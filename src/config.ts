@@ -8,7 +8,8 @@ export type DtgConfig = {
   definition: string;
   cssOut: string;
   cssFormat: CssFormat;
-  figmaOut: string;
+  /** Only emitted when configured. */
+  dtcgOut?: string;
 };
 
 const DEFAULT_DIR = "design-tokens";
@@ -22,7 +23,7 @@ export function loadConfig(flags: {
   definition?: string;
   css?: string;
   cssFormat?: string;
-  figma?: string;
+  dtcg?: string;
 }): DtgConfig {
   let fileConfig: Record<string, unknown> = {};
   if (existsSync("dtg.yaml")) {
@@ -32,6 +33,11 @@ export function loadConfig(flags: {
     >;
   }
   const outputs = (fileConfig.outputs ?? {}) as Record<string, unknown>;
+  if (outputs.figma != null) {
+    throw new Error(
+      "dtg.yaml outputs.figma: the bespoke Figma payload was removed — use `dtcg` instead, which carries the same collections, modes, values and aliases plus stable identities",
+    );
+  }
   const css = parseCssOutput(outputs.css);
 
   return {
@@ -41,10 +47,7 @@ export function loadConfig(flags: {
     cssOut: flags.css ?? css.path ?? join(DEFAULT_DIR, "tokens.generated.css"),
     cssFormat:
       assertCssFormat(flags.cssFormat, "--css-format") ?? css.format ?? "plain",
-    figmaOut:
-      flags.figma ??
-      (outputs.figma as string | undefined) ??
-      join(DEFAULT_DIR, "figma.json"),
+    dtcgOut: flags.dtcg ?? (outputs.dtcg as string | undefined),
   };
 }
 

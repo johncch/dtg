@@ -35,8 +35,13 @@ Canonical. The README carries the user-facing version of the same rules.
   step's flattened value). Every other key passes through untouched.
 - `defaults`: shared params per algorithm, merged under each system's own
   params. One copy of each number.
-- Sections: every top-level key other than `dtg`/`modes`/`defaults`/`systems`
-  is a section. Arbitrary name, becomes a Figma collection, holds
+- `changelog`: an optional list of `<date>: <note>` entries (or bare note
+  strings). The resolver validates the shape and never reads the content —
+  emitters pass it through for whoever replays the system into a design
+  tool. Prose on purpose: the useful part is the intent, which is what a
+  schema would strip out. See "Identity in emitted artifacts" below.
+- Sections: every top-level key other than
+  `dtg`/`modes`/`defaults`/`systems`/`changelog` is a section. Arbitrary name, becomes a Figma collection, holds
   `domain → role → [ref per mode]`. A role may also be
   `{ refs, alias?, omit? }`. `alias` (on the systems block, a system, a
   section, a domain, or a role; string or per-target map) replaces a public
@@ -146,7 +151,7 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `contract.ts` — the `AlgorithmImpl` interface and `assertKnownParams`.
 - `algorithms/` — the three built-ins.
 - `color-math.ts` — hex parsing, compositing, and the OKLCH and OKLAB math.
-- `emit.ts` — the CSS and `figma.json` emitters.
+- `emit.ts` — the CSS and DTCG emitters.
 - `render.ts`, `dev-server.ts`, `watch.ts` — the browsing UI, its HTTP and SSE
   server, and definition file watching.
 
@@ -186,10 +191,13 @@ Anything outside those three is a real defect. Promoting this check into a
       code.
 - [x] CSS emitter (`dtg emit`): `@theme` primitives block, `:root` and
       `.dark` semantic blocks, `@theme inline` wiring for every role. Public
-      naming is inline via `alias` and `omit`. Emit also writes `figma.json`:
-      a deterministic variable payload (collections, modes, hex values,
-      aliases by name) for a courier to replay. An agent may ferry the
-      payload; it never invents values.
+      naming is inline via `alias` and `omit`. `format: plain` (the default)
+      emits primitives into `:root` instead, for any project not on
+      Tailwind. Emit also writes DTCG when asked: the same collections,
+      modes, values and aliases, plus `$description` as a stable identity —
+      a role's internal path, a demand-driven step's lineage — so a courier
+      can tell a rename from a create. An agent may ferry the payload; it
+      never invents values.
 - [ ] Multi-file definitions (`shadows.dtg.yaml`, `type.dtg.yaml` as
       siblings, one resolver over all). Discovery exists; merging does not.
 - [ ] Designer tweaking in the browser: controls POST param changes, the
@@ -201,16 +209,18 @@ Anything outside those three is a real defect. Promoting this check into a
       components render under a proposed palette, plus auto-generated
       specimens (nested surfaces, labels at small sizes on every surface, 1px
       separators, states) for the portable case.
-- [ ] Figma sync. `emit` already writes the payload (collections, modes,
-      values, aliases by name, no file IDs). Delivery paths, ranked: (1) an
+- [ ] Figma sync. `emit` already writes the payload as DTCG (collections
+      via `$extensions`, modes, values, aliases by path, no file IDs).
+      Delivery paths, ranked: (1) an
       agent courier replaying the payload through a plugin console, required
       for a first sync that must reconcile drifted names in an existing file,
       where renaming keeps variable IDs so mockups stay wired and anything
       ambiguous is skipped and reported; (2) the endgame, a thin plugin
       fetching `/figma.json` from the dev server, putting the reconcile loop
       behind a button inside Figma with no Enterprise plan and no agent; (3)
-      DTCG export plus Figma's official import plugin is seed-only, since it
-      only adds and never updates, so it cannot sync. Every path is Plugin
+      Figma's *official* DTCG import plugin is seed-only, since it only adds
+      and never updates — emitting DTCG does not change that, it only makes
+      the payload standard for our own courier. Every path is Plugin
       API underneath: the REST variables API is Enterprise-only in both
       directions.
 - [ ] `check` command: definition versus emitted artifact drift, inert

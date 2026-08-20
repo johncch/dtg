@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { loadConfig } from "./config.js";
 import { startDevServer } from "./dev-server.js";
-import { emitCss, emitFigma } from "./emit.js";
+import { emitCss, emitDtcg } from "./emit.js";
 import { resolveDefinition } from "./resolve.js";
 import { watchDefinition } from "./watch.js";
 
@@ -32,7 +32,7 @@ if (command === "dev" || command === "emit") {
       definition: flagValue("--definition"),
       css: flagValue("--css"),
       cssFormat: flagValue("--css-format"),
-      figma: flagValue("--figma"),
+      dtcg: flagValue("--dtcg"),
     });
   } catch (e) {
     fail((e as Error).message);
@@ -41,16 +41,18 @@ if (command === "dev" || command === "emit") {
   if (command === "dev") {
     startDevServer(config.definition, Number(flagValue("--port") ?? "4401"));
   } else {
-    const { definition, cssOut, cssFormat, figmaOut } = config;
+    const { definition, cssOut, cssFormat, dtcgOut } = config;
     const emitOnce = () => {
       const resolved = resolveDefinition(readFileSync(definition, "utf8"));
       mkdirSync(dirname(cssOut), { recursive: true });
-      mkdirSync(dirname(figmaOut), { recursive: true });
       writeFileSync(cssOut, emitCss(resolved, cssFormat));
-      writeFileSync(
-        figmaOut,
-        JSON.stringify(emitFigma(resolved), null, 2) + "\n",
-      );
+      if (dtcgOut) {
+        mkdirSync(dirname(dtcgOut), { recursive: true });
+        writeFileSync(
+          dtcgOut,
+          JSON.stringify(emitDtcg(resolved), null, 2) + "\n",
+        );
+      }
       const tokenCount = resolved.systems.reduce(
         (n, s) => n + s.steps.filter((st) => st.opaque).length,
         0,
@@ -58,7 +60,7 @@ if (command === "dev" || command === "emit") {
       console.log(
         `${new Date().toLocaleTimeString()}  ${cssOut} (${cssFormat}): ${tokenCount} primitives + ${resolved.statics.length} statics, ${resolved.roles.length} roles × ${resolved.modes.length} modes`,
       );
-      console.log(`  + ${figmaOut}`);
+      if (dtcgOut) console.log(`  + ${dtcgOut}`);
       for (const w of resolved.warnings) console.log(`  warning: ${w}`);
     };
 
@@ -83,8 +85,8 @@ if (command === "dev" || command === "emit") {
   }
 } else {
   console.log(`usage:
-  emit [--live] [--css <path>] [--css-format <plain|tailwind>] [--figma <path>]
-                                                  generate the CSS + Figma payload
+  emit [--live] [--css <path>] [--css-format <plain|tailwind>] [--dtcg <path>]
+                                                  generate the CSS (and DTCG, when asked)
                                                   --live re-emits on every definition save
                                                   --css-format defaults to plain; tailwind wraps
                                                   primitives in @theme and adds utility wiring
@@ -92,7 +94,7 @@ if (command === "dev" || command === "emit") {
 
 Definition resolution (both commands): --definition <file> if given; else the
 \`definitions\` entry in dtg.yaml; else discover design-tokens/*.dtg.yaml.
-Output defaults: design-tokens/tokens.generated.css, design-tokens/figma.json
-(overridable in dtg.yaml \`outputs\` or via flags).`);
+CSS defaults to design-tokens/tokens.generated.css; DTCG is written only when
+\`outputs.dtcg\` or --dtcg names a path.`);
   process.exit(command ? 1 : 0);
 }

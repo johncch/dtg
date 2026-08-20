@@ -1,36 +1,13 @@
 import { oklabDeltaE } from "./color-math.js";
 import {
   publicSystemName,
+  type Lineage,
   type RefTarget,
   type ResolvedDefinition,
   type ResolvedRole,
   type ResolvedStep,
   type ResolvedSystem,
 } from "./resolve.js";
-
-export type Lineage = Map<
-  string,
-  { domain: string; role: string; mode: string; viaTransparent: boolean }[]
->;
-
-export function buildLineage(resolved: ResolvedDefinition): Lineage {
-  const lineage: Lineage = new Map();
-  for (const role of resolved.roles) {
-    role.perMode.forEach((entry, i) => {
-      if (entry.target.kind === "role") return;
-      const key = `${entry.target.system}/${entry.target.selector}`;
-      const uses = lineage.get(key) ?? [];
-      uses.push({
-        domain: role.domain,
-        role: role.role,
-        mode: resolved.modes[i] ?? String(i),
-        viaTransparent: entry.target.kind === "transparent",
-      });
-      lineage.set(key, uses);
-    });
-  }
-  return lineage;
-}
 
 const esc = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

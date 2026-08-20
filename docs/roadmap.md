@@ -67,18 +67,30 @@ can use. Tailwind consumers opt in explicitly — Sunnyday's `dtg.yaml` is
 pinned to `format: tailwind`, verified emitting its `colors.generated.css`
 byte-for-byte unchanged.
 
-## Settled, not yet built
+### DTCG emit
 
-### DTCG emit with descriptions
+`emitDtcg` in `src/emit.ts`, opt-in via `outputs.dtcg` or `--dtcg` so no
+project grows an artifact it did not ask for.
 
-Replaces bespoke Figma work for now. Emit standard DTCG — `$value`, `$type`,
-`$description` — where the description carries the recipe and lineage
-(`sky/3` → "3% ink over base", plus which roles demand it). An agent reads
-that and does identify-and-replace against Figma or anywhere else, so no
-Figma-specific integration ships until there is a reason.
+**The description is identity, not documentation.** The first pass had this
+backwards — describing the recipe in `$description` and reserving
+`$extensions` for machine data. The recipe is exactly the part that changes
+when a name changes, so it is useless as a matching key. Inverted: a role's
+description is its internal path (`label.primary`, unchanged when `omit`
+emits it as `label`); a demand-driven step's is the roles that demand it
+(`state.selected[light], label.primary[dark]`), unchanged when the
+coordinate renumbers; a declared stop's is its ref. `$extensions` holds the
+recipe, the public Figma name, per-mode values, and refs.
 
-Put machine-readable recipe data in namespaced `$extensions` rather than
-prose, so it round-trips. Prose `$description` is for the agent's judgment.
+`changelog` is a reserved top-level key, validated for shape and never
+interpreted, passed through to the DTCG root. Prose rather than a rename
+schema: a changelog is *read*, a migration map is *executed*, and an
+incomplete changelog is still useful where an incomplete migration map
+silently corrupts bindings.
+
+`buildLineage` moved from `render.ts` to `resolve.ts` — it is a fact about
+the definition, not a preview concern, and the emit layer should not depend
+on the preview layer.
 
 ## Later
 
@@ -127,6 +139,14 @@ prose, so it round-trips. Prose `$description` is for the agent's judgment.
 - **Figma-specific integration.** No plugin, no courier, no sync loop until
   there is a need. DTCG plus an agent covers it. When it returns it belongs
   in layer 6, not in emit.
+- **The bespoke `figma.json` payload is deleted**, once DTCG carried
+  everything it did — collections (via group `$extensions`, aliases
+  applied), modes, values, aliases. It was also the last always-on output,
+  which is how an unasked-for artifact ended up untracked in Sunnyday's
+  repo. `outputs.figma` now errors with a pointer to `dtcg`, following the
+  repo's convention for removed spellings. The `figma` alias target stays:
+  DTCG is what feeds Figma, so `alias: { css: light, figma: Light }` still
+  means what it always did.
 
 ## Open questions
 

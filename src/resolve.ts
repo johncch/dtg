@@ -19,7 +19,13 @@ const builtinAlgorithms: Record<string, AlgorithmImpl> = {
 };
 
 // Top-level keys the tool owns; every other top-level key is a section.
-const TOP_LEVEL_RESERVED = ["dtg", "modes", "defaults", "systems"];
+const TOP_LEVEL_RESERVED = [
+  "dtg",
+  "modes",
+  "defaults",
+  "systems",
+  "changelog",
+];
 // System keys addressed to the tool, not the algorithm.
 const SYSTEM_RESERVED = ["algorithm", "alias", "overrides"];
 
@@ -40,6 +46,33 @@ export function aliasedName(
  * Total order over a system's steps: the algorithm's key first, then the raw
  * selector, so identical keys still sort deterministically.
  */
+function parseChangelog(raw: unknown, errors: string[]): ChangelogEntry[] {
+  if (raw == null) return [];
+  if (!Array.isArray(raw)) {
+    errors.push("`changelog` must be a list");
+    return [];
+  }
+  const entries: ChangelogEntry[] = [];
+  for (const [i, item] of raw.entries()) {
+    if (typeof item === "string") {
+      entries.push({ note: item });
+      continue;
+    }
+    if (item != null && typeof item === "object" && !Array.isArray(item)) {
+      const pairs = Object.entries(item as Record<string, unknown>);
+      if (pairs.length === 1) {
+        const [date, note] = pairs[0];
+        entries.push({ date: String(date), note: String(note) });
+        continue;
+      }
+    }
+    errors.push(
+      `changelog[${i}]: expected "<date>: <note>" or a plain note string`,
+    );
+  }
+  return entries;
+}
+
 function compareSteps(
   algo: AlgorithmImpl,
   params: Record<string, unknown>,
@@ -61,6 +94,30 @@ function compareSteps(
   return a.selector < b.selector ? -1 : a.selector > b.selector ? 1 : 0;
 }
 
+export type Lineage = Map<
+  string,
+  { domain: string; role: string; mode: string; viaTransparent: boolean }[]
+>;
+
+export function buildLineage(resolved: ResolvedDefinition): Lineage {
+  const lineage: Lineage = new Map();
+  for (const role of resolved.roles) {
+    role.perMode.forEach((entry, i) => {
+      if (entry.target.kind === "role") return;
+      const key = `${entry.target.system}/${entry.target.selector}`;
+      const uses = lineage.get(key) ?? [];
+      uses.push({
+        domain: role.domain,
+        role: role.role,
+        mode: resolved.modes[i] ?? String(i),
+        viaTransparent: entry.target.kind === "transparent",
+      });
+      lineage.set(key, uses);
+    });
+  }
+  return lineage;
+}
+
 export type ResolvedStep = {
   selector: string;
   /** Selector formatted for token names: "5.5" → "5_5". */
@@ -80,6 +137,13 @@ export type ResolvedSystem = {
   params: Record<string, unknown>;
   steps: ResolvedStep[];
 };
+
+/**
+ * Prose notes for whoever replays this definition into a design tool. The
+ * resolver never interprets one — the useful part is the intent, which is
+ * exactly what a schema would strip out.
+ */
+export type ChangelogEntry = { date?: string; note: string };
 
 export type ResolvedSection = {
   name: string;
@@ -112,6 +176,7 @@ export type ResolvedRole = {
 
 export type ResolvedDefinition = {
   modes: string[];
+  changelog: ChangelogEntry[];
   systems: ResolvedSystem[];
   /** The systems block's own alias (its Figma collection name). */
   systemsAlias?: AliasValue;
@@ -165,6 +230,7 @@ export function resolveDefinition(
     );
   }
 
+  const changelog = parseChangelog(doc.changelog, errors);
   const modes = Array.isArray(doc.modes) ? doc.modes.map(String) : [];
   if (modes.length === 0) errors.push("`modes` must be a non-empty list");
 
@@ -628,6 +694,7 @@ export function resolveDefinition(
 
   return {
     modes,
+    changelog,
     systems: resolvedSystems,
     systemsAlias,
     statics,

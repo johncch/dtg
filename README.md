@@ -5,8 +5,8 @@ a list.**
 
 `@fifthrevision/dtg` turns color rules into design tokens. You write a YAML
 definition describing how your colors are _made_, and it compiles
-deterministically into CSS variables, a Figma variable payload, and a
-browsable dev server.
+deterministically into CSS variables, a DTCG token file, and a browsable
+dev server.
 
 ## Why dtg exists
 
@@ -99,9 +99,9 @@ from and how they remain coherent as the system changes.
 
 ## Status
 
-0.1. The grammar, resolver, built-in algorithms, dev server, and CSS and
-Figma emitters work and are in production use on one real design system.
-The next work is multi-file definitions, Figma sync, and the `check`
+0.1. The grammar, resolver, built-in algorithms, dev server, and the CSS
+and DTCG emitters work and are in production use on one real design system.
+The next work is multi-file definitions, design-tool sync, and the `check`
 command. See the roadmap at the bottom.
 
 ---
@@ -118,14 +118,15 @@ pnpm add -D @fifthrevision/dtg
 
 ```
 dtg dev  [--port <n>]                              # browse ramps, deltaE, lineage; live-reloads on save
-dtg emit [--live] [--css <path>] [--figma <path>]  # generate CSS + Figma payload
+dtg emit [--live] [--css <path>]                   # generate the CSS
          [--css-format <plain|tailwind>]           # default plain
+         [--dtcg <path>]                           # DTCG; written only when asked
 ```
 
 Definition resolution: `--definition <file>` if given; else the
 `definitions` entry in `dtg.yaml`; else discover `design-tokens/*.dtg.yaml`.
-Outputs default to beside the definitions:
-`design-tokens/tokens.generated.css` and `design-tokens/figma.json`.
+The CSS output defaults to `design-tokens/tokens.generated.css`, beside the
+definitions. DTCG is written only when you name a path for it.
 
 ## Project layout
 
@@ -133,7 +134,7 @@ Outputs default to beside the definitions:
 design-tokens/
   colors.dtg.yaml          # the definition (decisions)
   tokens.generated.css     # generated, committed, never hand-edited
-  figma.json               # generated, committed (see roadmap)
+  tokens.json              # generated DTCG, committed — opt in via dtg.yaml
 dtg.yaml                   # optional; only needed off-convention
 ```
 
@@ -143,7 +144,7 @@ dtg.yaml                   # optional; only needed off-convention
 definitions: design-tokens/ # a dir (globs *.dtg.yaml) or an explicit file
 outputs:
   css: design-tokens/tokens.generated.css
-  figma: design-tokens/figma.json
+  dtcg: design-tokens/tokens.json # omit and no DTCG is written
 ```
 
 The CSS output also takes a long form, for a project on Tailwind v4:
@@ -212,8 +213,12 @@ core: # any non-reserved top-level key is a section you name;
 - **Raw hex is legal only inside `systems`.**
 - A **role** is a list of refs, one per mode, or `{ refs, alias?, omit? }`
   when its public name diverges. This is the complete role grammar.
+- **`changelog`** is an optional list of `<date>: <note>` entries, passed
+  through to the DTCG output untouched. It is prose for whoever replays the
+  system into a design tool — "renamed `shadow.2` to `shadow.3`, rename in
+  Figma rather than recreate" — and the resolver never interprets it.
 - **Sections are yours.** Top-level keys other than
-  `dtg`/`modes`/`defaults`/`systems` are sections: arbitrary names, each
+  `dtg`/`modes`/`defaults`/`systems`/`changelog` are sections: arbitrary names, each
   emitted as a Figma collection. CSS names never include the section. Role
   paths (`domain.role`) must be unique across sections so refs stay
   unambiguous.
@@ -270,19 +275,26 @@ generation methods or shadow a built-in by name.
   `@theme inline` utility wiring. The Tailwind form relies on at-rules
   nothing else understands, so a browser outside a Tailwind build discards
   the primitives entirely; pick it only for a Tailwind v4 project.
-- **Figma**: a deterministic payload (`figma.json`) of collections, modes,
-  values, and aliases-by-name, with no file IDs, for a courier (agent or
-  plugin) to replay against a file via the Plugin API. The REST variables
-  API is Enterprise-only, so every sync path runs through plugins.
+- **DTCG**: standard design tokens, emitted only when a path is given.
+  `$description` carries *identity*, not documentation — a role's internal
+  path, or for a demand-driven step the roles that demand it, both of which
+  survive the renames and renumberings that change public names.
+  `$extensions` carries the recipe, which is the volatile part. Any
+  `changelog` rides at the root. Aimed at an agent replaying the system into
+  a design tool.
+Both emitters are pure functions of the definition: same definition, same
+bytes. Nothing reads the design tool's state, which is why sync is a
+separate concern and not an emit target.
 
 ## Roadmap
 
 - Multi-file definitions (`shadows.dtg.yaml`, `type.dtg.yaml` as siblings,
   one resolver over all). Discovery exists; merging does not yet.
-- Figma payload moves from `emit` to sync time. The payload belongs to the
-  sync loop, generated by a future `dtg figma` whose `--dry-run` diffs
-  against the live file, with the dev server serving it at `/figma.json`
-  for a plugin courier. Kept as an emit artifact in 0.1 for simplicity.
+- Design-tool sync. The DTCG file is the payload; delivery is an agent
+  courier replaying it through a plugin console, since renaming preserves
+  variable IDs and keeps mockups wired. A future `dtg check --dry-run`
+  diffs against the live file. The REST variables API is Enterprise-only,
+  so every path runs through plugins.
 - `check` command: definition versus emitted artifact drift, inert
   overrides, longhand-sugar detection.
 - In-browser tweaking: controls POST param changes, the server rewrites the

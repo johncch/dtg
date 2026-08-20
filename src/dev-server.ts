@@ -1,13 +1,16 @@
 import { createServer, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
-import { resolveDefinition, type ResolvedDefinition } from "./resolve.js";
-import { watchDefinition } from "./watch.js";
 import {
   buildLineage,
+  resolveDefinition,
+  type Lineage,
+  type ResolvedDefinition,
+} from "./resolve.js";
+import { watchDefinition } from "./watch.js";
+import {
   renderDomain,
   renderOverview,
   renderSystem,
-  type Lineage,
 } from "./render.js";
 
 type State = {
