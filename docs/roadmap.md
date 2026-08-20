@@ -55,16 +55,19 @@ emits `#faf0f0`, exactly the site's shipped `$lightWarm-c1`, and `#00398e` at
 3.5% emits `#f6f8fb`, exactly its third gradient stop. The derived inks
 round-trip to the colors the site ships today.
 
+### Plain-CSS emit
+
+`emitCss` takes a `CssFormat`: `plain` (default) puts primitives in `:root`,
+`tailwind` keeps the `@theme` wrapper and the `@theme inline` utility block.
+`dtg.yaml` accepts `outputs.css` as a bare path or `{ path, format }`, and
+`--css-format` overrides both.
+
+**Plain is the default**, so a project that never opts in gets CSS a browser
+can use. Tailwind consumers opt in explicitly — Sunnyday's `dtg.yaml` is
+pinned to `format: tailwind`, verified emitting its `colors.generated.css`
+byte-for-byte unchanged.
+
 ## Settled, not yet built
-
-### Plain-CSS emit target
-
-`emitCss` wraps all primitives in `@theme { … }` (`emit.ts:41`), a Tailwind
-v4 at-rule. Outside a Tailwind build a browser discards the whole block, so
-every `--color-*` primitive never registers and the `:root` `var()` chains
-resolve to nothing. The trailing `@theme inline` block is dead weight there
-too. **dtg 0.1 silently emits a stylesheet that does nothing outside
-Tailwind.** Blocks every non-Tailwind consumer, fifthrevision included.
 
 ### DTCG emit with descriptions
 

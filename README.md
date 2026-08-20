@@ -119,6 +119,7 @@ pnpm add -D @fifthrevision/dtg
 ```
 dtg dev  [--port <n>]                              # browse ramps, deltaE, lineage; live-reloads on save
 dtg emit [--live] [--css <path>] [--figma <path>]  # generate CSS + Figma payload
+         [--css-format <plain|tailwind>]           # default plain
 ```
 
 Definition resolution: `--definition <file>` if given; else the
@@ -143,6 +144,15 @@ definitions: design-tokens/ # a dir (globs *.dtg.yaml) or an explicit file
 outputs:
   css: design-tokens/tokens.generated.css
   figma: design-tokens/figma.json
+```
+
+The CSS output also takes a long form, for a project on Tailwind v4:
+
+```yaml
+outputs:
+  css:
+    path: app/colors.generated.css
+    format: tailwind # default: plain
 ```
 
 Precedence: CLI flags, then `dtg.yaml`, then convention defaults.
@@ -253,10 +263,13 @@ generation methods or shadow a built-in by name.
 
 ## Emit targets
 
-- **CSS**: one generated file with an `@theme` primitives block (Tailwind
-  v4), `:root` and `.dark` semantic blocks (step refs stay as `var()`
-  chains; transparent and overlay values inline), and `@theme inline`
-  utility wiring.
+- **CSS**: one generated file. `format: plain` (the default) emits a
+  `:root` primitives block plus `:root` and `.dark` semantic blocks — step
+  refs stay as `var()` chains, transparent and overlay values inline.
+  `format: tailwind` instead wraps the primitives in `@theme` and appends
+  `@theme inline` utility wiring. The Tailwind form relies on at-rules
+  nothing else understands, so a browser outside a Tailwind build discards
+  the primitives entirely; pick it only for a Tailwind v4 project.
 - **Figma**: a deterministic payload (`figma.json`) of collections, modes,
   values, and aliases-by-name, with no file IDs, for a courier (agent or
   plugin) to replay against a file via the Plugin API. The REST variables

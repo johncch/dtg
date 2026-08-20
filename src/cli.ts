@@ -31,6 +31,7 @@ if (command === "dev" || command === "emit") {
     config = loadConfig({
       definition: flagValue("--definition"),
       css: flagValue("--css"),
+      cssFormat: flagValue("--css-format"),
       figma: flagValue("--figma"),
     });
   } catch (e) {
@@ -40,12 +41,12 @@ if (command === "dev" || command === "emit") {
   if (command === "dev") {
     startDevServer(config.definition, Number(flagValue("--port") ?? "4401"));
   } else {
-    const { definition, cssOut, figmaOut } = config;
+    const { definition, cssOut, cssFormat, figmaOut } = config;
     const emitOnce = () => {
       const resolved = resolveDefinition(readFileSync(definition, "utf8"));
       mkdirSync(dirname(cssOut), { recursive: true });
       mkdirSync(dirname(figmaOut), { recursive: true });
-      writeFileSync(cssOut, emitCss(resolved));
+      writeFileSync(cssOut, emitCss(resolved, cssFormat));
       writeFileSync(
         figmaOut,
         JSON.stringify(emitFigma(resolved), null, 2) + "\n",
@@ -55,7 +56,7 @@ if (command === "dev" || command === "emit") {
         0,
       );
       console.log(
-        `${new Date().toLocaleTimeString()}  ${cssOut}: ${tokenCount} primitives + ${resolved.statics.length} statics, ${resolved.roles.length} roles × ${resolved.modes.length} modes`,
+        `${new Date().toLocaleTimeString()}  ${cssOut} (${cssFormat}): ${tokenCount} primitives + ${resolved.statics.length} statics, ${resolved.roles.length} roles × ${resolved.modes.length} modes`,
       );
       console.log(`  + ${figmaOut}`);
       for (const w of resolved.warnings) console.log(`  warning: ${w}`);
@@ -82,8 +83,11 @@ if (command === "dev" || command === "emit") {
   }
 } else {
   console.log(`usage:
-  emit [--live] [--css <path>] [--figma <path>]   generate the CSS + Figma payload
+  emit [--live] [--css <path>] [--css-format <plain|tailwind>] [--figma <path>]
+                                                  generate the CSS + Figma payload
                                                   --live re-emits on every definition save
+                                                  --css-format defaults to plain; tailwind wraps
+                                                  primitives in @theme and adds utility wiring
   dev  [--port <n>]                               browse the token system (default port 4401)
 
 Definition resolution (both commands): --definition <file> if given; else the
