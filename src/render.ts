@@ -1,6 +1,7 @@
 import { oklabDeltaE } from "./color-math.js";
 import {
   publicSystemName,
+  type RefTarget,
   type ResolvedDefinition,
   type ResolvedRole,
   type ResolvedStep,
@@ -44,19 +45,17 @@ function stepAnchor(step: ResolvedStep): string {
 }
 
 function refLink(
+  resolved: ResolvedDefinition,
   ref: string,
-  target: {
-    kind: string;
-    system?: string;
-    selector?: string;
-    domain?: string;
-    role?: string;
-  },
+  target: RefTarget,
 ): string {
   if (target.kind === "role") {
     return `<a href="/domain/${target.domain}#${target.role}"><code>${esc(ref)}</code></a>`;
   }
-  return `<a href="/system/${target.system}#s-${(target.selector ?? "").replace(".", "_")}"><code>${esc(ref)}</code></a>`;
+  const step = resolved.systems
+    .find((s) => s.system === target.system)
+    ?.steps.find((s) => s.selector === target.selector);
+  return `<a href="/system/${target.system}#s-${step?.publicStep ?? target.selector}"><code>${esc(ref)}</code></a>`;
 }
 
 function layout(
@@ -394,7 +393,7 @@ export function renderDomain(
       const cells = role.perMode
         .map(
           (entry) =>
-            `<td><span class="cell">${swatch(entry.css, entry.opaque)}<span><code>${esc(entry.css)}</code><br>${refLink(entry.ref, entry.target)}</span></span></td>`,
+            `<td><span class="cell">${swatch(entry.css, entry.opaque)}<span><code>${esc(entry.css)}</code><br>${refLink(resolved, entry.ref, entry.target)}</span></span></td>`,
         )
         .join("");
       return `<tr id="${esc(role.role)}"><td><code>${esc(role.role)}</code></td>${cells}</tr>`;

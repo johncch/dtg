@@ -1,11 +1,18 @@
 import { parse } from "yaml";
-import type { AlgorithmImpl } from "./contract.js";
+import {
+  assertNameFragment,
+  defaultPublicStep,
+  defaultStepOrder,
+  type AlgorithmImpl,
+} from "./contract.js";
 import { assertHex } from "./color-math.js";
+import { compose } from "./algorithms/compose.js";
 import { inkRamp } from "./algorithms/ink-ramp.js";
 import { oklchScale } from "./algorithms/oklch-scale.js";
 import { overlay } from "./algorithms/overlay.js";
 
 const builtinAlgorithms: Record<string, AlgorithmImpl> = {
+  compose,
   "ink-ramp": inkRamp,
   "oklch-scale": oklchScale,
   overlay: overlay,
@@ -27,6 +34,31 @@ export function aliasedName(
   if (alias == null) return fallback;
   if (typeof alias === "string") return alias;
   return alias[target] ?? fallback;
+}
+
+/**
+ * Total order over a system's steps: the algorithm's key first, then the raw
+ * selector, so identical keys still sort deterministically.
+ */
+function compareSteps(
+  algo: AlgorithmImpl,
+  params: Record<string, unknown>,
+  a: ResolvedStep,
+  b: ResolvedStep,
+): number {
+  const ka = algo.stepOrder?.(params, a.selector) ?? defaultStepOrder(a.selector);
+  const kb = algo.stepOrder?.(params, b.selector) ?? defaultStepOrder(b.selector);
+  if (
+    typeof ka === "number" &&
+    typeof kb === "number" &&
+    Number.isFinite(ka) &&
+    Number.isFinite(kb)
+  ) {
+    if (ka !== kb) return ka - kb;
+  } else if (String(ka) !== String(kb)) {
+    return String(ka) < String(kb) ? -1 : 1;
+  }
+  return a.selector < b.selector ? -1 : a.selector > b.selector ? 1 : 0;
 }
 
 export type ResolvedStep = {
@@ -248,7 +280,11 @@ export function resolveDefinition(
             : undefined;
         step = {
           selector,
-          publicStep: selector.replace(".", "_"),
+          publicStep: assertNameFragment(
+            sys.algo.publicStep?.(sys.params, selector) ??
+              defaultPublicStep(selector),
+            key,
+          ),
           css: overrideCss ?? value.css,
           opaque: value.opaque,
           overridden: overrideCss != null,
@@ -566,7 +602,7 @@ export function resolveDefinition(
       steps = [...stepCache.entries()]
         .filter(([key, step]) => step != null && key.startsWith(`${name}/`))
         .map(([, step]) => step as ResolvedStep)
-        .sort((a, b) => Number(a.selector) - Number(b.selector));
+        .sort((a, b) => compareSteps(sys.algo, sys.params, a, b));
     }
     const emitted = new Set(steps.map((s) => s.selector));
     for (const selector of Object.keys(sys.overrides)) {

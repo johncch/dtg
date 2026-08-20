@@ -16,8 +16,11 @@ function cssValueFor(resolved: ResolvedDefinition, entry: ResolvedRef): string {
     const system = resolved.systems.find(
       (s) => entry.target.kind !== "role" && s.system === entry.target.system,
     );
-    if (system) {
-      return `var(--color-${publicSystemName(system, "css")}-${entry.target.selector.replace(".", "_")})`;
+    const step = system?.steps.find(
+      (s) => entry.target.kind !== "role" && s.selector === entry.target.selector,
+    );
+    if (system && step) {
+      return `var(--color-${publicSystemName(system, "css")}-${step.publicStep})`;
     }
   }
   if (entry.target.kind === "role") {
@@ -163,10 +166,15 @@ export function emitFigma(resolved: ResolvedDefinition): FigmaPayload {
                 entry.target.kind !== "role" &&
                 s.system === entry.target.system,
             );
+            const step = system?.steps.find(
+              (s) =>
+                entry.target.kind !== "role" &&
+                s.selector === entry.target.selector,
+            );
             return {
               type: "alias",
               collection: systemsCollection,
-              variable: `${system ? publicSystemName(system, "figma") : entry.target.system}/${entry.target.selector.replace(".", "_")}`,
+              variable: `${system ? publicSystemName(system, "figma") : entry.target.system}/${step?.publicStep ?? entry.target.selector}`,
             };
           }
           if (entry.target.kind === "role") {
