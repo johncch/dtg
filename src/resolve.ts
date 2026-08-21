@@ -5,7 +5,14 @@ import {
   defaultStepOrder,
   type AlgorithmImpl,
 } from "./contract.js";
-import { assertHex, hexToRgb, translucent } from "./color-math.js";
+import {
+  assertHex,
+  colorFromHex,
+  colorFromRgb,
+  hexToRgb,
+  isOpaque,
+  type Color,
+} from "./color-math.js";
 import { blend } from "./algorithms/blend.js";
 import { inkRamp } from "./algorithms/ink-ramp.js";
 import { oklchScale } from "./algorithms/oklch-scale.js";
@@ -123,7 +130,7 @@ export function buildLineage(resolved: ResolvedDefinition): Lineage {
         domain: role.domain,
         role: role.role,
         mode: resolved.modes[i] ?? String(i),
-        translucent: !entry.opaque,
+        translucent: !isOpaque(entry.color),
       });
       lineage.set(key, uses);
     });
@@ -135,11 +142,10 @@ export type ResolvedStep = {
   selector: string;
   /** Selector formatted for token names: "5.5" → "5_5". */
   publicStep: string;
-  css: string;
-  opaque: boolean;
+  color: Color;
   overridden: boolean;
   /** What the algorithm produced, present only when an override won. */
-  generatedCss?: string;
+  generated?: Color;
 };
 
 export type ResolvedSystem = {
@@ -193,8 +199,7 @@ export type RefTarget =
 export type ResolvedRef = {
   ref: string;
   target: RefTarget;
-  css: string;
-  opaque: boolean;
+  color: Color;
 };
 
 export type ResolvedRole = {
@@ -433,10 +438,9 @@ export function resolveDefinition(
               defaultPublicStep(selector),
             key,
           ),
-          css: overrideCss ?? value.css,
-          opaque: value.opaque,
+          color: overrideCss != null ? colorFromHex(overrideCss) : value.color,
           overridden: overrideCss != null,
-          generatedCss: overrideCss != null ? value.css : undefined,
+          generated: overrideCss != null ? value.color : undefined,
         };
       } catch (e) {
         errors.push(`${refContext}: ${(e as Error).message}`);
@@ -603,7 +607,7 @@ export function resolveDefinition(
     }
 
     const complete = perMode.length === raw.refs.length;
-    if (complete && new Set(perMode.map((entry) => entry.opaque)).size > 1) {
+    if (complete && new Set(perMode.map((entry) => isOpaque(entry.color))).size > 1) {
       warnings.push(
         `${path}: modes mix opaque and translucent values — probably a mistake`,
       );
@@ -667,8 +671,7 @@ export function resolveDefinition(
         return {
           ref,
           target: { kind: "constant", name: inner, alpha },
-          css: translucent(hexToRgb(constant.hex), alpha),
-          opaque: false,
+          color: colorFromRgb(hexToRgb(constant.hex), "srgb", alpha / 100),
         };
       }
       errors.push(
@@ -685,8 +688,7 @@ export function resolveDefinition(
       return {
         ref,
         target: { kind: "step", system, selector },
-        css: step.css,
-        opaque: step.opaque,
+        color: step.color,
       };
     }
     if (ref.includes(".") && roleIndex.has(ref)) {
@@ -701,8 +703,7 @@ export function resolveDefinition(
           domain: ref.slice(0, dot),
           role: ref.slice(dot + 1),
         },
-        css: entry.css,
-        opaque: entry.opaque,
+        color: entry.color,
       };
     }
     const constant = statics.find((s) => s.path === ref);
@@ -710,8 +711,7 @@ export function resolveDefinition(
       return {
         ref,
         target: { kind: "constant", name: ref },
-        css: constant.hex,
-        opaque: true,
+        color: colorFromHex(constant.hex),
       };
     }
     if (/^transparent\(/.test(ref) && !ref.endsWith(")")) {

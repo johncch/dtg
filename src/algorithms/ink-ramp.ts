@@ -2,9 +2,8 @@ import { assertKnownParams, type AlgorithmImpl } from "../contract.js";
 import {
   alphaComposite,
   assertHex,
+  colorFromRgb,
   hexToRgb,
-  rgbToHex,
-  translucent,
 } from "../color-math.js";
 
 /**
@@ -23,11 +22,9 @@ export const inkRamp: AlgorithmImpl = {
   resolveStep(params, selector) {
     const { alpha, inkOnly } = parse(selector);
     const ink = hexToRgb(assertHex(params.ink, "ink-ramp param 'ink'"));
-    if (inkOnly) {
-      return { css: translucent(ink, alpha * 100), opaque: false };
-    }
+    if (inkOnly) return { color: colorFromRgb(ink, "srgb", alpha) };
     const base = hexToRgb(assertHex(params.base, "ink-ramp param 'base'"));
-    return { css: rgbToHex(alphaComposite(ink, base, alpha)), opaque: true };
+    return { color: colorFromRgb(alphaComposite(ink, base, alpha)) };
   },
 
   publicStep(_params, selector) {

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stringify } from "yaml";
+import { formatColor, isOpaque } from "./color-math.js";
 import { withParamAt } from "./contract.js";
 import {
   algorithmFor,
@@ -195,7 +196,11 @@ function preview(
     for (const s of (body.selectors ?? []) as string[]) selectors.add(s);
     const steps = [...selectors].map((selector) => {
       const value = algo.resolveStep(params, selector);
-      return { selector, css: value.css, opaque: value.opaque };
+      return {
+          selector,
+          css: formatColor(value.color, "srgb"),
+          opaque: isOpaque(value.color),
+        };
     });
     return { steps, yaml: stringify(params).trimEnd() };
   } catch (e) {

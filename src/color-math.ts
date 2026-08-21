@@ -22,12 +22,18 @@ export function rgbToHex(rgb: Rgb): string {
     "#" +
     rgb
       .map((c) =>
-        Math.max(0, Math.min(255, Math.round(c)))
+        Math.max(0, Math.min(255, roundChannel(c)))
           .toString(16)
           .padStart(2, "0"),
       )
       .join("")
   );
+}
+
+/** Channels round half-up. No snapping: a colour formatted in its own space
+ * never round-trips, so there is no float noise to snap away. */
+export function roundChannel(c: number): number {
+  return Math.round(c);
 }
 
 /**
@@ -37,7 +43,7 @@ export function rgbToHex(rgb: Rgb): string {
  * about whether the alpha arrived as a percent or a fraction.
  */
 export function translucent(rgb: Rgb, alphaPercent: number): string {
-  const [r, g, b] = rgb.map((c) => Math.max(0, Math.min(255, Math.round(c))));
+  const [r, g, b] = rgb.map((c) => Math.max(0, Math.min(255, roundChannel(c))));
   return `rgba(${r}, ${g}, ${b}, ${alphaPercent / 100})`;
 }
 
@@ -54,26 +60,34 @@ function linearToSrgb(c: number): number {
   return 255 * (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
 }
 
-function linearRgbToOklab([r, g, b]: Rgb): [number, number, number] {
-  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
-  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
-  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-  return [
-    0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s,
-    1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s,
-    0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s,
-  ];
+/**
+ * Only the forward matrices are written down; the reverse pair is derived by
+ * inverting them. Published OKLab matrices are rounded independently in each
+ * direction, so forward-then-back drifts by about 1e-7 relative — invisible
+ * on integer channels, fatal exactly on a half-way boundary, where 229.5
+ * comes back as 229.49997 and rounds the wrong way.
+ */
+const RGB_TO_LMS: M3 = [
+  [0.4122214708, 0.5363325363, 0.0514459929],
+  [0.2119034982, 0.6806995451, 0.1073969566],
+  [0.0883024619, 0.2817188376, 0.6299787005],
+];
+const LMS_TO_OKLAB: M3 = [
+  [0.2104542553, 0.793617785, -0.0040720468],
+  [1.9779984951, -2.428592205, 0.4505937099],
+  [0.0259040371, 0.7827717662, -0.808675766],
+];
+const LMS_TO_RGB = invert(RGB_TO_LMS);
+const OKLAB_TO_LMS = invert(LMS_TO_OKLAB);
+
+function linearRgbToOklab(rgb: Rgb): [number, number, number] {
+  const lms = matmul(RGB_TO_LMS, rgb).map(Math.cbrt) as Rgb;
+  return matmul(LMS_TO_OKLAB, lms);
 }
 
-function oklabToLinearRgb([L, a, b]: [number, number, number]): Rgb {
-  const l = (L + 0.3963377774 * a + 0.2158037573 * b) ** 3;
-  const m = (L - 0.1055613458 * a - 0.0638541728 * b) ** 3;
-  const s = (L - 0.0894841775 * a - 1.291485548 * b) ** 3;
-  return [
-    4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
-  ];
+function oklabToLinearRgb(lab: [number, number, number]): Rgb {
+  const lms = matmul(OKLAB_TO_LMS, lab).map((c) => c ** 3) as Rgb;
+  return matmul(LMS_TO_RGB, lms);
 }
 
 function rgbToOklch(rgb: Rgb): [number, number, number] {
@@ -335,43 +349,115 @@ export const BLEND_SPACES: {
 ];
 
 /** Mix two colours by `t` of A over B, in the named space. */
-export function mixIn(
-  hexA: string,
-  hexB: string,
-  t: number,
-  space: BlendSpace,
-): { css: string; hex: string } {
+export function mixIn(hexA: string, hexB: string, t: number, space: BlendSpace): Color {
   const A = hexToRgb(hexA);
   const B = hexToRgb(hexB);
   const lerp = (x: number, y: number) => t * x + (1 - t) * y;
 
   if (space === "srgb") {
-    const hex = rgbToHex(A.map((c, i) => lerp(c, B[i])) as Rgb);
-    return { css: hex, hex };
+    return colorFromRgb(A.map((c, i) => lerp(c, B[i])) as Rgb);
   }
   if (space === "srgb-linear") {
     const mixed = A.map((c, i) =>
       lerp(srgbToLinear(c), srgbToLinear(B[i])),
     ) as Rgb;
-    const hex = rgbToHex(mixed.map(linearToSrgb) as Rgb);
-    return { css: hex, hex };
+    return colorFromRgb(mixed.map(linearToSrgb) as Rgb);
   }
   if (space === "oklab") {
     const a = hexToOklab(hexA);
     const b = hexToOklab(hexB);
-    const lab = a.map((c, i) => lerp(c, b[i])) as Oklab;
-    return { css: formatIn(lab, "srgb"), hex: formatIn(lab, "srgb") };
+    return colorFromOklab(a.map((c, i) => lerp(c, b[i])) as Oklab);
   }
+  // display-p3: interpolate in P3's own encoded channels, then keep the
+  // result canonical so emit can render it for either target.
   const [pa] = encodeIn(hexToOklab(hexA), "display-p3");
   const [pb] = encodeIn(hexToOklab(hexB), "display-p3");
   const mixed = pa.map((c, i) => lerp(c, pb[i])) as Rgb;
-  const parts = mixed
-    .map((c) => c.toFixed(4).replace(/0+$/, "").replace(/\.$/, "") || "0")
+  return { space: "display-p3", coords: mixed, alpha: 1 };
+}
+
+// ---- Color: tagged with the space it was authored in ---------------------
+
+/**
+ * A colour keeps the space it arrived in and converts only when something
+ * asks for a different one. Canonicalising everything up front looks tidier
+ * but manufactures round trips: an sRGB colour emitted as sRGB would convert
+ * out and back for no reason, and a value landing exactly on a half-way
+ * boundary — #ff0000 at 10% over white is exactly 229.5 — then rounds
+ * whichever way the float noise fell.
+ *
+ * `coords` are encoded channels 0..1 for the RGB spaces, and L/a/b for oklab.
+ */
+export type ColorSpace = Gamut | "oklab";
+
+export type Color = {
+  space: ColorSpace;
+  coords: [number, number, number];
+  alpha: number;
+};
+
+export function colorFromHex(hex: string, alpha = 1): Color {
+  return {
+    space: "srgb",
+    coords: hexToRgb(hex).map((c) => c / 255) as Rgb,
+    alpha,
+  };
+}
+
+/** From channels 0..255 in a gamut, the form the ramp algorithms work in. */
+export function colorFromRgb(
+  rgb: Rgb,
+  space: Gamut = "srgb",
+  alpha = 1,
+): Color {
+  return { space, coords: rgb.map((c) => c / 255) as Rgb, alpha };
+}
+
+export function colorFromOklab(lab: Oklab, alpha = 1): Color {
+  return { space: "oklab", coords: lab, alpha };
+}
+
+export function isOpaque(color: Color): boolean {
+  return color.alpha >= 1;
+}
+
+export function toOklab(color: Color): Oklab {
+  if (color.space === "oklab") return color.coords;
+  return encodedToOklab(color.coords, color.space);
+}
+
+/** Converts if the space differs; returns the colour untouched if it does not. */
+export function convert(color: Color, space: ColorSpace): Color {
+  if (color.space === space) return color;
+  const lab = toOklab(color);
+  if (space === "oklab") return { space, coords: lab, alpha: color.alpha };
+  const [coords] = encodeIn(lab, space);
+  return { space, coords, alpha: color.alpha };
+}
+
+/** True when the target has to reduce chroma to hold this colour. */
+export function needsMapping(color: Color, gamut: Gamut): boolean {
+  if (color.space === gamut) return false;
+  return !inGamut(toOklab(color), gamut);
+}
+
+/**
+ * Render a colour for one target. A colour already in the target space is
+ * formatted straight from its own coordinates — no conversion, so no drift.
+ */
+export function formatColor(color: Color, gamut: Gamut): string {
+  const { coords, alpha } = convert(color, gamut);
+  if (gamut === "srgb") {
+    const rgb = coords.map((c) => c * 255) as Rgb;
+    return alpha >= 1 ? rgbToHex(rgb) : translucent(rgb, alpha * 100);
+  }
+  const parts = coords
+    .map((c) =>
+      Math.max(0, Math.min(1, c))
+        .toFixed(4)
+        .replace(/0+$/, "")
+        .replace(/\.$/, "") || "0",
+    )
     .join(" ");
-  // The sRGB column is what that P3 colour falls back to, for comparison.
-  const lab = linearToOklab(
-    mixed.map((c) => srgbToLinear(c * 255)) as Rgb,
-    "display-p3",
-  );
-  return { css: `color(display-p3 ${parts})`, hex: formatIn(lab, "srgb") };
+  return `color(display-p3 ${parts}${alpha >= 1 ? "" : ` / ${Number(alpha.toFixed(4))}`})`;
 }

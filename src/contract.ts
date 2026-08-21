@@ -1,13 +1,16 @@
-export type StepValue = {
-  /** CSS-ready color: a hex for surface systems, an rgba() for overlays. */
-  css: string;
-  opaque: boolean;
-};
+/**
+ * What an algorithm returns: a colour as coordinates, not a string. The
+ * string is chosen at emit, per target, so one value can be written as a hex
+ * and as a P3 colour without either being a conversion of the other.
+ */
+export type StepValue = { color: Color };
 
 /**
  * How a system wants to be shown and tuned. Structure, not markup — the
  * preview layer owns presentation, the algorithm owns what its params mean.
  */
+import type { Color } from "./color-math.js";
+
 export type PreviewControl =
   | { kind: "color"; path: string; label: string; value: string }
   | {

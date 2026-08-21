@@ -1,4 +1,4 @@
-import { oklabDeltaE } from "./color-math.js";
+import { formatColor, isOpaque, oklabDeltaE } from "./color-math.js";
 import type { AlgorithmPreview } from "./contract.js";
 import {
   algorithmFor,
@@ -307,9 +307,9 @@ function stripFor(system: ResolvedSystem, withDeltas = false): string {
   const cells = system.steps
     .map((step) => {
       const textColor =
-        step.opaque && luma(step.css) < 150 ? "#fff" : "#1d2427";
-      const cellClass = step.opaque ? "" : ' class="swatch-alpha"';
-      return `<a href="/system/${system.system}#${stepAnchor(step)}"${cellClass}><span class="strip-fill" style="background:${esc(step.css)}"></span><span class="step-label" style="color:${textColor}">${esc(step.publicStep)}</span><span class="step-hex" style="color:${textColor}">${esc(step.css)}</span></a>`;
+        isOpaque(step.color) && luma(formatColor(step.color, "srgb")) < 150 ? "#fff" : "#1d2427";
+      const cellClass = isOpaque(step.color) ? "" : ' class="swatch-alpha"';
+      return `<a href="/system/${system.system}#${stepAnchor(step)}"${cellClass}><span class="strip-fill" style="background:${esc(formatColor(step.color, "srgb"))}"></span><span class="step-label" style="color:${textColor}">${esc(step.publicStep)}</span><span class="step-hex" style="color:${textColor}">${esc(formatColor(step.color, "srgb"))}</span></a>`;
     })
     .join("");
   const strip = `<div class="strip">${cells}</div>`;
@@ -318,8 +318,8 @@ function stripFor(system: ResolvedSystem, withDeltas = false): string {
     .map((step, i) => {
       const next = system.steps[i + 1];
       const label =
-        next && step.opaque && next.opaque
-          ? `<span>${oklabDeltaE(step.css, next.css).toFixed(3)}</span>`
+        next && isOpaque(step.color) && isOpaque(next.color)
+          ? `<span>${oklabDeltaE(formatColor(step.color, "srgb"), formatColor(next.color, "srgb")).toFixed(3)}</span>`
           : "";
       return `<div class="gap">${label}</div>`;
     })
@@ -832,13 +832,13 @@ export function renderSystem(
         .join(", ");
       const previous = i > 0 ? system.steps[i - 1] : null;
       const deltaE =
-        previous && step.opaque && previous.opaque
-          ? `<span class="de">${oklabDeltaE(previous.css, step.css).toFixed(3)}</span>`
+        previous && isOpaque(step.color) && isOpaque(previous.color)
+          ? `<span class="de">${oklabDeltaE(formatColor(previous.color, "srgb"), formatColor(step.color, "srgb")).toFixed(3)}</span>`
           : `<span class="muted">—</span>`;
       const value = step.overridden
-        ? `<span class="cell">${swatch(step.css, step.opaque, 22)}<code>${esc(step.css)}</code><span class="pill">override</span></span>
-           <div class="muted" style="margin-top:3px">generated <span class="cell" style="display:inline-flex">${swatch(step.generatedCss ?? "", step.opaque, 14)}<code>${esc(step.generatedCss ?? "")}</code></span></div>`
-        : `<span class="cell">${swatch(step.css, step.opaque, 22)}<code>${esc(step.css)}</code></span>`;
+        ? `<span class="cell">${swatch(formatColor(step.color, "srgb"), isOpaque(step.color), 22)}<code>${esc(formatColor(step.color, "srgb"))}</code><span class="pill">override</span></span>
+           <div class="muted" style="margin-top:3px">generated <span class="cell" style="display:inline-flex">${swatch(formatColor(step.generated!, "srgb"), isOpaque(step.color), 14)}<code>${esc(formatColor(step.generated!, "srgb"))}</code></span></div>`
+        : `<span class="cell">${swatch(formatColor(step.color, "srgb"), isOpaque(step.color), 22)}<code>${esc(formatColor(step.color, "srgb"))}</code></span>`;
       return `<tr id="${stepAnchor(step)}"><td><code>${esc(publicSystemName(system, "css"))}-${esc(step.publicStep)}</code></td><td><code>${esc(name)}/${esc(step.selector)}</code></td><td>${value}</td><td>${deltaE}</td><td>${usedBy || '<span class="muted">—</span>'}</td></tr>`;
     })
     .join("");
@@ -871,7 +871,7 @@ export function renderDomain(
       const cells = role.perMode
         .map(
           (entry) =>
-            `<td><span class="cell">${swatch(entry.css, entry.opaque)}<span><code>${esc(entry.css)}</code><br>${refLink(resolved, entry.ref, entry.target)}</span></span></td>`,
+            `<td><span class="cell">${swatch(formatColor(entry.color, "srgb"), isOpaque(entry.color))}<span><code>${esc(formatColor(entry.color, "srgb"))}</code><br>${refLink(resolved, entry.ref, entry.target)}</span></span></td>`,
         )
         .join("");
       return `<tr id="${esc(role.role)}"><td><code>${esc(role.role)}</code></td>${cells}</tr>`;

@@ -4,6 +4,7 @@ import { dirname } from "node:path";
 import { loadConfig } from "./config.js";
 import { startDevServer } from "./dev-server.js";
 import { emitCss, emitDtcg } from "./emit.js";
+import { isOpaque } from "./color-math.js";
 import { resolveDefinition } from "./resolve.js";
 import { watchDefinition } from "./watch.js";
 
@@ -54,7 +55,7 @@ if (command === "dev" || command === "emit") {
         );
       }
       const tokenCount = resolved.systems.reduce(
-        (n, s) => n + s.steps.filter((st) => st.opaque).length,
+        (n, s) => n + s.steps.filter((st) => isOpaque(st.color)).length,
         0,
       );
       console.log(

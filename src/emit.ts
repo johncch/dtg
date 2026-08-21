@@ -1,3 +1,4 @@
+import { formatColor, isOpaque } from "./color-math.js";
 import {
   aliasedName,
   buildLineage,
@@ -28,14 +29,14 @@ function cssVarName(role: ResolvedRole): string {
 
 function cssValueFor(resolved: ResolvedDefinition, entry: ResolvedRef): string {
   const target = entry.target;
-  if (target.kind === "step" && entry.opaque) {
+  if (target.kind === "step" && isOpaque(entry.color)) {
     const system = resolved.systems.find((s) => s.system === target.system);
     const step = system?.steps.find((s) => s.selector === target.selector);
     if (system && step) {
       return `var(--color-${publicSystemName(system, "css")}-${step.publicStep})`;
     }
   }
-  if (target.kind === "constant" && entry.opaque) {
+  if (target.kind === "constant" && isOpaque(entry.color)) {
     const constant = resolved.statics.find((c) => c.path === target.name);
     if (constant) {
       return `var(--color-${publicPath(constant.segments, "css", "-")})`;
@@ -49,7 +50,7 @@ function cssValueFor(resolved: ResolvedDefinition, entry: ResolvedRef): string {
   }
   // transparent() results and overlay steps have no primitive variable to
   // point at; they inline their computed value.
-  return entry.css;
+  return formatColor(entry.color, "srgb");
 }
 
 export function emitCss(
@@ -63,12 +64,12 @@ export function emitCss(
     format === "tailwind" ? "@theme {" : ":root {",
   );
   for (const system of resolved.systems) {
-    const opaqueSteps = system.steps.filter((s) => s.opaque);
+    const opaqueSteps = system.steps.filter((s) => isOpaque(s.color));
     if (opaqueSteps.length === 0) continue;
     const name = publicSystemName(system, "css");
     lines.push(`  /* ${system.system} (${system.algorithm}) */`);
     for (const step of opaqueSteps) {
-      lines.push(`  --color-${name}-${step.publicStep}: ${step.css};`);
+      lines.push(`  --color-${name}-${step.publicStep}: ${formatColor(step.color, "srgb")};`);
     }
   }
   if (resolved.statics.length > 0) {
@@ -167,7 +168,7 @@ export function emitDtcg(resolved: ResolvedDefinition): unknown {
     },
   };
   for (const system of resolved.systems) {
-    const steps = system.steps.filter((s) => s.opaque);
+    const steps = system.steps.filter((s) => isOpaque(s.color));
     if (steps.length === 0) continue;
     const group: Record<string, unknown> = {};
     for (const step of steps) {
@@ -176,10 +177,10 @@ export function emitDtcg(resolved: ResolvedDefinition): unknown {
         ref: `${system.system}/${step.selector}`,
         algorithm: system.algorithm,
       };
-      if (step.overridden) ext.generated = step.generatedCss;
+      if (step.overridden) ext.generated = formatColor(step.generated!, "srgb");
       group[step.publicStep] = {
         $type: "color",
-        $value: dtcgColor(step.css),
+        $value: dtcgColor(formatColor(step.color, "srgb")),
         $description: stepIdentity(lineage, system, step),
         $extensions: { [DTCG_NS]: ext },
       };
@@ -263,13 +264,13 @@ function dtcgRef(resolved: ResolvedDefinition, entry: ResolvedRef): string {
     );
     if (role) return `{${role.section}.${role.domain}.${role.role}}`;
   }
-  if (target.kind === "constant" && entry.opaque) {
+  if (target.kind === "constant" && isOpaque(entry.color)) {
     return `{systems.static.${target.name}}`;
   }
-  if (target.kind === "step" && entry.opaque) {
+  if (target.kind === "step" && isOpaque(entry.color)) {
     const system = resolved.systems.find((s) => s.system === target.system);
     const step = system?.steps.find((s) => s.selector === target.selector);
     if (system && step) return `{systems.${system.system}.${step.publicStep}}`;
   }
-  return dtcgColor(entry.css);
+  return dtcgColor(formatColor(entry.color, "srgb"));
 }

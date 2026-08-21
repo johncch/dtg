@@ -6,9 +6,9 @@ import {
 } from "../contract.js";
 import {
   assertHex,
+  colorFromRgb,
   hexToRgb,
   mixIn,
-  translucent,
   BLEND_SPACES,
 } from "../color-math.js";
 import type { BlendSpace } from "../color-math.js";
@@ -45,12 +45,9 @@ export const blend: AlgorithmImpl = {
           `blend selector "${selector}": /alpha defers the blend to the browser, which always blends in srgb — this system blends in ${space}, so the two would disagree`,
         );
       }
-      return { css: translucent(hexToRgb(color), alpha), opaque: false };
+      return { color: colorFromRgb(hexToRgb(color), "srgb", alpha / 100) };
     }
-    return {
-      css: mixIn(color, base, alpha / 100, spaceOf(params)).css,
-      opaque: true,
-    };
+    return { color: mixIn(color, base, alpha / 100, spaceOf(params)) };
   },
 
   publicStep(params, selector) {

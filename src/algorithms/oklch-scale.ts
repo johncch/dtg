@@ -2,9 +2,9 @@ import { assertKnownParams, type AlgorithmImpl } from "../contract.js";
 import {
   assertHex,
   baseHueOf,
+  colorFromRgb,
   hexToRgb,
   oklchInterpolate,
-  rgbToHex,
 } from "../color-math.js";
 
 /**
@@ -35,7 +35,7 @@ export const oklchScale: AlgorithmImpl = {
       );
     }
     const base = hexToRgb(assertHex(params.base, "oklch-scale param 'base'"));
-    if (t === 1) return { css: rgbToHex(base), opaque: true };
+    if (t === 1) return { color: colorFromRgb(base) };
 
     const toward = params.toward;
     if (!Array.isArray(toward) || toward.length !== 2) {
@@ -67,7 +67,7 @@ export const oklchScale: AlgorithmImpl = {
             baseHue,
             hueShift,
           );
-    return { css: rgbToHex(rgb), opaque: true };
+    return { color: colorFromRgb(rgb) };
   },
 };
 

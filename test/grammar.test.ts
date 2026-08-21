@@ -1,5 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
+import { formatColor, isOpaque } from "../dist/color-math.js";
 import {
   publicPath,
   publicSystemName,
@@ -30,8 +31,8 @@ s:
   d:
     flat: [paper, reds.rose]
 `);
-    assert.equal(r.roles[0].perMode[0].css, "#ffffff");
-    assert.equal(r.roles[0].perMode[1].css, "#ff0000");
+    assert.equal(formatColor(r.roles[0].perMode[0].color, "srgb"), "#ffffff");
+    assert.equal(formatColor(r.roles[0].perMode[1].color, "srgb"), "#ff0000");
     assert.equal(r.roles[0].perMode[0].target.kind, "constant");
   });
 
@@ -41,7 +42,7 @@ s:
   d:
     tinted: [generated.sky/3, generated.sky/8]
 `);
-    assert.equal(r.roles[0].perMode[0].css, "#f3f6f9");
+    assert.equal(formatColor(r.roles[0].perMode[0].color, "srgb"), "#f3f6f9");
     assert.equal(r.systems[0].system, "generated.sky");
   });
 
@@ -63,8 +64,8 @@ s:
   d:
     veil: [generated.sky/3/ink, generated.sky/8/ink]
 `);
-    assert.equal(r.roles[0].perMode[0].css, "rgba(0, 26, 40, 0.03)");
-    assert.equal(r.roles[0].perMode[0].opaque, false);
+    assert.equal(formatColor(r.roles[0].perMode[0].color, "srgb"), "rgba(0, 26, 40, 0.03)");
+    assert.equal(isOpaque(r.roles[0].perMode[0].color), false);
   });
 
   test("transparent() is a utility on constants only", () => {
@@ -73,7 +74,7 @@ s:
   d:
     veil: [transparent(reds.dawn 20), transparent(paper 40)]
 `);
-    assert.equal(r.roles[0].perMode[0].css, "rgba(250, 0, 0, 0.2)");
+    assert.equal(formatColor(r.roles[0].perMode[0].color, "srgb"), "rgba(250, 0, 0, 0.2)");
     assert.throws(
       () =>
         withRoles(`
@@ -92,7 +93,7 @@ s:
     base: [paper, paper]
     echo: [d.base, d.base]
 `);
-    assert.equal(r.roles[1].perMode[0].css, "#ffffff");
+    assert.equal(formatColor(r.roles[1].perMode[0].color, "srgb"), "#ffffff");
     assert.equal(r.roles[1].perMode[0].target.kind, "role");
   });
 });

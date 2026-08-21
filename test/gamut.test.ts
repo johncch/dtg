@@ -8,6 +8,7 @@ import {
   hexToOklab,
   inGamut,
   maxChroma,
+  formatColor,
   oklabToOklch,
   oklchToOklab,
   translucent,
@@ -93,18 +94,18 @@ describe("translucent", () => {
     const overlay = algorithmFor("overlay")!;
     const expected = "rgba(0, 26, 40, 0.03)";
     assert.equal(
-      ink.resolveStep({ base: "#fafdff", ink: "#001a28" }, "3/ink").css,
+      formatColor(ink.resolveStep({ base: "#fafdff", ink: "#001a28" }, "3/ink").color, "srgb"),
       expected,
     );
     assert.equal(
-      blend.resolveStep(
+      formatColor(blend.resolveStep(
         { base: "#fafdff", toward: { ink: "#001a28" } },
         "ink@3/alpha",
-      ).css,
+      ).color, "srgb"),
       expected,
     );
     assert.equal(
-      overlay.resolveStep({ color: "#001a28" }, "3").css,
+      formatColor(overlay.resolveStep({ color: "#001a28" }, "3").color, "srgb"),
       expected,
     );
   });
