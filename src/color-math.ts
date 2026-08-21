@@ -296,24 +296,39 @@ export function hexToOklab(hex: string): Oklab {
 /** CSS color-mix() interpolation spaces — `color-mix(in <space>, a p%, b)`. */
 export type BlendSpace = "srgb" | "srgb-linear" | "oklab" | "display-p3";
 
-export const BLEND_SPACES: { id: BlendSpace; label: string; note: string }[] = [
+/**
+ * `emittable` is false where a blend produces a value the CSS emitter cannot
+ * yet ship safely — a bare `color(display-p3 ...)` with no sRGB fallback is
+ * dropped whole by a browser that cannot parse it, taking the custom property
+ * with it. The comparison tools still show every space; only emit is gated.
+ */
+export const BLEND_SPACES: {
+  id: BlendSpace;
+  label: string;
+  note: string;
+  emittable: boolean;
+}[] = [
   {
     id: "srgb",
+    emittable: true,
     label: "sRGB",
     note: "What browsers and design tools actually do. Lerps the stored byte.",
   },
   {
     id: "srgb-linear",
+    emittable: true,
     label: "sRGB linear",
     note: "Physically correct — lerps emitted light. What film and games use.",
   },
   {
     id: "oklab",
+    emittable: true,
     label: "OKLab",
     note: "Perceptual. Holds hue exactly when mixing toward a neutral.",
   },
   {
     id: "display-p3",
+    emittable: false,
     label: "Display P3",
     note: "The same operation as sRGB, in P3 primaries. A wider display.",
   },

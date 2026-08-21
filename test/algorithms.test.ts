@@ -108,12 +108,21 @@ describe("blend space", () => {
     );
   });
 
-  test("each space lands somewhere different", () => {
+  test("each emittable space lands somewhere different", () => {
     const at = (space: string) =>
       blend.resolveStep({ ...P, space }, "red@6").css;
+    assert.equal(at("srgb"), "#faf0f0");
     assert.equal(at("srgb-linear"), "#fbf8f8");
     assert.equal(at("oklab"), "#fdf2f0");
-    assert.match(at("display-p3"), /^color\(display-p3 /);
+  });
+
+  test("display-p3 is refused until emit can ship a fallback", () => {
+    // A bare color(display-p3 ...) with no sRGB fallback is dropped whole by
+    // a browser that cannot parse it, taking the custom property with it.
+    assert.throws(
+      () => blend.declaredSelectors({ ...P, space: "display-p3" }),
+      /not emittable yet/,
+    );
   });
 
   test("endpoints agree in every space", () => {
@@ -126,7 +135,7 @@ describe("blend space", () => {
   test("an unknown space is rejected", () => {
     assert.throws(
       () => blend.declaredSelectors({ ...P, space: "cmyk" }),
-      /expected one of srgb, srgb-linear, oklab, display-p3/,
+      /expected one of srgb, srgb-linear, oklab/,
     );
   });
 
