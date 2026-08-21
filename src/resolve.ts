@@ -5,7 +5,7 @@ import {
   defaultStepOrder,
   type AlgorithmImpl,
 } from "./contract.js";
-import { assertHex } from "./color-math.js";
+import { assertHex, hexToRgb } from "./color-math.js";
 import { compose } from "./algorithms/compose.js";
 import { inkRamp } from "./algorithms/ink-ramp.js";
 import { oklchScale } from "./algorithms/oklch-scale.js";
@@ -26,11 +26,20 @@ const TOP_LEVEL_RESERVED = [
   "systems",
   "changelog",
 ];
-// System keys addressed to the tool, not the algorithm.
-const SYSTEM_RESERVED = ["algorithm", "alias", "overrides"];
+// A system node's keys. Params live in their own block, so this list can
+// grow without ever colliding with an algorithm's parameter names.
+const SYSTEM_RESERVED = ["algorithm", "params", "alias", "overrides"];
 
 /** A public-name override: one name for all targets, or per-target ("css", "figma"). */
 export type AliasValue = string | Record<string, string>;
+
+/** The algorithm registry, for callers that need to re-run one directly. */
+export function algorithmFor(
+  name: string,
+  extra?: Record<string, AlgorithmImpl>,
+): AlgorithmImpl | undefined {
+  return { ...builtinAlgorithms, ...extra }[name];
+}
 
 export function aliasedName(
   alias: AliasValue | undefined,
@@ -96,21 +105,25 @@ function compareSteps(
 
 export type Lineage = Map<
   string,
-  { domain: string; role: string; mode: string; viaTransparent: boolean }[]
+  { domain: string; role: string; mode: string; translucent: boolean }[]
 >;
 
 export function buildLineage(resolved: ResolvedDefinition): Lineage {
   const lineage: Lineage = new Map();
   for (const role of resolved.roles) {
     role.perMode.forEach((entry, i) => {
-      if (entry.target.kind === "role") return;
-      const key = `${entry.target.system}/${entry.target.selector}`;
+      const target = entry.target;
+      if (target.kind === "role") return;
+      const key =
+        target.kind === "constant"
+          ? target.name
+          : `${target.system}/${target.selector}`;
       const uses = lineage.get(key) ?? [];
       uses.push({
         domain: role.domain,
         role: role.role,
         mode: resolved.modes[i] ?? String(i),
-        viaTransparent: entry.target.kind === "transparent",
+        translucent: !entry.opaque,
       });
       lineage.set(key, uses);
     });
@@ -130,7 +143,9 @@ export type ResolvedStep = {
 };
 
 export type ResolvedSystem = {
+  /** Internal dotted path — the stable identity refs point at. */
   system: string;
+  segments: PathSegment[];
   alias?: AliasValue;
   algorithm: string;
   algorithmDescription: string;
@@ -145,6 +160,25 @@ export type ResolvedSystem = {
  */
 export type ChangelogEntry = { date?: string; note: string };
 
+/** One step of a systems-tree path, with the alias that renames it on emit. */
+export type PathSegment = { name: string; alias?: AliasValue };
+
+/** A declared constant. `path` is its internal identity; segments carry aliases. */
+export type ResolvedStatic = {
+  path: string;
+  segments: PathSegment[];
+  hex: string;
+};
+
+/** Joins a path for emitting, applying each segment's alias. */
+export function publicPath(
+  segments: PathSegment[],
+  target: string,
+  sep: string,
+): string {
+  return segments.map((s) => aliasedName(s.alias, target, s.name)).join(sep);
+}
+
 export type ResolvedSection = {
   name: string;
   alias?: AliasValue;
@@ -152,7 +186,8 @@ export type ResolvedSection = {
 
 export type RefTarget =
   | { kind: "step"; system: string; selector: string }
-  | { kind: "transparent"; system: string; selector: string }
+  /** A declared constant; `alpha` present means it was taken through transparent(). */
+  | { kind: "constant"; name: string; alpha?: number }
   | { kind: "role"; domain: string; role: string };
 
 export type ResolvedRef = {
@@ -180,7 +215,7 @@ export type ResolvedDefinition = {
   systems: ResolvedSystem[];
   /** The systems block's own alias (its Figma collection name). */
   systemsAlias?: AliasValue;
-  statics: { name: string; hex: string }[];
+  statics: ResolvedStatic[];
   sections: ResolvedSection[];
   roles: ResolvedRole[];
   warnings: string[];
@@ -189,8 +224,9 @@ export type ResolvedDefinition = {
 export function publicSystemName(
   system: ResolvedSystem,
   target: string,
+  sep = "-",
 ): string {
-  return aliasedName(system.alias, target, system.system);
+  return publicPath(system.segments, target, sep);
 }
 
 /** The role's public path segments for a target, alias applied, omissions dropped. */
@@ -271,53 +307,93 @@ export function resolveDefinition(
     overrides: Record<string, string>;
     alias?: AliasValue;
     declared: string[] | null;
+    segments: PathSegment[];
   };
   const systems = new Map<string, SystemEntry>();
-  const statics: { name: string; hex: string }[] = [];
+  const statics: ResolvedStatic[] = [];
   const systemsBlock = (doc.systems ?? {}) as Record<string, unknown>;
   const systemsAlias = parseAlias(systemsBlock.alias, "systems block");
 
-  for (const [name, raw] of Object.entries(systemsBlock)) {
-    if (name === "alias") continue;
-    if (typeof raw === "string") {
-      try {
-        statics.push({ name, hex: assertHex(raw, `system "${name}"`) });
-      } catch (e) {
-        errors.push((e as Error).message);
+  // A string is a constant, an object with `algorithm` is a system, and any
+  // other object is a group. Groups nest, so a path is the identity.
+  function walkSystems(node: Record<string, unknown>, prefix: PathSegment[]) {
+    for (const [key, raw] of Object.entries(node)) {
+      if (key === "alias") continue;
+      const segments = [...prefix, { name: key }];
+      const path = segments.map((seg) => seg.name).join(".");
+      if (typeof raw === "string") {
+        try {
+          statics.push({
+            path,
+            segments,
+            hex: assertHex(raw, `constant "${path}"`),
+          });
+        } catch (e) {
+          errors.push((e as Error).message);
+        }
+        continue;
       }
-      continue;
+      if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+        errors.push(`"${path}": expected a hex color, a group, or a system`);
+        continue;
+      }
+      const block = raw as Record<string, unknown>;
+      if (block.emits !== undefined) {
+        errors.push(`system "${path}": \`emits\` was renamed — use \`alias\``);
+        continue;
+      }
+      const alias = parseAlias(block.alias, `"${path}"`);
+      const named = [...prefix, { name: key, alias }];
+      if (block.algorithm === undefined) {
+        walkSystems(block, named);
+        continue;
+      }
+      const algoName = String(block.algorithm);
+      const algo = algorithms[algoName];
+      if (!algo) {
+        errors.push(`system "${path}": unknown algorithm "${algoName}"`);
+        continue;
+      }
+      const stray = Object.keys(block).filter(
+        (k) => !SYSTEM_RESERVED.includes(k),
+      );
+      if (stray.length > 0) {
+        errors.push(
+          `system "${path}": algorithm params moved into a \`params\` block — move ${stray.map((k) => `\`${k}\``).join(", ")} under \`params:\``,
+        );
+        continue;
+      }
+      const paramsBlock = block.params;
+      if (
+        paramsBlock != null &&
+        (typeof paramsBlock !== "object" || Array.isArray(paramsBlock))
+      ) {
+        errors.push(`system "${path}": \`params\` must be a map`);
+        continue;
+      }
+      const params = {
+        ...defaults[algoName],
+        ...((paramsBlock ?? {}) as Record<string, unknown>),
+      };
+      let declared: string[] | null = null;
+      try {
+        declared = algo.declaredSelectors(params);
+      } catch (e) {
+        errors.push(`system "${path}": ${(e as Error).message}`);
+        continue;
+      }
+      systems.set(path, {
+        algo,
+        algoName,
+        params,
+        overrides: (block.overrides ?? {}) as Record<string, string>,
+        alias,
+        declared,
+        segments: named,
+      });
     }
-    const block = raw as Record<string, unknown>;
-    if (block.emits !== undefined) {
-      errors.push(`system "${name}": \`emits\` was renamed — use \`alias\``);
-      continue;
-    }
-    const algoName = String(block.algorithm ?? "");
-    const algo = algorithms[algoName];
-    if (!algo) {
-      errors.push(`system "${name}": unknown algorithm "${algoName}"`);
-      continue;
-    }
-    const params = { ...defaults[algoName] };
-    for (const [key, value] of Object.entries(block)) {
-      if (!SYSTEM_RESERVED.includes(key)) params[key] = value;
-    }
-    let declared: string[] | null = null;
-    try {
-      declared = algo.declaredSelectors(params);
-    } catch (e) {
-      errors.push(`system "${name}": ${(e as Error).message}`);
-      continue;
-    }
-    systems.set(name, {
-      algo,
-      algoName,
-      params,
-      overrides: (block.overrides ?? {}) as Record<string, string>,
-      alias: parseAlias(block.alias, `system "${name}"`),
-      declared,
-    });
   }
+  walkSystems(systemsBlock, []);
 
   const stepCache = new Map<string, ResolvedStep | undefined>();
 
@@ -362,41 +438,6 @@ export function resolveDefinition(
     }
     stepCache.set(key, step);
     return step;
-  }
-
-  function resolveTransparent(
-    systemName: string,
-    selector: string,
-    refContext: string,
-  ): string | undefined {
-    const sys = systems.get(systemName);
-    if (!sys) {
-      errors.push(`${refContext}: unknown system "${systemName}"`);
-      return undefined;
-    }
-    if (!sys.algo.resolveTranslucent) {
-      errors.push(
-        `${refContext}: "${systemName}" has no unflattened form for transparent()`,
-      );
-      return undefined;
-    }
-    if (sys.declared && !sys.declared.includes(selector)) {
-      errors.push(
-        `${refContext}: "${systemName}" declares no stop "${selector}"`,
-      );
-      return undefined;
-    }
-    if (sys.overrides[selector] != null) {
-      warnings.push(
-        `transparent(${systemName}/${selector}) follows the algorithm's ink math; the step's override pins only the flattened form`,
-      );
-    }
-    try {
-      return sys.algo.resolveTranslucent(sys.params, selector);
-    } catch (e) {
-      errors.push(`${refContext}: ${(e as Error).message}`);
-      return undefined;
-    }
   }
 
   // ---- sections: every non-reserved top-level key ----
@@ -509,6 +550,14 @@ export function resolveDefinition(
     }
   }
 
+  for (const constant of statics) {
+    if (roleIndex.has(constant.path)) {
+      errors.push(
+        `"${constant.path}" is both a constant and a role path — refs would be ambiguous`,
+      );
+    }
+  }
+
   // ---- role resolution ----
   const roleCache = new Map<string, ResolvedRole | undefined>();
 
@@ -529,7 +578,11 @@ export function resolveDefinition(
     }
     if (modes.length > 0 && raw.refs.length !== modes.length) {
       errors.push(
-        `${path}: expected ${modes.length} refs (one per mode), got ${raw.refs.length}`,
+        `${path}: expected ${modes.length} refs (one per mode), got ${raw.refs.length}${
+          raw.refs.some((r) => /^transparent\(/.test(r) && !r.endsWith(")"))
+            ? " — a comma inside a `[ ]` list separates items. transparent() takes a space: transparent(shade 70)."
+            : ""
+        }`,
       );
       roleCache.set(path, undefined);
       return undefined;
@@ -575,26 +628,48 @@ export function resolveDefinition(
       );
       return undefined;
     }
-    const transparentMatch = ref.match(/^transparent\(\s*([^\s()]+)\s*\)$/);
+    const transparentMatch = ref.match(
+      /^transparent\(\s*([^\s(),]+)(?:\s+([^\s(),]+))?\s*\)$/,
+    );
     if (transparentMatch) {
       const inner = transparentMatch[1];
-      const slash = inner.indexOf("/");
-      if (slash < 1) {
-        errors.push(
-          `${context}: transparent() takes a system/selector ref, got "${inner}"`,
-        );
-        return undefined;
+      const weight = transparentMatch[2];
+      if (weight != null) {
+        // transparent(<constant>, <opacity>): a declared color at an alpha,
+        // never composited. The system/selector form takes its weight from
+        // the selector instead, so the two spellings do not overlap.
+        if (inner.includes("/")) {
+          errors.push(
+            `${context}: "${ref}" mixes forms — a system/selector ref already carries its weight`,
+          );
+          return undefined;
+        }
+        const constant = statics.find((c) => c.path === inner);
+        if (!constant) {
+          errors.push(
+            `${context}: unknown constant "${inner}" (declared: ${statics.map((c) => c.path).join(", ") || "none"})`,
+          );
+          return undefined;
+        }
+        const alpha = Number(weight);
+        if (!Number.isFinite(alpha) || alpha < 0 || alpha > 100) {
+          errors.push(
+            `${context}: transparent() opacity must be a number 0-100, got "${weight}"`,
+          );
+          return undefined;
+        }
+        const [r, g, b] = hexToRgb(constant.hex);
+        return {
+          ref,
+          target: { kind: "constant", name: inner, alpha },
+          css: `rgba(${r}, ${g}, ${b}, ${alpha / 100})`,
+          opaque: false,
+        };
       }
-      const system = inner.slice(0, slash);
-      const selector = inner.slice(slash + 1);
-      const css = resolveTransparent(system, selector, context);
-      if (css == null) return undefined;
-      return {
-        ref,
-        target: { kind: "transparent", system, selector },
-        css,
-        opaque: false,
-      };
+      errors.push(
+        `${context}: transparent() takes a constant and an opacity, as transparent(shade 70). For a system's uncomposited form, ask the algorithm — ink-ramp spells it "sky/3/ink".`,
+      );
+      return undefined;
     }
     if (ref.includes("/")) {
       const slash = ref.indexOf("/");
@@ -609,7 +684,7 @@ export function resolveDefinition(
         opaque: step.opaque,
       };
     }
-    if (ref.includes(".")) {
+    if (ref.includes(".") && roleIndex.has(ref)) {
       const targetRole = resolveRole(ref, stack);
       const entry = targetRole?.perMode[modeIndex];
       if (!entry) return undefined;
@@ -625,7 +700,30 @@ export function resolveDefinition(
         opaque: entry.opaque,
       };
     }
-    errors.push(`${context}: unrecognized ref "${ref}"`);
+    const constant = statics.find((s) => s.path === ref);
+    if (constant) {
+      return {
+        ref,
+        target: { kind: "constant", name: ref },
+        css: constant.hex,
+        opaque: true,
+      };
+    }
+    if (/^transparent\(/.test(ref) && !ref.endsWith(")")) {
+      errors.push(
+        `${context}: "${ref}" was cut short — a comma inside a \`[ ]\` list separates items. Write the refs as a block list ("- transparent(x, 70)") or quote this one.`,
+      );
+      return undefined;
+    }
+    if (/^[0-9.]+\)$/.test(ref)) {
+      errors.push(
+        `${context}: "${ref}" is the tail of a transparent(...) ref split by a comma inside a \`[ ]\` list — use a block list or quote the ref.`,
+      );
+      return undefined;
+    }
+    errors.push(
+      `${context}: unrecognized ref "${ref}" — expected system/selector, domain.role, a declared constant, or transparent(...)`,
+    );
     return undefined;
   }
 
@@ -680,6 +778,7 @@ export function resolveDefinition(
     }
     resolvedSystems.push({
       system: name,
+      segments: sys.segments,
       alias: sys.alias,
       algorithm: sys.algoName,
       algorithmDescription: sys.algo.description,

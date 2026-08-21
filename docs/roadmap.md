@@ -92,6 +92,54 @@ silently corrupts bindings.
 the definition, not a preview concern, and the emit layer should not depend
 on the preview layer.
 
+### The systems tree and contained params
+
+`systems` became a tree: a string is a constant, an object with `algorithm`
+is a system, any other object is a group, and groups nest. Constants are
+addressable by dotted path (`ink.body`) and referenceable from a role, which
+retired the palettes-used-only-at-100% fiction that `compose` was being bent
+into. Algorithm params moved into their own `params` block, so the reserved
+key list can grow without colliding with a parameter name. Both old shapes
+error with a pointer.
+
+One meaning per separator: `.` navigates a namespace, `/` hands off to an
+algorithm. That rule survives nesting — `palettes.sky/3` parses without
+ambiguity — and it is why constant paths and role paths share a shape and
+must not collide.
+
+### The uncomposited form moved into the selector
+
+`transparent(system/selector)` and the `resolveTranslucent` hook are gone.
+An algorithm that composites publishes its layer as an ordinary selector —
+`sky/3/ink`, `warm/red@6/top` — named from its own params.
+
+The reason is that a core function's syntax promised generality it could not
+have: `X(ref)` looked like it took any color but only worked on algorithms
+that composite, and nothing at the call site said which those were. Two
+alternatives were rejected on evidence. An explicit ground argument
+(`unflatten(sky/3, sky.base)`) is decorative, because the ground is
+determined by the ref. Recovering the layer by subtraction is numerically
+dead: quantisation amplifies by 1/α, so at 3% a ±0.5 rounding error becomes
+±16.7 per channel and `#001a28` comes back as `#111437`.
+
+`transparent(name 70)` survives for constants, where it is a genuine pure
+function of a color and an amount. The contract shrank: one method and one
+grammar form removed, nothing added.
+
+### Tests
+
+`pnpm test` builds, then runs `node --test` over `test/*.test.ts` — 33 tests,
+no new dependencies. They import from `dist/`, since Node's type stripping
+does not remap a `.js` specifier onto a `.ts` file; building first means a
+stale artifact cannot give a false pass, which is the failure mode that
+fooled the dev server three times in one session.
+
+Coverage is weighted to the grammar: every ref form, alias-versus-identity,
+the params block, the constant/role collision, circular roles, ref counts,
+raw hex, the comma diagnostic, determinism. One test pins a real regression —
+deriving a public name from the parsed float turned `3.5` into
+`3_5000000000000004`, and only Sunnyday's use of a fractional alpha caught it.
+
 ## Later
 
 - **Param schema on `AlgorithmImpl`.** One construct, three jobs: subsumes

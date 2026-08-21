@@ -30,7 +30,9 @@ plus a few anchors.
 
 ```yaml
 systems:
-  sky: { algorithm: ink-ramp, base: "#fafdff", ink: "#001a28" }
+  sky:
+    algorithm: ink-ramp
+    params: { base: "#fafdff", ink: "#001a28" }
 ```
 
 That system can produce any step on demand. `sky/3` is 3% ink over the
@@ -169,11 +171,22 @@ dtg: 1 # grammar version
 modes: [light, dark]
 
 systems:
-  sky: { algorithm: ink-ramp, base: "#fafdff", ink: "#001a28" }
-  night: { algorithm: ink-ramp, base: "#151c1f", ink: "#001a28" }
-  theme: { algorithm: oklch-scale, base: "#03a2e8" }
-  shadow: { algorithm: overlay, color: "#000000" }
-  white: "#ffffff" # statics: plain hex
+  white: "#ffffff" # a constant: a role can point straight at it
+  ink:               # a group: constants nest, addressed by path
+    body: "#313133"
+    muted: "#828282"
+  sky: # a system: an object with `algorithm`
+    algorithm: ink-ramp
+    params: { base: "#fafdff", ink: "#001a28" }
+  night:
+    algorithm: ink-ramp
+    params: { base: "#151c1f", ink: "#001a28" }
+  theme:
+    algorithm: oklch-scale
+    params: { base: "#03a2e8" }
+  shadow:
+    algorithm: overlay
+    params: { color: "#000000" }
 
 defaults: # shared params, per algorithm
   oklch-scale:
@@ -182,34 +195,46 @@ defaults: # shared params, per algorithm
     stops: { "50": 0.05, "500": 1, "950": 0.05 }
 
 core: # any non-reserved top-level key is a section you name;
-  surface: #   each section becomes a Figma collection
+  surface: #   each section becomes a design-tool collection
     canvas: [sky/3, night/0] # one ref per mode
     card: [sky/0, night/4]
     floating: [surface.card, night/6] # roles can point at roles
   state:
-    hover: [transparent(sky/3), transparent(night/3.5)]
+    hover: [sky/3/ink, night/3.5/ink] # ink-ramp's uncomposited form
+    veil: [transparent(white 70), transparent(ink.body 40)]
   label:
     primary: # omit drops the segment: emits --label
       omit: true
       refs: [night/0, sky/0]
-    secondary: [night/30, sky/40] # emits --label-secondary
+    secondary: [ink.muted, ink.muted] # emits --label-secondary
 ```
 
 ### Grammar
 
 - `dtg: 1` declares the grammar version. The resolver warns when it is
   missing and refuses versions it does not understand.
-- **`systems`** declares color systems: `name` maps to
-  `{ algorithm, ...params }`, or to a plain hex for a static. Reserved keys
-  the tool owns: `algorithm`, `alias` (public-name override), `overrides`
-  (selector to hex, pins a step's flattened value). Everything else passes
-  through to the algorithm untouched, and built-ins reject unknown params
-  so typos fail loudly.
+- **`systems`** is a tree of three node kinds, told apart with no extra
+  syntax. A **string** is a constant. An object with **`algorithm`** is a
+  system. Any other object is a **group**, and groups nest.
+- A system node's keys belong to the tool: `algorithm` names the algorithm,
+  `params` holds its inputs, `alias` overrides the public name, `overrides`
+  pins a step's flattened value. Params live in their own block so this list
+  can grow without ever colliding with a parameter name, and built-ins
+  reject unknown params so typos fail loudly.
 - **`defaults`** holds shared params per algorithm, merged under each
   system's own params. One copy of each number.
-- A **ref** is `system/selector` (everything after the slash belongs to the
-  algorithm), or `domain.role` to alias another decision in the same mode,
-  or `transparent(system/selector)` for a step's unflattened ink form.
+- A **ref** is one of:
+  - `paper`, or `ink.body` — a constant, by path
+  - `sky/3` — a step. Dots walk the systems tree; the slash hands off, and
+    everything after it belongs to the algorithm (`sky/3` is 3% ink,
+    `sky/3/ink` is that ink uncomposited, `theme/600` is a stop name,
+    `warm/red@6` is a compose anchor at 6%)
+  - `domain.role` — another decision in the same mode
+  - `transparent(paper 70)` — a constant at an opacity. Constants only:
+    they have no recipe, so this is a plain function of a color and an
+    amount. A system's uncomposited form is a selector instead, because it
+    re-runs the recipe rather than transforming the output.
+- One meaning per separator: **`.` navigates, `/` hands off.**
 - **Raw hex is legal only inside `systems`.**
 - A **role** is a list of refs, one per mode, or `{ refs, alias?, omit? }`
   when its public name diverges. This is the complete role grammar.
@@ -218,12 +243,12 @@ core: # any non-reserved top-level key is a section you name;
   system into a design tool — "renamed `shadow.2` to `shadow.3`, rename in
   Figma rather than recreate" — and the resolver never interprets it.
 - **Sections are yours.** Top-level keys other than
-  `dtg`/`modes`/`defaults`/`systems`/`changelog` are sections: arbitrary names, each
-  emitted as a Figma collection. CSS names never include the section. Role
+  `dtg`/`modes`/`defaults`/`systems`/`changelog` are sections: arbitrary
+  names, each emitted as a design-tool collection. CSS names never include the section. Role
   paths (`domain.role`) must be unique across sections so refs stay
   unambiguous.
-- **`alias`** on any emitting key (a system, the systems block itself, a
-  section, a domain, or a role) replaces its public name. A string for all
+- **`alias`** on any emitting key (a constant group, a system, the systems
+  block itself, a section, a domain, or a role) replaces its public name. A string for all
   targets, or per-target: `alias: { css: light, figma: Light }`. Internal
   names are for pointing, public names are for emitting, refs always use
   internal names.
@@ -241,14 +266,20 @@ historical ones, such as shipped names that predate the definition.
 Each built-in algorithm has one complete behavior.
 
 - **`ink-ramp`** (`base`, `ink`): ink composited over a base. The selector
-  is the ink's alpha percent, so the token name is the recipe. Steps are
-  opaque surface colors. Backs `transparent()`.
+  is the ink's alpha percent, so the token name is the recipe — `sky/15` is
+  15% ink. Adding `/ink` gives the same ink at the same alpha without the
+  base, for a value that must sit over an unknown surface.
 - **`oklch-scale`** (`base`, `toward`, `hueShift`, `stops`): a chromatic
   scale blended from the base in OKLCH. Stops below 500 blend toward
   `toward[0]`, above toward `toward[1]`; a stop's value is the fraction of
   base remaining. `hueShift` 0 locks every stop to the base hue, 100
   follows the natural interpolated path. Declared stops emit in full, as a
   public palette.
+- **`compose`** (`bottom`, `tops`): a palette of named colors over one
+  shared ground. The selector carries both coordinates — `warm/red@6` is
+  that anchor at 6% over the ground, `warm/red@100` is the anchor itself —
+  so one palette serves tints and full-strength use. `/top` gives the
+  anchor uncomposited.
 - **`overlay`** (`color`): color at selector % opacity, never flattened.
   Shadows and scrims.
 
@@ -257,10 +288,15 @@ is declared once in the systems block and applies everywhere the system is
 used. A shadow, for example, uses `overlay` because overlays stay
 translucent.
 
-`transparent()` asks an algorithm for the unflattened form of a step. The
-system re-runs its recipe and stops before compositing, preserving the ink
-and its alpha rather than trying to recover them from a flattened hex.
-Algorithms expose this capability when their recipes support it.
+An algorithm that composites can also publish the layer *before* it meets
+the ground — `sky/3/ink`, `warm/red@6/top`. That is a selector rather than a
+core function, because it re-runs the recipe rather than transforming the
+output: the ink and its alpha cannot be recovered from a flattened hex, and
+at low alpha the arithmetic is hopeless anyway. Each algorithm names the
+form from its own params, and documents it in its description.
+
+`transparent(name 70)` is the separate, ordinary thing: a constant at an
+opacity. Constants have no recipe, so nothing is being un-done.
 
 The registry is open: `resolveDefinition(yaml, extraAlgorithms)` merges
 project algorithms over built-ins, so a project can bring its own

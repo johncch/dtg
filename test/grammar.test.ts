@@ -1,0 +1,200 @@
+import { describe, test } from "node:test";
+import assert from "node:assert/strict";
+import {
+  publicPath,
+  publicSystemName,
+  resolveDefinition,
+} from "../dist/resolve.js";
+
+const BASE = `
+dtg: 1
+modes: [light, dark]
+systems:
+  paper: "#ffffff"
+  reds:
+    rose: "#ff0000"
+    dawn: "#fa0000"
+  generated:
+    alias: test
+    sky:
+      algorithm: ink-ramp
+      params: { base: "#fafdff", ink: "#001a28" }
+`;
+
+const withRoles = (roles: string) => resolveDefinition(BASE + roles);
+
+describe("refs", () => {
+  test("a bare name is a constant; a dotted name is one in a group", () => {
+    const r = withRoles(`
+s:
+  d:
+    flat: [paper, reds.rose]
+`);
+    assert.equal(r.roles[0].perMode[0].css, "#ffffff");
+    assert.equal(r.roles[0].perMode[1].css, "#ff0000");
+    assert.equal(r.roles[0].perMode[0].target.kind, "constant");
+  });
+
+  test("dots walk the tree, the slash hands off to the algorithm", () => {
+    const r = withRoles(`
+s:
+  d:
+    tinted: [generated.sky/3, generated.sky/8]
+`);
+    assert.equal(r.roles[0].perMode[0].css, "#f3f6f9");
+    assert.equal(r.systems[0].system, "generated.sky");
+  });
+
+  test("an alias renames on emit and never changes the identity", () => {
+    const r = withRoles(`
+s:
+  d:
+    tinted: [generated.sky/3, generated.sky/3]
+`);
+    assert.equal(r.systems[0].system, "generated.sky");
+    assert.equal(publicSystemName(r.systems[0], "css", "-"), "test-sky");
+    const rose = r.statics.find((c) => c.path === "reds.rose")!;
+    assert.equal(publicPath(rose.segments, "css", "-"), "reds-rose");
+  });
+
+  test("the uncomposited form is a selector, not a core function", () => {
+    const r = withRoles(`
+s:
+  d:
+    veil: [generated.sky/3/ink, generated.sky/8/ink]
+`);
+    assert.equal(r.roles[0].perMode[0].css, "rgba(0, 26, 40, 0.03)");
+    assert.equal(r.roles[0].perMode[0].opaque, false);
+  });
+
+  test("transparent() is a utility on constants only", () => {
+    const r = withRoles(`
+s:
+  d:
+    veil: [transparent(reds.dawn 20), transparent(paper 40)]
+`);
+    assert.equal(r.roles[0].perMode[0].css, "rgba(250, 0, 0, 0.2)");
+    assert.throws(
+      () =>
+        withRoles(`
+s:
+  d:
+    veil: [transparent(generated.sky/3), transparent(paper 40)]
+`),
+      /takes a constant and an opacity/,
+    );
+  });
+
+  test("roles can point at other roles", () => {
+    const r = withRoles(`
+s:
+  d:
+    base: [paper, paper]
+    echo: [d.base, d.base]
+`);
+    assert.equal(r.roles[1].perMode[0].css, "#ffffff");
+    assert.equal(r.roles[1].perMode[0].target.kind, "role");
+  });
+});
+
+describe("rejects", () => {
+  test("raw hex outside systems", () => {
+    assert.throws(
+      () =>
+        withRoles(`
+s:
+  d:
+    flat: ["#ff0000", "#ff0000"]
+`),
+      /raw hex is not allowed/,
+    );
+  });
+
+  test("a role with the wrong number of refs", () => {
+    assert.throws(
+      () =>
+        withRoles(`
+s:
+  d:
+    flat: [paper]
+`),
+      /expected 2 refs/,
+    );
+  });
+
+  test("a comma inside a flow list, with a diagnosis", () => {
+    assert.throws(
+      () =>
+        withRoles(`
+s:
+  d:
+    veil: [transparent(paper, 70), transparent(paper, 80)]
+`),
+      /comma inside a `\[ \]` list/,
+    );
+  });
+
+  test("algorithm params outside the params block", () => {
+    assert.throws(
+      () =>
+        resolveDefinition(`
+dtg: 1
+modes: [light]
+systems:
+  sky:
+    algorithm: ink-ramp
+    base: "#fafdff"
+    ink: "#001a28"
+s: { d: { r: [sky/3] } }
+`),
+      /moved into a `params` block/,
+    );
+  });
+
+  test("a constant and a role sharing a path", () => {
+    assert.throws(
+      () =>
+        resolveDefinition(`
+dtg: 1
+modes: [light]
+systems:
+  d:
+    r: "#ffffff"
+s:
+  d:
+    r: [d.r]
+`),
+      /both a constant and a role path/,
+    );
+  });
+
+  test("circular role references", () => {
+    assert.throws(
+      () =>
+        withRoles(`
+s:
+  d:
+    a: [d.b, d.b]
+    b: [d.a, d.a]
+`),
+      /circular role reference/,
+    );
+  });
+});
+
+describe("determinism", () => {
+  test("resolving the same definition twice gives the same result", () => {
+    const src =
+      BASE +
+      `
+s:
+  d:
+    flat: [paper, reds.rose]
+    tinted: [generated.sky/3, generated.sky/8]
+`;
+    assert.deepEqual(
+      JSON.parse(JSON.stringify(resolveDefinition(src))),
+      JSON.parse(JSON.stringify(resolveDefinition(src))),
+    );
+  });
+});

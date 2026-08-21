@@ -1,6 +1,7 @@
 import {
   aliasedName,
   buildLineage,
+  publicPath,
   publicRoleName,
   publicSystemName,
   type Lineage,
@@ -26,25 +27,25 @@ function cssVarName(role: ResolvedRole): string {
 }
 
 function cssValueFor(resolved: ResolvedDefinition, entry: ResolvedRef): string {
-  if (entry.target.kind === "step" && entry.opaque) {
-    const system = resolved.systems.find(
-      (s) => entry.target.kind !== "role" && s.system === entry.target.system,
-    );
-    const step = system?.steps.find(
-      (s) => entry.target.kind !== "role" && s.selector === entry.target.selector,
-    );
+  const target = entry.target;
+  if (target.kind === "step" && entry.opaque) {
+    const system = resolved.systems.find((s) => s.system === target.system);
+    const step = system?.steps.find((s) => s.selector === target.selector);
     if (system && step) {
       return `var(--color-${publicSystemName(system, "css")}-${step.publicStep})`;
     }
   }
-  if (entry.target.kind === "role") {
-    const target = resolved.roles.find(
-      (r) =>
-        entry.target.kind === "role" &&
-        r.domain === entry.target.domain &&
-        r.role === entry.target.role,
+  if (target.kind === "constant" && entry.opaque) {
+    const constant = resolved.statics.find((c) => c.path === target.name);
+    if (constant) {
+      return `var(--color-${publicPath(constant.segments, "css", "-")})`;
+    }
+  }
+  if (target.kind === "role") {
+    const role = resolved.roles.find(
+      (r) => r.domain === target.domain && r.role === target.role,
     );
-    if (target) return `var(--${cssVarName(target)})`;
+    if (role) return `var(--${cssVarName(role)})`;
   }
   // transparent() results and overlay steps have no primitive variable to
   // point at; they inline their computed value.
@@ -73,7 +74,7 @@ export function emitCss(
   if (resolved.statics.length > 0) {
     lines.push("  /* statics */");
     for (const s of resolved.statics) {
-      lines.push(`  --color-${s.name}: ${s.hex};`);
+      lines.push(`  --color-${publicPath(s.segments, "css", "-")}: ${s.hex};`);
     }
   }
   lines.push("}", "");
@@ -117,6 +118,20 @@ export function emitCss(
  */
 const DTCG_NS = "com.fifthrevision.dtg";
 
+/** Places a value at a dotted path, creating groups along the way. */
+function placeAt(
+  root: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): void {
+  const keys = path.split(".");
+  let node = root;
+  for (const key of keys.slice(0, -1)) {
+    node = (node[key] ??= {}) as Record<string, unknown>;
+  }
+  node[keys[keys.length - 1]] = value;
+}
+
 export function emitDtcg(resolved: ResolvedDefinition): unknown {
   const lineage = buildLineage(resolved);
   const meta: Record<string, unknown> = { modes: resolved.modes };
@@ -157,7 +172,7 @@ export function emitDtcg(resolved: ResolvedDefinition): unknown {
     const group: Record<string, unknown> = {};
     for (const step of steps) {
       const ext: Record<string, unknown> = {
-        name: `${publicSystemName(system, "figma")}/${step.publicStep}`,
+        name: `${publicSystemName(system, "figma", "/")}/${step.publicStep}`,
         ref: `${system.system}/${step.selector}`,
         algorithm: system.algorithm,
       };
@@ -169,17 +184,19 @@ export function emitDtcg(resolved: ResolvedDefinition): unknown {
         $extensions: { [DTCG_NS]: ext },
       };
     }
-    systems[system.system] = group;
+    placeAt(systems, system.system, group);
   }
   if (resolved.statics.length > 0) {
     const group: Record<string, unknown> = {};
     for (const s of resolved.statics) {
-      group[s.name] = {
+      placeAt(group, s.path, {
         $type: "color",
         $value: s.hex,
-        $description: `static.${s.name}`,
-        $extensions: { [DTCG_NS]: { name: `static/${s.name}` } },
-      };
+        $description: `static.${s.path}`,
+        $extensions: {
+          [DTCG_NS]: { name: `static/${publicPath(s.segments, "figma", "/")}` },
+        },
+      });
     }
     systems.static = group;
   }
@@ -239,22 +256,19 @@ function stepIdentity(
 }
 
 function dtcgRef(resolved: ResolvedDefinition, entry: ResolvedRef): string {
-  if (entry.target.kind === "role") {
-    const target = resolved.roles.find(
-      (r) =>
-        entry.target.kind === "role" &&
-        r.domain === entry.target.domain &&
-        r.role === entry.target.role,
+  const target = entry.target;
+  if (target.kind === "role") {
+    const role = resolved.roles.find(
+      (r) => r.domain === target.domain && r.role === target.role,
     );
-    if (target) return `{${target.section}.${target.domain}.${target.role}}`;
+    if (role) return `{${role.section}.${role.domain}.${role.role}}`;
   }
-  if (entry.target.kind === "step" && entry.opaque) {
-    const system = resolved.systems.find(
-      (s) => entry.target.kind !== "role" && s.system === entry.target.system,
-    );
-    const step = system?.steps.find(
-      (s) => entry.target.kind !== "role" && s.selector === entry.target.selector,
-    );
+  if (target.kind === "constant" && entry.opaque) {
+    return `{systems.static.${target.name}}`;
+  }
+  if (target.kind === "step" && entry.opaque) {
+    const system = resolved.systems.find((s) => s.system === target.system);
+    const step = system?.steps.find((s) => s.selector === target.selector);
     if (system && step) return `{systems.${system.system}.${step.publicStep}}`;
   }
   return dtcgColor(entry.css);

@@ -1,4 +1,9 @@
-import { assertKnownParams, type AlgorithmImpl } from "../contract.js";
+import {
+  assertKnownParams,
+  type AlgorithmImpl,
+  type AlgorithmPreview,
+  type PreviewControl,
+} from "../contract.js";
 import {
   alphaComposite,
   assertHex,
@@ -6,16 +11,18 @@ import {
   rgbToHex,
 } from "../color-math.js";
 
-type Top = { color: string; alpha: number };
-
 /**
- * A named palette of colors composited over one ground. Unlike ink-ramp,
- * which sweeps a single ink across alphas, compose holds several tops that
+ * A named palette of colors over one shared ground. Unlike ink-ramp, which
+ * sweeps a single ink across alphas, compose holds several anchors that
  * share a bottom — the shape a tinted-surface palette actually has.
+ *
+ * Weight belongs to the use, not the anchor: the same red is a surface tint
+ * at 6% and a border at 100%, so the selector carries both coordinates and
+ * the emitted name still reads as the recipe.
  */
 export const compose: AlgorithmImpl = {
   description:
-    "A palette of named tops composited over one shared bottom. Each top declares the alpha it is normally used at, so the selector is the top's name — `blush` — and an optional `@alpha` overrides that weight for a one-off, as in `blush@100` for the pure hue. Steps are opaque; transparent() returns the top at its alpha, uncomposited.",
+    "A palette of named colors composited over one shared bottom. The selector is a color and a weight — `red@6` is that anchor at 6% over the ground, `red@100` is the anchor itself — so one palette serves both tints and full-strength use. Steps are opaque; transparent() returns the anchor at its weight, uncomposited.",
 
   declaredSelectors(params) {
     assertKnownParams(params, ["bottom", "tops"], "compose");
@@ -25,64 +32,108 @@ export const compose: AlgorithmImpl = {
   },
 
   resolveStep(params, selector) {
+    const { color, alpha, topOnly } = parseSelector(params, selector);
+    const [r, g, b] = hexToRgb(color);
+    if (topOnly) {
+      return { css: `rgba(${r}, ${g}, ${b}, ${alpha / 100})`, opaque: false };
+    }
     const bottom = hexToRgb(assertHex(params.bottom, "compose param 'bottom'"));
-    const { top, alpha } = parseSelector(params, selector);
     return {
-      css: rgbToHex(alphaComposite(hexToRgb(top.color), bottom, alpha / 100)),
+      css: rgbToHex(alphaComposite([r, g, b], bottom, alpha / 100)),
       opaque: true,
     };
   },
 
-  resolveTranslucent(params, selector) {
-    const { top, alpha } = parseSelector(params, selector);
-    const [r, g, b] = hexToRgb(top.color);
-    return `rgba(${r}, ${g}, ${b}, ${alpha / 100})`;
-  },
-
-  publicStep(_params, selector) {
+  publicStep(params, selector) {
+    // Name from the selector text; compose keeps alpha unscaled so there is
+    // no round-trip here, but the rule is the same as ink-ramp's.
+    const { name, topOnly } = parseSelector(params, selector);
     const at = selector.indexOf("@");
-    if (at === -1) return selector;
-    return `${selector.slice(0, at)}-${selector.slice(at + 1).replace(/\./g, "_")}`;
+    const slash = selector.indexOf("/");
+    const weight = selector.slice(at + 1, slash === -1 ? undefined : slash);
+    return `${name}-${weight.replace(/\./g, "_")}${topOnly ? "-top" : ""}`;
   },
 
   stepOrder(params, selector) {
     const names = Object.keys(parseTops(params));
-    const { name, alpha } = parseSelector(params, selector);
-    // Declaration order first, then weight; padded so the compare is lexical
-    // but still reads 3.5 as less than 12.
+    const { name, alpha, topOnly } = parseSelector(params, selector);
+    // Declaration order first, then weight; padded so the compare stays
+    // lexical while still reading 3.5 as less than 12.
     return `${String(names.indexOf(name)).padStart(4, "0")}:${alpha
       .toFixed(4)
-      .padStart(9, "0")}`;
+      .padStart(9, "0")}:${topOnly ? "1" : "0"}`;
+  },
+
+  preview(params, selectors) {
+    const tops = parseTops(params);
+    const names = Object.keys(tops);
+    const controls: PreviewControl[] = [
+      {
+        kind: "color",
+        path: "bottom",
+        label: "ground",
+        value: assertHex(params.bottom, "compose param 'bottom'"),
+      },
+      ...names.map(
+        (name): PreviewControl => ({
+          kind: "color",
+          path: `tops.${name}`,
+          label: name,
+          value: tops[name],
+        }),
+      ),
+    ];
+    const preview: AlgorithmPreview = {
+      shape: "palette",
+      controls,
+      composite: {
+        selectors: names.map((name) => `${name}@{weight}`),
+        vars: [
+          {
+            name: "weight",
+            label: "weight",
+            value: commonAlpha(selectors),
+            min: 0,
+            max: 100,
+            step: 0.5,
+            unit: "%",
+          },
+        ],
+      },
+    };
+    return preview;
   },
 };
 
-function parseTops(params: Record<string, unknown>): Record<string, Top> {
+/** The weight this palette is mostly used at — the tuner's starting point. */
+function commonAlpha(selectors: string[]): number {
+  const counts = new Map<number, number>();
+  for (const selector of selectors) {
+    const at = selector.indexOf("@");
+    if (at === -1) continue;
+    const alpha = Number(selector.slice(at + 1));
+    if (!Number.isFinite(alpha) || alpha >= 100) continue;
+    counts.set(alpha, (counts.get(alpha) ?? 0) + 1);
+  }
+  let best = 8;
+  let seen = 0;
+  for (const [alpha, n] of counts) {
+    if (n > seen) [best, seen] = [alpha, n];
+  }
+  return best;
+}
+
+function parseTops(params: Record<string, unknown>): Record<string, string> {
   const raw = params.tops;
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(
-      "compose param 'tops': expected a map of name to { color, alpha }",
-    );
+    throw new Error("compose param 'tops': expected a map of name to a hex color");
   }
-  const tops: Record<string, Top> = {};
-  for (const [name, entry] of Object.entries(raw as Record<string, unknown>)) {
-    if (entry == null || typeof entry !== "object" || Array.isArray(entry)) {
-      throw new Error(`compose top "${name}": expected { color, alpha }`);
-    }
-    const fields = entry as Record<string, unknown>;
-    for (const key of Object.keys(fields)) {
-      if (key !== "color" && key !== "alpha") {
-        throw new Error(
-          `compose top "${name}": unknown key "${key}" (known: color, alpha)`,
-        );
-      }
-    }
-    tops[name] = {
-      color: assertHex(fields.color, `compose top "${name}" color`),
-      alpha: parseAlpha(fields.alpha, `compose top "${name}" alpha`),
-    };
+  const tops: Record<string, string> = {};
+  for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
+    tops[name] = assertHex(value, `compose top "${name}"`);
   }
   if (Object.keys(tops).length === 0) {
-    throw new Error("compose param 'tops': declares no tops");
+    throw new Error("compose param 'tops': declares no colors");
   }
   return tops;
 }
@@ -90,36 +141,39 @@ function parseTops(params: Record<string, unknown>): Record<string, Top> {
 function parseSelector(
   params: Record<string, unknown>,
   selector: string,
-): { name: string; top: Top; alpha: number } {
+): { name: string; color: string; alpha: number; topOnly: boolean } {
   const tops = parseTops(params);
+  let topOnly = false;
+  const slash = selector.indexOf("/");
+  if (slash !== -1) {
+    const suffix = selector.slice(slash + 1);
+    if (suffix !== "top") {
+      throw new Error(
+        `compose selector "${selector}": unknown form "${suffix}" (known: top)`,
+      );
+    }
+    topOnly = true;
+    selector = selector.slice(0, slash);
+  }
   const at = selector.indexOf("@");
-  const name = at === -1 ? selector : selector.slice(0, at);
-  const top = tops[name];
-  if (!top) {
+  if (at === -1) {
     throw new Error(
-      `compose: unknown top "${name}" (declared: ${Object.keys(tops).join(", ")})`,
+      `compose selector "${selector}": needs a weight — write "${selector}@100" for the color itself, or "${selector}@6" for a 6% tint`,
     );
   }
-  if (at === -1) return { name, top, alpha: top.alpha };
+  const name = selector.slice(0, at);
+  const color = tops[name];
+  if (!color) {
+    throw new Error(
+      `compose: unknown color "${name}" (declared: ${Object.keys(tops).join(", ")})`,
+    );
+  }
   const rest = selector.slice(at + 1);
-  if (rest === "") {
+  const alpha = Number(rest);
+  if (rest === "" || !Number.isFinite(alpha) || alpha < 0 || alpha > 100) {
     throw new Error(
-      `compose selector "${selector}": "@" with no alpha — write "${name}" for the declared weight`,
+      `compose selector "${selector}": weight must be a number 0-100, got ${JSON.stringify(rest)}`,
     );
   }
-  return {
-    name,
-    top,
-    alpha: parseAlpha(rest, `compose selector "${selector}" alpha`),
-  };
-}
-
-function parseAlpha(value: unknown, context: string): number {
-  const n = typeof value === "number" ? value : Number(value);
-  if (!Number.isFinite(n) || n < 0 || n > 100) {
-    throw new Error(
-      `${context}: expected a number 0-100, got ${JSON.stringify(value)}`,
-    );
-  }
-  return n;
+  return { name, color, alpha, topOnly };
 }

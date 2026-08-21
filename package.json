@@ -12,10 +12,12 @@
   ],
   "scripts": {
     "build": "tsc",
-    "prepare": "tsc"
+    "prepare": "tsc",
+    "test": "tsc && node --test --test-reporter=./test/reporter.mjs test/*.test.ts",
+    "test:spec": "tsc && node --test test/*.test.ts"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "dependencies": {
     "yaml": "^2.9.0"

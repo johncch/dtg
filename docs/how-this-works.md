@@ -29,30 +29,35 @@ Canonical. The README carries the user-facing version of the same rules.
 - `dtg: 1` is the grammar version. The resolver assumes 1 with a warning when
   absent, and errors on versions it does not understand.
 - `modes: [light, dark]` sets the order role ref tuples are read in.
-- `systems`: `name → hex` for a static, or `name → { algorithm, ...params }`.
-  Reserved keys addressed to the tool, never the algorithm: `algorithm`,
-  `alias` (public-name override), `overrides` (selector → hex, pinning a
-  step's flattened value). Every other key passes through untouched.
+- `systems` is a tree of three node kinds, discriminated without extra
+  syntax: a **string** is a constant, an object with **`algorithm`** is a
+  system, any other object is a **group**. Groups nest, so a constant's
+  identity is its dotted path.
+- A system node's keys are the tool's: `algorithm` (a string naming it),
+  `params` (the algorithm's inputs, in their own block), `alias`,
+  `overrides`. Params are contained rather than passed through, so the
+  reserved list can grow without colliding with a parameter name.
 - `defaults`: shared params per algorithm, merged under each system's own
   params. One copy of each number.
-- `changelog`: an optional list of `<date>: <note>` entries (or bare note
-  strings). The resolver validates the shape and never reads the content —
-  emitters pass it through for whoever replays the system into a design
-  tool. Prose on purpose: the useful part is the intent, which is what a
-  schema would strip out. See "Identity in emitted artifacts" below.
 - Sections: every top-level key other than
-  `dtg`/`modes`/`defaults`/`systems`/`changelog` is a section. Arbitrary name, becomes a Figma collection, holds
-  `domain → role → [ref per mode]`. A role may also be
-  `{ refs, alias?, omit? }`. `alias` (on the systems block, a system, a
-  section, a domain, or a role; string or per-target map) replaces a public
-  name; `omit: true` drops a segment. Refs always use internal names. That is
-  the *entire* role grammar. No flags, no options, no other object form.
+  `dtg`/`modes`/`defaults`/`systems`/`changelog` is a section. Arbitrary
+  name, becomes a collection, holds `domain → role → [ref per mode]`. A
+  role may also be `{ refs, alias?, omit? }`. `alias` (on a group, a
+  system, the systems block, a section, a domain, or a role; string or
+  per-target map) replaces a public name; `omit: true` drops a segment.
+  Refs always use internal names. That is the *entire* role grammar. No
+  flags, no options, no other object form.
 - A **ref** is one of:
-  - `system/selector`, where everything after the slash belongs to the
-    algorithm (`sky/3.5` is 3.5% ink over base, `theme/600` is a stop name,
-    `shadow/40` is a 40% opacity overlay)
-  - `domain.role`, aliasing another semantic decision in the same mode
-  - `transparent(system/selector)`, the step's unflattened form
+  - `paper`, `ink.body` — a constant by path
+  - `system/selector` — dots walk the tree, the slash hands off, and
+    everything after it belongs to the algorithm (`sky/3.5` is 3.5% ink,
+    `sky/3/ink` that ink uncomposited, `theme/600` a stop name,
+    `warm/red@6` a compose anchor at 6%)
+  - `domain.role` — another decision in the same mode
+  - `transparent(paper 70)` — a constant at an opacity, constants only
+- **One meaning per separator: `.` navigates, `/` hands off.** A constant
+  path and a role path are the same shape, so the two namespaces must not
+  collide; the resolver errors if they do.
 - **Raw hex is legal only inside `systems`.** The semantic tier points and
   derives; every color traces back to an anchor. This is the core invariant:
   a literal is a value that has forgotten its reason.
@@ -92,10 +97,16 @@ Three built-ins, each *total*, with no optional-parameter modes.
   than silently.
 - `resolveStep(params, selector)` returns `{ css, opaque }` and throws with a
   human-readable message on a bad selector or bad params.
-- `resolveTranslucent(params, selector)` is optional. Its absence means the
-  system has nothing to unflatten, and `transparent()` on it is an error.
+- `publicStep` and `stepOrder` are optional. The core needs a name fragment
+  and a total order for every selector; absent these it assumes a decimal
+  coordinate, which is only true of the ramps. An algorithm with any other
+  selector shape supplies both.
 
-`transparent()` is an algorithm *capability*, not a generic color function,
+An algorithm that composites publishes its layer as a further selector —
+`sky/3/ink`, `warm/red@6/top`. That is not a core function, and was
+deliberately not made one: `X(ref)` would promise it works on any color
+while only working on algorithms that composite, with nothing at the call
+site to say which. It cannot be a transformation of the output either,
 because flattening destroys information: you cannot recover ink and alpha
 from a flattened hex. The system re-runs the recipe and stops before
 compositing.
@@ -119,10 +130,10 @@ methods, or shadow a built-in by name.
 4. **No sugar in the role grammar.** `translucent: true` (auto-twin) was
    designed and then deliberately killed: uniform `name: [refs]` beats saving
    two lines. Twins are declared as sibling roles
-   (`primary-translucent: [transparent(sky/15), ...]`), so twinship stays
+   (`primary-translucent: [sky/15/ink, ...]`), so twinship stays
    recoverable by inspection.
-5. **Overrides pin flattened hexes only.** `transparent()` always follows
-   pure ink math, and the resolver warns when the two overlap. Hand-tunes are
+5. **Overrides pin flattened hexes only.** The uncomposited form always
+   follows pure ink math, and the resolver warns when the two overlap. Hand-tunes are
    explicit, visible, and survive regeneration. Exceptions either get
    promoted into the system later or stay flagged, never silent.
 6. **Demand-driven primitives.** An ink-ramp step exists because a ref

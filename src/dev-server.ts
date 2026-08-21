@@ -1,6 +1,11 @@
-import { createServer, type ServerResponse } from "node:http";
-import { readFileSync } from "node:fs";
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { readFileSync, watch } from "node:fs";
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+import { stringify } from "yaml";
+import { withParamAt } from "./contract.js";
 import {
+  algorithmFor,
   buildLineage,
   resolveDefinition,
   type Lineage,
@@ -8,6 +13,7 @@ import {
 } from "./resolve.js";
 import { watchDefinition } from "./watch.js";
 import {
+  renderConstants,
   renderDomain,
   renderOverview,
   renderSystem,
@@ -24,6 +30,20 @@ export function startDevServer(definitionPath: string, port: number): void {
   let state: State = load(definitionPath);
   const sseClients = new Set<ServerResponse>();
 
+  // The server holds dtg's own code from startup, so a rebuild leaves it
+  // serving stale results that look like definition errors. Say so instead.
+  let stale = false;
+  try {
+    watch(dirname(fileURLToPath(import.meta.url)), () => {
+      if (stale) return;
+      stale = true;
+      console.log("dtg's own code changed — restart the dev server");
+      for (const client of sseClients) client.write("data: reload\n\n");
+    });
+  } catch {
+    // watching the install directory is a convenience, never a requirement
+  }
+
   watchDefinition(definitionPath, () => {
     state = load(definitionPath, state);
     for (const client of sseClients) client.write("data: reload\n\n");
@@ -37,18 +57,43 @@ export function startDevServer(definitionPath: string, port: number): void {
         "cache-control": "no-cache",
         connection: "keep-alive",
       });
-      res.write("\n");
+      res.write(": connected\n\n");
       sseClients.add(res);
-      req.on("close", () => sseClients.delete(res));
+      // A heartbeat so a stream orphaned by a closed tab errors and is
+      // reaped, rather than sitting in the set forever.
+      const beat = setInterval(() => res.write(": ping\n\n"), 15_000);
+      beat.unref?.();
+      const drop = () => {
+        clearInterval(beat);
+        sseClients.delete(res);
+      };
+      req.on("close", drop);
+      res.on("close", drop);
+      res.on("error", drop);
       return;
     }
 
-    const banner = state.error
-      ? `<div class="banner">${state.error.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</div>`
-      : null;
+    if (url.pathname === "/preview" && req.method === "POST") {
+      readBody(req).then((body) => {
+        res.writeHead(200, { "content-type": "application/json" });
+        res.end(JSON.stringify(preview(state.resolved, body)));
+      });
+      return;
+    }
+
+    const staleBanner = stale
+      ? `<div class="banner">dtg was rebuilt since this server started — restart it, or what you see below is from the old build.</div>`
+      : "";
+    const banner =
+      staleBanner ||
+      (state.error
+        ? `<div class="banner">${state.error.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</div>`
+        : null);
     let html: string | null = null;
     if (url.pathname === "/") {
       html = renderOverview(state.resolved, banner);
+    } else if (url.pathname === "/constants") {
+      html = renderConstants(state.resolved, state.lineage, banner);
     } else {
       const [, kind, name] = url.pathname.split("/");
       if (kind === "system" && name)
@@ -80,5 +125,52 @@ function load(definitionPath: string, previous?: State): State {
     if (previous) return { ...previous, error: message };
     console.error(message);
     process.exit(1);
+  }
+}
+
+function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    let raw = "";
+    req.on("data", (chunk) => (raw += chunk));
+    req.on("end", () => {
+      try {
+        resolve(JSON.parse(raw) as Record<string, unknown>);
+      } catch {
+        resolve({});
+      }
+    });
+  });
+}
+
+/**
+ * Re-run one system's algorithm with tweaked params. The math stays on the
+ * server so the browser never carries a second implementation of it.
+ */
+function preview(
+  resolved: ResolvedDefinition,
+  body: Record<string, unknown>,
+): unknown {
+  const system = resolved.systems.find((s) => s.system === body.system);
+  const algo = system && algorithmFor(system.algorithm);
+  if (!system || !algo) return { error: `unknown system "${body.system}"` };
+
+  let params = system.params;
+  for (const [path, value] of Object.entries(
+    (body.overrides ?? {}) as Record<string, unknown>,
+  )) {
+    params = withParamAt(params, path, value);
+  }
+
+  try {
+    algo.declaredSelectors(params);
+    const selectors = new Set(system.steps.map((s) => s.selector));
+    for (const s of (body.selectors ?? []) as string[]) selectors.add(s);
+    const steps = [...selectors].map((selector) => {
+      const value = algo.resolveStep(params, selector);
+      return { selector, css: value.css, opaque: value.opaque };
+    });
+    return { steps, yaml: stringify(params).trimEnd() };
+  } catch (e) {
+    return { error: (e as Error).message };
   }
 }

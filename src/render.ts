@@ -1,5 +1,8 @@
 import { oklabDeltaE } from "./color-math.js";
+import type { AlgorithmPreview } from "./contract.js";
 import {
+  algorithmFor,
+  publicPath,
   publicSystemName,
   type Lineage,
   type RefTarget,
@@ -17,6 +20,10 @@ function swatch(css: string, opaque: boolean, size = 28): string {
   return `<span class="swatch ${opaque ? "" : "swatch-alpha"}" style="width:${size}px;height:${size}px">${inner}</span>`;
 }
 
+function constantAnchor(path: string): string {
+  return `c-${path.replace(/\./g, "_")}`;
+}
+
 function stepAnchor(step: ResolvedStep): string {
   return `s-${step.publicStep}`;
 }
@@ -28,6 +35,9 @@ function refLink(
 ): string {
   if (target.kind === "role") {
     return `<a href="/domain/${target.domain}#${target.role}"><code>${esc(ref)}</code></a>`;
+  }
+  if (target.kind === "constant") {
+    return `<a href="/constants#${constantAnchor(target.name)}"><code>${esc(ref)}</code></a>`;
   }
   const step = resolved.systems
     .find((s) => s.system === target.system)
@@ -118,6 +128,22 @@ function layout(
   #bg-form input[type="color"] { width: 26px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 5px; background: transparent; }
   #bg-form button { font-size: 12px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 5px; background: transparent; color: var(--fg); cursor: pointer; }
   #bg-form button:hover { background: var(--hover); }
+  .tuner { display: grid; grid-template-columns: minmax(260px, 320px) 1fr; gap: 20px; align-items: start; margin: 0 0 20px; }
+  .tuner-controls { display: flex; flex-direction: column; gap: 10px; background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 14px; }
+  .ctl { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; font-size: 12px; color: var(--muted); }
+  .ctl label { color: var(--fg); }
+  .ctl input[type="color"] { width: 30px; height: 24px; padding: 0; border: 1px solid var(--border); border-radius: 5px; background: transparent; cursor: pointer; }
+  .ctl-range { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 62px; gap: 8px; align-items: center; }
+  .ctl-range input[type="range"] { width: 100%; accent-color: var(--link); }
+  .ctl-range input[type="number"] { width: 100%; font-family: \"SF Mono\", ui-monospace, monospace; font-size: 12px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 5px; background: transparent; color: var(--fg); }
+  .ctl-sep { border-top: 1px solid var(--border-soft); margin: 4px 0 0; padding-top: 8px; }
+  .composite { min-height: 300px; border: 1px solid var(--border); border-radius: 8px; }
+  .tuner-out { display: flex; flex-direction: column; gap: 10px; }
+  .tuner-steps { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tuner-steps .chip { display: flex; align-items: center; gap: 6px; font-size: 11px; font-family: \"SF Mono\", ui-monospace, monospace; border: 1px solid var(--border); border-radius: 6px; padding: 3px 7px; color: var(--muted); }
+  .tuner-steps .chip b { font-weight: 600; color: var(--fg); }
+  pre.snippet { background: var(--panel-head); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-family: \"SF Mono\", ui-monospace, monospace; font-size: 11.5px; line-height: 1.5; overflow-x: auto; color: var(--fg); }
+  .tuner-err { color: #a33; font-size: 12px; font-family: \"SF Mono\", ui-monospace, monospace; }
 </style>
 </head>
 <body>
@@ -134,7 +160,12 @@ function layout(
 </aside>
 <main>${banner ?? ""}${body}</main>
 <script>
-new EventSource("/events").onmessage = () => location.reload();
+var live = new EventSource("/events");
+live.onmessage = function () { location.reload(); };
+// Closed explicitly on navigation: a page frozen into the back/forward
+// cache keeps its stream open, and six open streams exhaust the browser's
+// per-origin connection limit, so the next page load blocks forever.
+addEventListener("pagehide", function () { live.close(); });
 
 (function () {
   var KEY = "colors.backgrounds", ACT = "colors.activeBackground";
@@ -217,7 +248,11 @@ function navFor(resolved: ResolvedDefinition): string {
   const domains = [...new Set(resolved.roles.map((r) => r.domain))]
     .map((d) => `<a href="/domain/${d}">${esc(d)}</a>`)
     .join("");
-  return `<h1><a href="/">colors</a></h1><nav><h2>Systems</h2>${systems}<h2>Roles</h2>${domains}</nav>`;
+  const constants =
+    resolved.statics.length > 0
+      ? `<h2>Constants</h2><a href="/constants">all ${resolved.statics.length}</a>`
+      : "";
+  return `<h1><a href="/">colors</a></h1><nav><h2>Systems</h2>${systems}${constants}<h2>Roles</h2>${domains}</nav>`;
 }
 
 function luma(hex: string): number {
@@ -252,6 +287,113 @@ function stripFor(system: ResolvedSystem, withDeltas = false): string {
     })
     .join("");
   return `<div class="strip-wrap">${strip}<div class="strip-gaps">${gaps}</div></div>`;
+}
+
+function tunerFor(system: ResolvedSystem, pv: AlgorithmPreview): string {
+  const control = (c: (typeof pv.controls)[number]) =>
+    c.kind === "color"
+      ? `<div class="ctl"><label for="c-${esc(c.path)}">${esc(c.label)}</label>
+         <input type="color" id="c-${esc(c.path)}" data-path="${esc(c.path)}" value="${esc(c.value)}"></div>`
+      : `<div class="ctl ctl-sep"><label for="c-${esc(c.path)}">${esc(c.label)}</label><span>${esc(c.unit ?? "")}</span>
+         <div class="ctl-range">
+           <input type="range" data-path="${esc(c.path)}" value="${c.value}" min="${c.min}" max="${c.max}" step="${c.step}">
+           <input type="number" id="c-${esc(c.path)}" data-path="${esc(c.path)}" value="${c.value}" min="${c.min}" max="${c.max}" step="${c.step}">
+         </div></div>`;
+
+  const vars = (pv.composite?.vars ?? [])
+    .map(
+      (v) => `<div class="ctl ctl-sep"><label for="v-${esc(v.name)}">${esc(v.label)}</label><span>${esc(v.unit ?? "")}</span>
+        <div class="ctl-range">
+          <input type="range" data-var="${esc(v.name)}" value="${v.value}" min="${v.min}" max="${v.max}" step="${v.step}">
+          <input type="number" id="v-${esc(v.name)}" data-var="${esc(v.name)}" value="${v.value}" min="${v.min}" max="${v.max}" step="${v.step}">
+        </div></div>`,
+    )
+    .join("");
+
+  return `<div class="tuner">
+    <div class="tuner-controls">${vars}${pv.controls.map(control).join("")}</div>
+    <div class="tuner-out">
+      ${pv.composite ? `<div class="composite" id="composite"></div>` : ""}
+      <div class="tuner-steps" id="tuner-steps"></div>
+      <div class="tuner-err" id="tuner-err"></div>
+      <pre class="snippet" id="tuner-yaml"></pre>
+    </div>
+  </div>
+  <script>
+  (function () {
+    var system = ${JSON.stringify(system.system)};
+    var templates = ${JSON.stringify(pv.composite?.selectors ?? [])};
+    var params = document.querySelectorAll("[data-path]");
+    var vars = document.querySelectorAll("[data-var]");
+
+    function varValues() {
+      var out = {};
+      vars.forEach(function (el) { out[el.dataset.var] = el.value; });
+      return out;
+    }
+    function wanted() {
+      var v = varValues();
+      return templates.map(function (t) {
+        Object.keys(v).forEach(function (name) {
+          t = t.split("{" + name + "}").join(v[name]);
+        });
+        return t;
+      });
+    }
+    function overrides() {
+      var out = {};
+      params.forEach(function (el) {
+        out[el.dataset.path] = el.type === "color" ? el.value : Number(el.value);
+      });
+      return out;
+    }
+    function mirror(source) {
+      var key = source.dataset.var ? "data-var" : "data-path";
+      var val = source.dataset.var || source.dataset.path;
+      document.querySelectorAll("[" + key + "=\'" + val + "\']").forEach(function (el) {
+        if (el !== source) el.value = source.value;
+      });
+    }
+    function paint(data, ring) {
+      var err = document.getElementById("tuner-err");
+      err.textContent = data.error || "";
+      if (data.error) return;
+      var by = {};
+      data.steps.forEach(function (s) { by[s.selector] = s.css; });
+      var box = document.getElementById("composite");
+      if (box && ring.length) {
+        var seq = ring.map(function (s) { return by[s]; }).filter(Boolean);
+        if (seq.length) {
+          var all = seq.concat([seq[0]]);
+          box.style.background = "linear-gradient(178deg, " + all.map(function (c, i) {
+            return c + " " + ((i / (all.length - 1)) * 100).toFixed(1) + "%";
+          }).join(", ") + ")";
+        }
+      }
+      document.getElementById("tuner-steps").innerHTML = data.steps.map(function (s) {
+        return \'<span class="chip"><span class="swatch\' + (s.opaque ? "" : " swatch-alpha") +
+          \'" style="width:14px;height:14px"><span class="swatch-color" style="background:\' + s.css +
+          \'"></span></span><b>\' + s.selector + "</b>" + s.css + "</span>";
+      }).join("");
+      document.getElementById("tuner-yaml").textContent = data.yaml || "";
+    }
+    function update() {
+      var ring = wanted();
+      fetch("/preview", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ system: system, overrides: overrides(), selectors: ring }),
+      }).then(function (r) { return r.json(); }).then(function (d) { paint(d, ring); });
+    }
+    [].forEach.call(params, function (el) {
+      el.addEventListener("input", function () { mirror(el); update(); });
+    });
+    [].forEach.call(vars, function (el) {
+      el.addEventListener("input", function () { mirror(el); update(); });
+    });
+    update();
+  })();
+  </script>`;
 }
 
 function paramValue(value: unknown): string {
@@ -295,12 +437,13 @@ export function renderOverview(
     .join("");
   const statics =
     resolved.statics.length > 0
-      ? `<h2>Statics</h2><table><tbody>${resolved.statics
-          .map(
-            (s) =>
-              `<tr><td><code>${esc(s.name)}</code></td><td><span class="cell">${swatch(s.hex, true, 22)}<code>${esc(s.hex)}</code></span></td></tr>`,
-          )
-          .join("")}</tbody></table>`
+      ? `<h2><a href="/constants">Constants</a> <span class="muted">${resolved.statics.length}</span></h2>
+         <div class="strip-wrap"><div class="strip">${resolved.statics
+           .map(
+             (s) =>
+               `<a href="/constants#${constantAnchor(s.path)}"><span class="strip-fill" style="background:${esc(s.hex)}"></span><span class="step-label" style="color:${luma(s.hex) < 150 ? "#fff" : "#1d2427"}">${esc(s.path)}</span></a>`,
+           )
+           .join("")}</div></div>`
       : "";
   const domains = [...new Set(resolved.roles.map((r) => r.domain))]
     .map((d) => {
@@ -312,6 +455,39 @@ export function renderOverview(
     "Colors",
     navFor(resolved),
     `<h1>Colors</h1><p class="sub">Modes: ${resolved.modes.join(", ")}</p>${warnings}${systems}${statics}<h2>Role domains</h2><ul class="plain">${domains}</ul>`,
+    banner,
+  );
+}
+
+export function renderConstants(
+  resolved: ResolvedDefinition,
+  lineage: Lineage,
+  banner: string | null,
+): string | null {
+  if (resolved.statics.length === 0) return null;
+  const rows = resolved.statics
+    .map((c) => {
+      const uses = lineage.get(c.path) ?? [];
+      const usedBy = uses
+        .map(
+          (u) =>
+            `<a href="/domain/${u.domain}#${u.role}"><code>${esc(`${u.domain}.${u.role}`)}</code></a><span class="muted"> ${esc(u.mode)}${u.translucent ? " (translucent)" : ""}</span>`,
+        )
+        .join(", ");
+      return `<tr id="${constantAnchor(c.path)}">
+        <td><code>${esc(c.path)}</code></td>
+        <td><code>--color-${esc(publicPath(c.segments, "css", "-"))}</code></td>
+        <td><span class="cell">${swatch(c.hex, true, 22)}<code>${esc(c.hex)}</code></span></td>
+        <td>${usedBy || '<span class="muted">nothing — it emits, but no role points at it</span>'}</td>
+      </tr>`;
+    })
+    .join("");
+  return layout(
+    "Constants · Colors",
+    navFor(resolved),
+    `<h1>Constants</h1>
+     <p class="desc">Flat colors with no recipe behind them. A role points at one by path; <code>transparent(name 70)</code> takes one at an alpha. Unlike a system step, a constant emits whether or not anything demands it.</p>
+     <table><thead><tr><th>Path</th><th>Emits</th><th>Value</th><th>Used by</th></tr></thead><tbody>${rows}</tbody></table>`,
     banner,
   );
 }
@@ -330,7 +506,7 @@ export function renderSystem(
       const usedBy = uses
         .map(
           (u) =>
-            `<a href="/domain/${u.domain}#${u.role}"><code>${esc(`${u.domain}.${u.role}`)}</code></a><span class="muted"> ${esc(u.mode)}${u.viaTransparent ? " (transparent)" : ""}</span>`,
+            `<a href="/domain/${u.domain}#${u.role}"><code>${esc(`${u.domain}.${u.role}`)}</code></a><span class="muted"> ${esc(u.mode)}${u.translucent ? " (translucent)" : ""}</span>`,
         )
         .join(", ");
       const previous = i > 0 ? system.steps[i - 1] : null;
@@ -345,13 +521,17 @@ export function renderSystem(
       return `<tr id="${stepAnchor(step)}"><td><code>${esc(publicSystemName(system, "css"))}-${esc(step.publicStep)}</code></td><td><code>${esc(name)}/${esc(step.selector)}</code></td><td>${value}</td><td>${deltaE}</td><td>${usedBy || '<span class="muted">—</span>'}</td></tr>`;
     })
     .join("");
+  const pv = algorithmFor(system.algorithm)?.preview?.(
+    system.params,
+    system.steps.map((s) => s.selector),
+  );
   return layout(
     `${name} · Colors`,
     navFor(resolved),
     `<h1>${esc(name)} <span class="muted" style="font-size:14px">emits <code>${esc(publicSystemName(system, "css"))}</code> · ${esc(system.algorithm)}</span></h1>
      <p class="desc">${esc(system.algorithmDescription)}</p>
-     ${paramsFor(system)}
-     ${stripFor(system, true)}
+     ${pv ? tunerFor(system, pv) : paramsFor(system)}
+     ${stripFor(system, pv?.shape !== "palette")}
      <table><thead><tr><th>Token</th><th>Ref</th><th>Value</th><th>ΔE prev</th><th>Demanded by</th></tr></thead><tbody>${rows}</tbody></table>`,
     banner,
   );

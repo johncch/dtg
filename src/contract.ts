@@ -4,6 +4,49 @@ export type StepValue = {
   opaque: boolean;
 };
 
+/**
+ * How a system wants to be shown and tuned. Structure, not markup — the
+ * preview layer owns presentation, the algorithm owns what its params mean.
+ */
+export type PreviewControl =
+  | { kind: "color"; path: string; label: string; value: string }
+  | {
+      kind: "number";
+      path: string;
+      label: string;
+      value: number;
+      min: number;
+      max: number;
+      step: number;
+      unit?: string;
+    };
+
+/** A knob that varies the selectors previewed, rather than a param. */
+export type PreviewVar = {
+  name: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  unit?: string;
+};
+
+export type AlgorithmPreview = {
+  /**
+   * `ramp` reads as a continuum, so neighbour deltas mean something.
+   * `palette` is a set of unrelated entries, where they do not.
+   */
+  shape: "ramp" | "palette";
+  controls: PreviewControl[];
+  /**
+   * Selectors to render together as one blended field, in order. A
+   * `{name}` placeholder is filled from `vars`, so a preview can sweep a
+   * coordinate the params do not hold.
+   */
+  composite?: { selectors: string[]; vars?: PreviewVar[] };
+};
+
 export type AlgorithmImpl = {
   /** One short paragraph explaining how this algorithm generates colors; rendered in the browsing UI. */
   description: string;
@@ -15,14 +58,6 @@ export type AlgorithmImpl = {
   declaredSelectors(params: Record<string, unknown>): string[] | null;
   /** Throws with a human message on an invalid selector or bad params. */
   resolveStep(params: Record<string, unknown>, selector: string): StepValue;
-  /**
-   * The step's unflattened form (ink at the step's alpha), backing the
-   * transparent() expression. Absent = the system has nothing to unflatten.
-   */
-  resolveTranslucent?(
-    params: Record<string, unknown>,
-    selector: string,
-  ): string;
   /**
    * The public name fragment this selector emits as. Absent = the default,
    * which suits decimal ramp coordinates. The core validates whatever comes
@@ -40,7 +75,51 @@ export type AlgorithmImpl = {
     params: Record<string, unknown>,
     selector: string,
   ): number | string;
+  /**
+   * Controls and shape for the browsing UI. Absent = the default ramp
+   * rendering, which is what the built-in ramps want.
+   */
+  preview?(
+    params: Record<string, unknown>,
+    /** Selectors this system currently has steps for, for sensible defaults. */
+    selectors: string[],
+  ): AlgorithmPreview;
 };
+
+/** Read a dotted path out of a params object. */
+export function paramAt(
+  params: Record<string, unknown>,
+  path: string,
+): unknown {
+  return path
+    .split(".")
+    .reduce<unknown>(
+      (node, key) =>
+        node != null && typeof node === "object"
+          ? (node as Record<string, unknown>)[key]
+          : undefined,
+      params,
+    );
+}
+
+/** Copy params with one dotted path replaced; the original is untouched. */
+export function withParamAt(
+  params: Record<string, unknown>,
+  path: string,
+  value: unknown,
+): Record<string, unknown> {
+  const keys = path.split(".");
+  const copy: Record<string, unknown> = { ...params };
+  let node = copy;
+  for (const key of keys.slice(0, -1)) {
+    const child = node[key];
+    if (child == null || typeof child !== "object") return copy;
+    node[key] = { ...(child as Record<string, unknown>) };
+    node = node[key] as Record<string, unknown>;
+  }
+  node[keys[keys.length - 1]] = value;
+  return copy;
+}
 
 /** Dots become underscores: "5.5" → "5_5". */
 export function defaultPublicStep(selector: string): string {

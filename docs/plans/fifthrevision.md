@@ -160,7 +160,7 @@ No test suite in dtg; verification is the dev server plus output parity.
 - The site is npm; dtg is pnpm. Install from the registry, not a link.
 - Generated CSS is committed, so CircleCI and Vercel never run the Node step.
   Keep it that way.
-- dtg requires Node >= 20.
+- dtg requires Node >= 22.
 
 ## Open decisions
 
