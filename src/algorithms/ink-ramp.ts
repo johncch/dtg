@@ -1,9 +1,10 @@
 import { assertKnownParams, type AlgorithmImpl } from "../contract.js";
 import {
   alphaComposite,
-  assertHex,
+  channelsIn,
   colorFromRgb,
-  hexToRgb,
+  parseColor,
+  widestGamut,
 } from "../color-math.js";
 
 /**
@@ -16,15 +17,23 @@ export const inkRamp: AlgorithmImpl = {
     "A fixed ink composited over a base color. The selector is the ink's alpha in percent — `15` is 15% ink over the base, so the token name is the recipe. Adding `/ink` — `15/ink` — gives the same ink at the same alpha without the base, for a value that has to sit over an unknown surface.",
   declaredSelectors(params) {
     assertKnownParams(params, ["base", "ink"], "ink-ramp");
+    parseColor(params.base, "ink-ramp param 'base'");
+    parseColor(params.ink, "ink-ramp param 'ink'");
     return null;
   },
 
   resolveStep(params, selector) {
     const { alpha, inkOnly } = parse(selector);
-    const ink = hexToRgb(assertHex(params.ink, "ink-ramp param 'ink'"));
-    if (inkOnly) return { color: colorFromRgb(ink, "srgb", alpha) };
-    const base = hexToRgb(assertHex(params.base, "ink-ramp param 'base'"));
-    return { color: colorFromRgb(alphaComposite(ink, base, alpha)) };
+    const ink = parseColor(params.ink, "ink-ramp param 'ink'");
+    if (inkOnly) return { color: { ...ink, alpha } };
+    const base = parseColor(params.base, "ink-ramp param 'base'");
+    const gamut = widestGamut([ink, base]);
+    return {
+      color: colorFromRgb(
+        alphaComposite(channelsIn(ink, gamut), channelsIn(base, gamut), alpha),
+        gamut,
+      ),
+    };
   },
 
   publicStep(_params, selector) {

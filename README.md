@@ -53,8 +53,8 @@ byte for byte reproducibly. These are useful controls because they move the
 system together. A color picker can change one value; a parameter can
 change fifty while preserving the relationship between them.
 
-The rule that holds the model together is simple: **raw hex is legal only
-inside `systems`**. Semantic roles are made of references and derivations,
+The rule that holds the model together is simple: **a raw color is legal
+only inside `systems`**. Semantic roles are made of references and derivations,
 so every color traces back to an anchor. A literal is a value that has
 forgotten its reason.
 
@@ -94,7 +94,7 @@ from and how they remain coherent as the system changes.
    plus the systems block. The definition shows its reasoning.
 4. **Demand-driven primitives.** A step exists because a ref demands it.
    Declared palettes emit in full when the palette itself is the product.
-5. **Declared overrides.** Hand-tuned hexes live in the definition, where
+5. **Declared overrides.** Hand-tuned colors live in the definition, where
    they can be understood and eventually promoted into the system.
 6. **Growth from real needs.** Repeated derivations are signals that a new
    system or algorithm has emerged. The vocabulary grows from use.
@@ -235,7 +235,11 @@ core: # any non-reserved top-level key is a section you name;
     amount. A system's uncomposited form is a selector instead, because it
     re-runs the recipe rather than transforming the output.
 - One meaning per separator: **`.` navigates, `/` hands off.**
-- **Raw hex is legal only inside `systems`.**
+- **A raw color is legal only inside `systems`.** A color literal is
+  `#rgb`, `#rrggbb`, `oklch(L C H)`, `oklab(L a b)`, `color(srgb r g b)` or
+  `color(display-p3 r g b)`, each with an optional `/ alpha`. A color keeps
+  the space it was written in, so a wide-gamut anchor is not clipped to sRGB
+  on the way in — the transform runs in the widest space its inputs use.
 - A **role** is a list of refs, one per mode, or `{ refs, alias?, omit? }`
   when its public name diverges. This is the complete role grammar.
 - **`changelog`** is an optional list of `<date>: <note>` entries, passed

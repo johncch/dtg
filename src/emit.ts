@@ -75,7 +75,7 @@ export function emitCss(
   if (resolved.statics.length > 0) {
     lines.push("  /* statics */");
     for (const s of resolved.statics) {
-      lines.push(`  --color-${publicPath(s.segments, "css", "-")}: ${s.hex};`);
+      lines.push(`  --color-${publicPath(s.segments, "css", "-")}: ${formatColor(s.color, "srgb")};`);
     }
   }
   lines.push("}", "");
@@ -192,7 +192,7 @@ export function emitDtcg(resolved: ResolvedDefinition): unknown {
     for (const s of resolved.statics) {
       placeAt(group, s.path, {
         $type: "color",
-        $value: s.hex,
+        $value: formatColor(s.color, "srgb"),
         $description: `static.${s.path}`,
         $extensions: {
           [DTCG_NS]: { name: `static/${publicPath(s.segments, "figma", "/")}` },

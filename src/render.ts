@@ -492,7 +492,7 @@ export function renderOverview(
          <div class="strip-wrap"><div class="strip">${resolved.statics
            .map(
              (s) =>
-               `<a href="/constants#${constantAnchor(s.path)}"><span class="strip-fill" style="background:${esc(s.hex)}"></span><span class="step-label" style="color:${luma(s.hex) < 150 ? "#fff" : "#1d2427"}">${esc(s.path)}</span></a>`,
+               `<a href="/constants#${constantAnchor(s.path)}"><span class="strip-fill" style="background:${esc(formatColor(s.color, "srgb"))}"></span><span class="step-label" style="color:${luma(formatColor(s.color, "srgb")) < 150 ? "#fff" : "#1d2427"}">${esc(s.path)}</span></a>`,
            )
            .join("")}</div></div>`
       : "";
@@ -528,7 +528,7 @@ export function renderConstants(
       return `<tr id="${constantAnchor(c.path)}">
         <td><code>${esc(c.path)}</code></td>
         <td><code>--color-${esc(publicPath(c.segments, "css", "-"))}</code></td>
-        <td><span class="cell">${swatch(c.hex, true, 22)}<code>${esc(c.hex)}</code></span></td>
+        <td><span class="cell">${swatch(formatColor(c.color, "srgb"), true, 22)}<code>${esc(formatColor(c.color, "srgb"))}</code></span></td>
         <td>${usedBy || '<span class="muted">nothing — it emits, but no role points at it</span>'}</td>
       </tr>`;
     })

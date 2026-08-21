@@ -1,12 +1,123 @@
 export type Rgb = [number, number, number];
 
-export function assertHex(value: unknown, context: string): string {
-  if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value)) {
+const COLOR_FORMS =
+  "#rgb, #rrggbb, oklch(L C H), oklab(L a b), color(srgb r g b) or color(display-p3 r g b), each with an optional `/ alpha`";
+
+/**
+ * A colour literal from a definition file. Authoring is not limited to sRGB:
+ * `oklch()` reaches colours no hex can name, and `color(display-p3 ...)` names
+ * a colour in the gamut it was picked in. The parsed colour keeps that space —
+ * see Color — so nothing is clipped on the way in.
+ */
+export function parseColor(value: unknown, context: string): Color {
+  if (typeof value !== "string") {
     throw new Error(
-      `${context}: expected a 6-digit hex color, got ${JSON.stringify(value)}`,
+      `${context}: expected a color, got ${JSON.stringify(value)} (${COLOR_FORMS})`,
     );
   }
-  return value.toLowerCase();
+  const text = value.trim();
+
+  const hex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(text);
+  if (hex) {
+    const digits =
+      hex[1].length === 3
+        ? hex[1]
+            .split("")
+            .map((d) => d + d)
+            .join("")
+        : hex[1];
+    return colorFromHex("#" + digits.toLowerCase());
+  }
+
+  const call = /^([a-zA-Z-]+)\(([^()]*)\)$/.exec(text);
+  if (!call) {
+    throw new Error(
+      `${context}: cannot read ${JSON.stringify(value)} as a color (${COLOR_FORMS})`,
+    );
+  }
+  const fn = call[1].toLowerCase();
+  const [body, alphaText, ...extra] = call[2].split("/");
+  if (extra.length > 0) {
+    throw new Error(`${context}: ${JSON.stringify(value)} has more than one \`/\``);
+  }
+  const alpha =
+    alphaText == null ? 1 : component(alphaText, 1, `${context}: alpha`);
+  const parts = body.trim().split(/\s+/).filter(Boolean);
+
+  if (fn === "oklch" || fn === "oklab") {
+    expectCount(parts, 3, fn, context, value);
+    const L = component(parts[0], 1, `${context}: ${fn} L`);
+    if (fn === "oklab") {
+      return {
+        space: "oklab",
+        coords: [
+          L,
+          component(parts[1], 0.4, `${context}: oklab a`),
+          component(parts[2], 0.4, `${context}: oklab b`),
+        ],
+        alpha,
+      };
+    }
+    const C = component(parts[1], 0.4, `${context}: oklch C`);
+    const H = angle(parts[2], `${context}: oklch H`);
+    return { space: "oklab", coords: oklchToOklab([L, C, H]), alpha };
+  }
+
+  if (fn === "color") {
+    const space = parts[0]?.toLowerCase();
+    if (space !== "srgb" && space !== "display-p3") {
+      throw new Error(
+        `${context}: color() space must be srgb or display-p3, got ${JSON.stringify(parts[0] ?? "")}`,
+      );
+    }
+    const channels = parts.slice(1);
+    expectCount(channels, 3, `color(${space} ...)`, context, value);
+    return {
+      space,
+      coords: channels.map((c, i) =>
+        component(c, 1, `${context}: ${space} channel ${i + 1}`),
+      ) as [number, number, number],
+      alpha,
+    };
+  }
+
+  throw new Error(
+    `${context}: unknown color function "${fn}" in ${JSON.stringify(value)} (${COLOR_FORMS})`,
+  );
+}
+
+function expectCount(
+  parts: string[],
+  n: number,
+  fn: string,
+  context: string,
+  value: string,
+): void {
+  if (parts.length !== n) {
+    throw new Error(
+      `${context}: ${fn} takes ${n} components, got ${parts.length} in ${JSON.stringify(value)}`,
+    );
+  }
+}
+
+/** A number, or a percentage of `full` — CSS lets either stand in most slots. */
+function component(text: string, full: number, context: string): number {
+  const raw = text.trim();
+  const pct = raw.endsWith("%");
+  const n = Number(pct ? raw.slice(0, -1) : raw);
+  if (raw === "" || !Number.isFinite(n)) {
+    throw new Error(`${context}: expected a number, got ${JSON.stringify(raw)}`);
+  }
+  return pct ? (n / 100) * full : n;
+}
+
+function angle(text: string, context: string): number {
+  const raw = text.trim().toLowerCase();
+  const n = Number(raw.endsWith("deg") ? raw.slice(0, -3) : raw);
+  if (!Number.isFinite(n)) {
+    throw new Error(`${context}: expected an angle, got ${JSON.stringify(text)}`);
+  }
+  return n;
 }
 
 export function hexToRgb(hex: string): Rgb {
@@ -349,31 +460,25 @@ export const BLEND_SPACES: {
 ];
 
 /** Mix two colours by `t` of A over B, in the named space. */
-export function mixIn(hexA: string, hexB: string, t: number, space: BlendSpace): Color {
-  const A = hexToRgb(hexA);
-  const B = hexToRgb(hexB);
+export function mixIn(a: Color, b: Color, t: number, space: BlendSpace): Color {
   const lerp = (x: number, y: number) => t * x + (1 - t) * y;
 
-  if (space === "srgb") {
-    return colorFromRgb(A.map((c, i) => lerp(c, B[i])) as Rgb);
+  if (space === "oklab") {
+    const A = toOklab(a);
+    const B = toOklab(b);
+    return colorFromOklab(A.map((c, i) => lerp(c, B[i])) as Oklab);
   }
+
+  const gamut: Gamut = space === "display-p3" ? "display-p3" : "srgb";
+  const A = channelsIn(a, gamut);
+  const B = channelsIn(b, gamut);
   if (space === "srgb-linear") {
     const mixed = A.map((c, i) =>
       lerp(srgbToLinear(c), srgbToLinear(B[i])),
     ) as Rgb;
-    return colorFromRgb(mixed.map(linearToSrgb) as Rgb);
+    return colorFromRgb(mixed.map(linearToSrgb) as Rgb, gamut);
   }
-  if (space === "oklab") {
-    const a = hexToOklab(hexA);
-    const b = hexToOklab(hexB);
-    return colorFromOklab(a.map((c, i) => lerp(c, b[i])) as Oklab);
-  }
-  // display-p3: interpolate in P3's own encoded channels, then keep the
-  // result canonical so emit can render it for either target.
-  const [pa] = encodeIn(hexToOklab(hexA), "display-p3");
-  const [pb] = encodeIn(hexToOklab(hexB), "display-p3");
-  const mixed = pa.map((c, i) => lerp(c, pb[i])) as Rgb;
-  return { space: "display-p3", coords: mixed, alpha: 1 };
+  return colorFromRgb(A.map((c, i) => lerp(c, B[i])) as Rgb, gamut);
 }
 
 // ---- Color: tagged with the space it was authored in ---------------------
@@ -460,4 +565,21 @@ export function formatColor(color: Color, gamut: Gamut): string {
     )
     .join(" ");
   return `color(display-p3 ${parts}${alpha >= 1 ? "" : ` / ${Number(alpha.toFixed(4))}`})`;
+}
+
+/**
+ * Encoded channels 0..255 in a gamut — the form the ramp arithmetic works in.
+ * A colour already in that gamut comes back at its authored bytes exactly.
+ */
+export function channelsIn(color: Color, gamut: Gamut): Rgb {
+  return convert(color, gamut).coords.map((c) => c * 255) as Rgb;
+}
+
+/**
+ * The gamut a transform should work in: the widest any input was authored in.
+ * Compositing a P3 colour in sRGB would clip it before the arithmetic ran,
+ * so one wide input widens the whole operation.
+ */
+export function widestGamut(colors: Color[]): Gamut {
+  return colors.some((c) => c.space === "display-p3") ? "display-p3" : "srgb";
 }

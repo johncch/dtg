@@ -1,10 +1,11 @@
 import { assertKnownParams, type AlgorithmImpl } from "../contract.js";
 import {
-  assertHex,
   baseHueOf,
+  channelsIn,
   colorFromRgb,
-  hexToRgb,
   oklchInterpolate,
+  parseColor,
+  widestGamut,
 } from "../color-math.js";
 
 /**
@@ -34,8 +35,8 @@ export const oklchScale: AlgorithmImpl = {
         `oklch-scale has no stop "${selector}" (declared: ${Object.keys(stops).join(", ")})`,
       );
     }
-    const base = hexToRgb(assertHex(params.base, "oklch-scale param 'base'"));
-    if (t === 1) return { color: colorFromRgb(base) };
+    const baseColor = parseColor(params.base, "oklch-scale param 'base'");
+    if (t === 1) return { color: baseColor };
 
     const toward = params.toward;
     if (!Array.isArray(toward) || toward.length !== 2) {
@@ -43,6 +44,10 @@ export const oklchScale: AlgorithmImpl = {
         "oklch-scale param 'toward' must be [lightTarget, darkTarget]",
       );
     }
+    const light = parseColor(toward[0], "oklch-scale param 'toward[0]'");
+    const dark = parseColor(toward[1], "oklch-scale param 'toward[1]'");
+    const gamut = widestGamut([baseColor, light, dark]);
+    const base = channelsIn(baseColor, gamut);
     const hueShift = Number(params.hueShift ?? 0);
     const stopNumber = Number(selector);
     if (!Number.isFinite(stopNumber)) {
@@ -53,21 +58,15 @@ export const oklchScale: AlgorithmImpl = {
     const baseHue = baseHueOf(base);
     const rgb =
       stopNumber < 500
-        ? oklchInterpolate(
-            hexToRgb(assertHex(toward[0], "oklch-scale param 'toward[0]'")),
-            base,
-            t,
-            baseHue,
-            hueShift,
-          )
+        ? oklchInterpolate(channelsIn(light, gamut), base, t, baseHue, hueShift)
         : oklchInterpolate(
             base,
-            hexToRgb(assertHex(toward[1], "oklch-scale param 'toward[1]'")),
+            channelsIn(dark, gamut),
             1 - t,
             baseHue,
             hueShift,
           );
-    return { color: colorFromRgb(rgb) };
+    return { color: colorFromRgb(rgb, gamut) };
   },
 };
 

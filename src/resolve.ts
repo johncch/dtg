@@ -6,10 +6,9 @@ import {
   type AlgorithmImpl,
 } from "./contract.js";
 import {
-  assertHex,
   colorFromHex,
   colorFromRgb,
-  hexToRgb,
+  parseColor,
   isOpaque,
   type Color,
 } from "./color-math.js";
@@ -173,7 +172,7 @@ export type PathSegment = { name: string; alias?: AliasValue };
 export type ResolvedStatic = {
   path: string;
   segments: PathSegment[];
-  hex: string;
+  color: Color;
 };
 
 /** Joins a path for emitting, applying each segment's alias. */
@@ -331,7 +330,7 @@ export function resolveDefinition(
           statics.push({
             path,
             segments,
-            hex: assertHex(raw, `constant "${path}"`),
+            color: parseColor(raw, `constant "${path}"`),
           });
         } catch (e) {
           errors.push((e as Error).message);
@@ -339,7 +338,7 @@ export function resolveDefinition(
         continue;
       }
       if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
-        errors.push(`"${path}": expected a hex color, a group, or a system`);
+        errors.push(`"${path}": expected a color, a group, or a system`);
         continue;
       }
       const block = raw as Record<string, unknown>;
@@ -427,9 +426,9 @@ export function resolveDefinition(
       try {
         const value = sys.algo.resolveStep(sys.params, selector);
         const override = sys.overrides[selector];
-        const overrideCss =
+        const overrideColor =
           override != null
-            ? assertHex(override, `override "${key}"`)
+            ? parseColor(override, `override "${key}"`)
             : undefined;
         step = {
           selector,
@@ -438,9 +437,9 @@ export function resolveDefinition(
               defaultPublicStep(selector),
             key,
           ),
-          color: overrideCss != null ? colorFromHex(overrideCss) : value.color,
-          overridden: overrideCss != null,
-          generated: overrideCss != null ? value.color : undefined,
+          color: overrideColor ?? value.color,
+          overridden: overrideColor != null,
+          generated: overrideColor != null ? value.color : undefined,
         };
       } catch (e) {
         errors.push(`${refContext}: ${(e as Error).message}`);
@@ -671,7 +670,7 @@ export function resolveDefinition(
         return {
           ref,
           target: { kind: "constant", name: inner, alpha },
-          color: colorFromRgb(hexToRgb(constant.hex), "srgb", alpha / 100),
+          color: { ...constant.color, alpha: alpha / 100 },
         };
       }
       errors.push(
@@ -711,7 +710,7 @@ export function resolveDefinition(
       return {
         ref,
         target: { kind: "constant", name: ref },
-        color: colorFromHex(constant.hex),
+        color: constant.color,
       };
     }
     if (/^transparent\(/.test(ref) && !ref.endsWith(")")) {

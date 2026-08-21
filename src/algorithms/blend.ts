@@ -5,13 +5,12 @@ import {
   type PreviewControl,
 } from "../contract.js";
 import {
-  assertHex,
-  colorFromRgb,
-  hexToRgb,
+  formatColor,
   mixIn,
+  parseColor,
   BLEND_SPACES,
 } from "../color-math.js";
-import type { BlendSpace } from "../color-math.js";
+import type { BlendSpace, Color } from "../color-math.js";
 
 /**
  * One base colour and several named colours to blend toward, at a weight
@@ -29,14 +28,14 @@ export const blend: AlgorithmImpl = {
 
   declaredSelectors(params) {
     assertKnownParams(params, ["base", "toward", "space"], "blend");
-    assertHex(params.base, "blend param 'base'");
+    parseColor(params.base, "blend param 'base'");
     parseToward(params);
     spaceOf(params);
     return null;
   },
 
   resolveStep(params, selector) {
-    const base = assertHex(params.base, "blend param 'base'");
+    const base = parseColor(params.base, "blend param 'base'");
     const { color, alpha, alphaOnly } = parseSelector(params, selector);
     if (alphaOnly) {
       const space = spaceOf(params);
@@ -45,7 +44,7 @@ export const blend: AlgorithmImpl = {
           `blend selector "${selector}": /alpha defers the blend to the browser, which always blends in srgb — this system blends in ${space}, so the two would disagree`,
         );
       }
-      return { color: colorFromRgb(hexToRgb(color), "srgb", alpha / 100) };
+      return { color: { ...color, alpha: alpha / 100 } };
     }
     return { color: mixIn(color, base, alpha / 100, spaceOf(params)) };
   },
@@ -84,14 +83,14 @@ export const blend: AlgorithmImpl = {
         kind: "color",
         path: "base",
         label: "base",
-        value: assertHex(params.base, "blend param 'base'"),
+        value: formatColor(parseColor(params.base, "blend param 'base'"), "srgb"),
       },
       ...names.map(
         (name): PreviewControl => ({
           kind: "color",
           path: `toward.${name}`,
           label: name,
-          value: toward[name],
+          value: formatColor(toward[name], "srgb"),
         }),
       ),
     ];
@@ -155,16 +154,14 @@ function commonAlpha(selectors: string[]): number {
   return best;
 }
 
-function parseToward(params: Record<string, unknown>): Record<string, string> {
+function parseToward(params: Record<string, unknown>): Record<string, Color> {
   const raw = params.toward;
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
-    throw new Error(
-      "blend param 'toward': expected a map of name to a hex color",
-    );
+    throw new Error("blend param 'toward': expected a map of name to a color");
   }
-  const toward: Record<string, string> = {};
+  const toward: Record<string, Color> = {};
   for (const [name, value] of Object.entries(raw as Record<string, unknown>)) {
-    toward[name] = assertHex(value, `blend colour "${name}"`);
+    toward[name] = parseColor(value, `blend colour "${name}"`);
   }
   if (Object.keys(toward).length === 0) {
     throw new Error("blend param 'toward': declares no colours");
@@ -175,7 +172,7 @@ function parseToward(params: Record<string, unknown>): Record<string, string> {
 function parseSelector(
   params: Record<string, unknown>,
   selector: string,
-): { name: string; color: string; alpha: number; alphaOnly: boolean } {
+): { name: string; color: Color; alpha: number; alphaOnly: boolean } {
   const toward = parseToward(params);
   let alphaOnly = false;
   const slash = selector.indexOf("/");
