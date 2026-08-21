@@ -199,3 +199,82 @@ s:
     );
   });
 });
+
+describe("wide anchors that go nowhere", () => {
+  const warn = (src: string) => resolveDefinition(src).warnings.join(" ");
+  const def = (params: string) => `
+dtg: 1
+modes: [default]
+systems:
+  warm:
+    algorithm: blend
+    params: ${params}
+roles:
+  edge: { accent: [warm/red@100] }
+`;
+
+  test("warns when a wide anchor is flattened by an srgb transform", () => {
+    assert.match(
+      warn(def(`{ base: "#ffffff", toward: { red: "oklch(0.4854 0.2237 28.69)" } }`)),
+      /outside srgb, but its transform runs in srgb/,
+    );
+  });
+
+  test("silent when the transform runs wide enough to keep it", () => {
+    for (const space of ["display-p3", "display-p3-linear", "oklab"]) {
+      assert.doesNotMatch(
+        warn(def(`{ space: ${space}, base: "#ffffff", toward: { red: "oklch(0.4854 0.2237 28.69)" } }`)),
+        /extra gamut is discarded/,
+        space,
+      );
+    }
+  });
+
+  test("srgb-linear warns too — the clip is on the way in, not the path", () => {
+    assert.match(
+      warn(def(`{ space: srgb-linear, base: "#ffffff", toward: { red: "oklch(0.4854 0.2237 28.69)" } }`)),
+      /extra gamut is discarded/,
+    );
+  });
+
+  test("fires on the anchor, not on whichever steps happen to be demanded", () => {
+    // A pale tint is inside sRGB whatever the anchor was; the loss already
+    // happened when the anchor was clipped on the way in.
+    const pale = `
+dtg: 1
+modes: [default]
+systems:
+  warm:
+    algorithm: blend
+    params: { base: "#ffffff", toward: { red: "oklch(0.4854 0.2237 28.69)" } }
+roles:
+  surface: { tint: [warm/red@6] }
+`;
+    assert.match(warn(pale), /extra gamut is discarded/);
+  });
+
+  test("silent when nothing was wide to begin with", () => {
+    assert.doesNotMatch(
+      warn(def(`{ base: "#ffffff", toward: { red: "#b30a0a" } }`)),
+      /extra gamut is discarded/,
+    );
+  });
+
+  test("ink-ramp cannot discard it — it widens to fit its inputs", () => {
+    // Only blend takes an explicit `space`; the other algorithms transform in
+    // the widest gamut their inputs use, so there is nothing to warn about.
+    assert.doesNotMatch(
+      warn(`
+dtg: 1
+modes: [default]
+systems:
+  ramp:
+    algorithm: ink-ramp
+    params: { base: "#ffffff", ink: "color(display-p3 1 0 0)" }
+roles:
+  edge: { accent: [ramp/2] }
+`),
+      /extra gamut is discarded/,
+    );
+  });
+});

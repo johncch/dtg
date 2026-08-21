@@ -419,43 +419,42 @@ export function hexToOklab(hex: string): Oklab {
 
 /** The spaces a blend can happen in, and what each one is good for. */
 /** CSS color-mix() interpolation spaces — `color-mix(in <space>, a p%, b)`. */
-export type BlendSpace = "srgb" | "srgb-linear" | "oklab" | "display-p3";
+export type BlendSpace =
+  | "srgb"
+  | "srgb-linear"
+  | "display-p3"
+  | "display-p3-linear"
+  | "oklab";
 
-/**
- * `emittable` is false where a blend produces a value the CSS emitter cannot
- * yet ship safely — a bare `color(display-p3 ...)` with no sRGB fallback is
- * dropped whole by a browser that cannot parse it, taking the custom property
- * with it. The comparison tools still show every space; only emit is gated.
- */
 export const BLEND_SPACES: {
   id: BlendSpace;
   label: string;
   note: string;
-  emittable: boolean;
 }[] = [
   {
     id: "srgb",
-    emittable: true,
     label: "sRGB",
     note: "What browsers and design tools actually do. Lerps the stored byte.",
   },
   {
     id: "srgb-linear",
-    emittable: true,
     label: "sRGB linear",
     note: "Physically correct — lerps emitted light. What film and games use.",
   },
   {
     id: "oklab",
-    emittable: true,
     label: "OKLab",
     note: "Perceptual. Holds hue exactly when mixing toward a neutral.",
   },
   {
     id: "display-p3",
-    emittable: false,
     label: "Display P3",
-    note: "The same operation as sRGB, in P3 primaries. A wider display.",
+    note: "The same path as sRGB, in P3 primaries. A wider display.",
+  },
+  {
+    id: "display-p3-linear",
+    label: "Display P3 linear",
+    note: "The same path as sRGB linear, in P3 primaries.",
   },
 ];
 
@@ -469,10 +468,15 @@ export function mixIn(a: Color, b: Color, t: number, space: BlendSpace): Color {
     return colorFromOklab(A.map((c, i) => lerp(c, B[i])) as Oklab);
   }
 
-  const gamut: Gamut = space === "display-p3" ? "display-p3" : "srgb";
+  // A CSS interpolation keyword names two independent things: the primaries
+  // the mix happens in, and whether it happens in light or in encoded
+  // channels. Reading both off the keyword keeps all four combinations
+  // reachable — `srgb-linear` has no wide counterpart otherwise.
+  const gamut: Gamut = space.startsWith("display-p3") ? "display-p3" : "srgb";
+  const inLight = space.endsWith("-linear");
   const A = channelsIn(a, gamut);
   const B = channelsIn(b, gamut);
-  if (space === "srgb-linear") {
+  if (inLight) {
     const mixed = A.map((c, i) =>
       lerp(srgbToLinear(c), srgbToLinear(B[i])),
     ) as Rgb;

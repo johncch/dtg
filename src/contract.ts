@@ -9,7 +9,7 @@ export type StepValue = { color: Color };
  * How a system wants to be shown and tuned. Structure, not markup — the
  * preview layer owns presentation, the algorithm owns what its params mean.
  */
-import type { Color } from "./color-math.js";
+import type { Color, Gamut } from "./color-math.js";
 
 export type PreviewControl =
   | { kind: "color"; path: string; label: string; value: string }
@@ -68,6 +68,18 @@ export type AlgorithmImpl = {
   declaredSelectors(params: Record<string, unknown>): string[] | null;
   /** Throws with a human message on an invalid selector or bad params. */
   resolveStep(params: Record<string, unknown>, selector: string): StepValue;
+  /**
+   * The colours this system was given. Only the algorithm knows which params
+   * are colours. Absent = no check.
+   */
+  inputColors?(params: Record<string, unknown>): Color[];
+  /**
+   * The gamut this system's arithmetic runs in, or null when it has no fixed
+   * one — because it widens to fit its inputs, or works in an unbounded space.
+   * An input outside this gamut is clipped on the way in, whatever the steps
+   * that happen to be demanded look like.
+   */
+  workingGamut?(params: Record<string, unknown>): Gamut | null;
   /**
    * The public name fragment this selector emits as. Absent = the default,
    * which suits decimal ramp coordinates. The core validates whatever comes

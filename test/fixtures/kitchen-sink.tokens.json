@@ -6,10 +6,16 @@
         "light",
         "dark"
       ],
+      "colorSpace": "srgb",
+      "writingIntoFigma": "Set the Figma document colour profile to srgb first — it cannot be set through the plugin API, only by hand. Then write each $value's components as {r, g, b, a}, or its hex where an API takes only hex; both name the same colour in that profile. Nothing here is converted on import, so a document in any other profile will render every one of these wrong.",
       "changelog": [
         {
           "date": "2026-08-21",
           "note": "fixture for the golden-output test"
+        },
+        {
+          "date": "2026-08-21",
+          "note": "wide-gamut anchors, so the @supports layer is covered"
         }
       ]
     }
@@ -146,6 +152,42 @@
             }
           }
         }
+      },
+      "wide": {
+        "$type": "color",
+        "$value": "{systems.wide.60}",
+        "$description": "surface.wide",
+        "$extensions": {
+          "com.fifthrevision.dtg": {
+            "name": "surface/wide",
+            "modes": {
+              "light": "{systems.wide.60}",
+              "dark": "{systems.widemix.deep-80}"
+            },
+            "refs": {
+              "light": "wide/60",
+              "dark": "widemix/deep@80"
+            }
+          }
+        }
+      },
+      "lush": {
+        "$type": "color",
+        "$value": "{systems.static.lush}",
+        "$description": "surface.lush",
+        "$extensions": {
+          "com.fifthrevision.dtg": {
+            "name": "surface/lush",
+            "modes": {
+              "light": "{systems.static.lush}",
+              "dark": "{systems.static.vivid}"
+            },
+            "refs": {
+              "light": "lush",
+              "dark": "vivid"
+            }
+          }
+        }
       }
     },
     "label": {
@@ -207,14 +249,41 @@
     "state": {
       "veil": {
         "$type": "color",
-        "$value": "#001a2808",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.101961,
+            0.156863
+          ],
+          "alpha": 0.03,
+          "hex": "#001a28"
+        },
         "$description": "state.veil",
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "state/veil",
             "modes": {
-              "light": "#001a2808",
-              "dark": "#fafdff0a"
+              "light": {
+                "colorSpace": "srgb",
+                "components": [
+                  0,
+                  0.101961,
+                  0.156863
+                ],
+                "alpha": 0.03,
+                "hex": "#001a28"
+              },
+              "dark": {
+                "colorSpace": "srgb",
+                "components": [
+                  0.980392,
+                  0.992157,
+                  1
+                ],
+                "alpha": 0.04,
+                "hex": "#fafdff"
+              }
             },
             "refs": {
               "light": "sky/3/ink",
@@ -225,14 +294,41 @@
       },
       "deferred": {
         "$type": "color",
-        "$value": "#b30a0a0f",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.701961,
+            0.039216,
+            0.039216
+          ],
+          "alpha": 0.06,
+          "hex": "#b30a0a"
+        },
         "$description": "state.deferred",
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "state/deferred",
             "modes": {
-              "light": "#b30a0a0f",
-              "dark": "#6192bb0f"
+              "light": {
+                "colorSpace": "srgb",
+                "components": [
+                  0.701961,
+                  0.039216,
+                  0.039216
+                ],
+                "alpha": 0.06,
+                "hex": "#b30a0a"
+              },
+              "dark": {
+                "colorSpace": "srgb",
+                "components": [
+                  0.380392,
+                  0.572549,
+                  0.733333
+                ],
+                "alpha": 0.06,
+                "hex": "#6192bb"
+              }
             },
             "refs": {
               "light": "warm/red@6/alpha",
@@ -243,14 +339,41 @@
       },
       "scrim": {
         "$type": "color",
-        "$value": "#00000066",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0,
+            0
+          ],
+          "alpha": 0.4,
+          "hex": "#000000"
+        },
         "$description": "state.scrim",
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "state/scrim",
             "modes": {
-              "light": "#00000066",
-              "dark": "#00000099"
+              "light": {
+                "colorSpace": "srgb",
+                "components": [
+                  0,
+                  0,
+                  0
+                ],
+                "alpha": 0.4,
+                "hex": "#000000"
+              },
+              "dark": {
+                "colorSpace": "srgb",
+                "components": [
+                  0,
+                  0,
+                  0
+                ],
+                "alpha": 0.6,
+                "hex": "#000000"
+              }
             },
             "refs": {
               "light": "shadow/40",
@@ -261,18 +384,90 @@
       },
       "faded": {
         "$type": "color",
-        "$value": "#ffffffb3",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "alpha": 0.7,
+          "hex": "#ffffff"
+        },
         "$description": "state.faded",
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "state/faded",
             "modes": {
-              "light": "#ffffffb3",
-              "dark": "#31313366"
+              "light": {
+                "colorSpace": "srgb",
+                "components": [
+                  1,
+                  1,
+                  1
+                ],
+                "alpha": 0.7,
+                "hex": "#ffffff"
+              },
+              "dark": {
+                "colorSpace": "srgb",
+                "components": [
+                  0.192157,
+                  0.192157,
+                  0.2
+                ],
+                "alpha": 0.4,
+                "hex": "#313133"
+              }
             },
             "refs": {
               "light": "transparent(paper 70)",
               "dark": "transparent(ink.body 40)"
+            }
+          }
+        }
+      },
+      "widefade": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.203479,
+            0.158771
+          ],
+          "alpha": 0.3,
+          "hex": "#ff3428"
+        },
+        "$description": "state.widefade",
+        "$extensions": {
+          "com.fifthrevision.dtg": {
+            "name": "state/widefade",
+            "modes": {
+              "light": {
+                "colorSpace": "srgb",
+                "components": [
+                  1,
+                  0.203479,
+                  0.158771
+                ],
+                "alpha": 0.3,
+                "hex": "#ff3428"
+              },
+              "dark": {
+                "colorSpace": "srgb",
+                "components": [
+                  1,
+                  1,
+                  1
+                ],
+                "alpha": 0.3,
+                "hex": "#ffffff"
+              }
+            },
+            "refs": {
+              "light": "transparent(vivid 30)",
+              "dark": "transparent(paper 30)"
             }
           }
         }
@@ -288,7 +483,15 @@
     "sky": {
       "3": {
         "$type": "color",
-        "$value": "#f3f6f9",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.95098,
+            0.965451,
+            0.974706
+          ],
+          "hex": "#f2f6f9"
+        },
         "$description": "surface.canvas[light]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -302,7 +505,15 @@
     "night": {
       "4": {
         "$type": "color",
-        "$value": "#1e2528",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.118275,
+            0.145098,
+            0.156706
+          ],
+          "hex": "#1e2528"
+        },
         "$description": "surface.canvas[dark]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -316,7 +527,15 @@
     "warm": {
       "red-6": {
         "$type": "color",
-        "$value": "#faf0f0",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.982118,
+            0.942353,
+            0.942353
+          ],
+          "hex": "#faf0f0"
+        },
         "$description": "surface.tint[light]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -328,7 +547,15 @@
       },
       "red-100": {
         "$type": "color",
-        "$value": "#b30a0a",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.701961,
+            0.039216,
+            0.039216
+          ],
+          "hex": "#b30a0a"
+        },
         "$description": "surface.full[light]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -340,7 +567,15 @@
       },
       "blue-6": {
         "$type": "color",
-        "$value": "#f6f8fb",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.962824,
+            0.974353,
+            0.984
+          ],
+          "hex": "#f6f8fb"
+        },
         "$description": "surface.tint[dark]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -352,7 +587,15 @@
       },
       "blue-100": {
         "$type": "color",
-        "$value": "#6192bb",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.380392,
+            0.572549,
+            0.733333
+          ],
+          "hex": "#6192bb"
+        },
         "$description": "surface.full[dark]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -366,7 +609,15 @@
     "perceptual": {
       "red-6": {
         "$type": "color",
-        "$value": "#fdf2f0",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.990681,
+            0.949262,
+            0.942455
+          ],
+          "hex": "#fdf2f0"
+        },
         "$description": "surface.perceptual[light]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -380,7 +631,15 @@
     "lightmix": {
       "red-6": {
         "$type": "color",
-        "$value": "#fbf8f8",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.985373,
+            0.973231,
+            0.973231
+          ],
+          "hex": "#fbf8f8"
+        },
         "$description": "surface.perceptual[dark]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -394,7 +653,15 @@
     "theme": {
       "50": {
         "$type": "color",
-        "$value": "#f1f9fe",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.943316,
+            0.97499,
+            0.997161
+          ],
+          "hex": "#f1f9fe"
+        },
         "$description": "surface.scale[light]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -406,7 +673,15 @@
       },
       "500": {
         "$type": "color",
-        "$value": "#03a2e8",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.011765,
+            0.635294,
+            0.909804
+          ],
+          "hex": "#03a2e8"
+        },
         "$description": "theme/500",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -418,7 +693,15 @@
       },
       "950": {
         "$type": "color",
-        "$value": "#011f31",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.004877,
+            0.123316,
+            0.190559
+          ],
+          "hex": "#011f31"
+        },
         "$description": "surface.scale[dark]",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -429,11 +712,63 @@
         }
       }
     },
+    "wide": {
+      "60": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.439641,
+            0.439537
+          ],
+          "hex": "#ff7070"
+        },
+        "$description": "surface.wide[light]",
+        "$extensions": {
+          "com.fifthrevision.dtg": {
+            "name": "wide/60",
+            "ref": "wide/60",
+            "algorithm": "ink-ramp"
+          }
+        }
+      }
+    },
+    "widemix": {
+      "deep-80": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0.028044,
+            0.534105,
+            1
+          ],
+          "hex": "#0788ff"
+        },
+        "$description": "surface.wide[dark]",
+        "$extensions": {
+          "com.fifthrevision.dtg": {
+            "name": "widemix/deep-80",
+            "ref": "widemix/deep@80",
+            "algorithm": "blend"
+          }
+        }
+      }
+    },
     "grouped": {
       "inner": {
         "10": {
           "$type": "color",
-          "$value": "#ffe6e6",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              0.9,
+              0.9
+            ],
+            "hex": "#ffe6e6"
+          },
           "$description": "surface.nested[light]",
           "$extensions": {
             "com.fifthrevision.dtg": {
@@ -445,7 +780,15 @@
         },
         "20": {
           "$type": "color",
-          "$value": "#ffcccc",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              1,
+              0.8,
+              0.8
+            ],
+            "hex": "#ffcccc"
+          },
           "$description": "surface.nested[dark]",
           "$extensions": {
             "com.fifthrevision.dtg": {
@@ -460,7 +803,15 @@
     "static": {
       "paper": {
         "$type": "color",
-        "$value": "#ffffff",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            1,
+            1
+          ],
+          "hex": "#ffffff"
+        },
         "$description": "static.paper",
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -471,7 +822,15 @@
       "ink": {
         "body": {
           "$type": "color",
-          "$value": "#313133",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.192157,
+              0.192157,
+              0.2
+            ],
+            "hex": "#313133"
+          },
           "$description": "static.ink.body",
           "$extensions": {
             "com.fifthrevision.dtg": {
@@ -481,12 +840,56 @@
         },
         "muted": {
           "$type": "color",
-          "$value": "#828282",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.509804,
+              0.509804,
+              0.509804
+            ],
+            "hex": "#828282"
+          },
           "$description": "static.ink.muted",
           "$extensions": {
             "com.fifthrevision.dtg": {
               "name": "static/ink/muted"
             }
+          }
+        }
+      },
+      "vivid": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            1,
+            0.203479,
+            0.158771
+          ],
+          "hex": "#ff3428"
+        },
+        "$description": "static.vivid",
+        "$extensions": {
+          "com.fifthrevision.dtg": {
+            "name": "static/vivid"
+          }
+        }
+      },
+      "lush": {
+        "$type": "color",
+        "$value": {
+          "colorSpace": "srgb",
+          "components": [
+            0,
+            0.778814,
+            0.214932
+          ],
+          "hex": "#00c737"
+        },
+        "$description": "static.lush",
+        "$extensions": {
+          "com.fifthrevision.dtg": {
+            "name": "static/lush"
           }
         }
       }

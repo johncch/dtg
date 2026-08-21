@@ -7,6 +7,7 @@ import {
 } from "./contract.js";
 import {
   colorFromHex,
+  needsMapping,
   colorFromRgb,
   parseColor,
   isOpaque,
@@ -772,6 +773,28 @@ export function resolveDefinition(
         .map(([, step]) => step as ResolvedStep)
         .sort((a, b) => compareSteps(sys.algo, sys.params, a, b));
     }
+    // An input outside the gamut the arithmetic runs in is clipped on the way
+    // in, and the definition still reads as if it were wide. This asks the
+    // algorithm what gamut it works in rather than inspecting the steps: a
+    // system whose demanded steps are all pale tints still lost the anchor.
+    if (sys.algo.inputColors && sys.algo.workingGamut) {
+      try {
+        const gamut = sys.algo.workingGamut(sys.params);
+        const clipped = gamut
+          ? sys.algo
+              .inputColors(sys.params)
+              .filter((c) => needsMapping(c, gamut))
+          : [];
+        if (clipped.length > 0) {
+          warnings.push(
+            `system "${name}" is given ${clipped.length} colour${clipped.length === 1 ? "" : "s"} outside ${gamut}, but its transform runs in ${gamut} — the extra gamut is discarded on the way in. Every space has a display-p3 counterpart that keeps the same interpolation; switch to it rather than changing the interpolation itself.`,
+          );
+        }
+      } catch {
+        // Bad params are already reported as errors; don't double-report.
+      }
+    }
+
     const emitted = new Set(steps.map((s) => s.selector));
     for (const selector of Object.keys(sys.overrides)) {
       if (!emitted.has(selector)) {

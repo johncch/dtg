@@ -27,6 +27,16 @@ export const oklchScale: AlgorithmImpl = {
     return Object.keys(stopsOf(params));
   },
 
+  inputColors(params) {
+    const toward = Array.isArray(params.toward) ? params.toward : [];
+    return [
+      parseColor(params.base, "oklch-scale param 'base'"),
+      ...toward.map((t, i) =>
+        parseColor(t, `oklch-scale param 'toward[${i}]'`),
+      ),
+    ];
+  },
+
   resolveStep(params, selector) {
     const stops = stopsOf(params);
     const t = stops[selector];

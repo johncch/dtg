@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
-import { CSS_FORMATS, type CssFormat } from "./emit.js";
+import { CSS_FORMATS, DTCG_COLOR_SPACES, type CssFormat } from "./emit.js";
+import type { Gamut } from "./color-math.js";
 
 export type DtgConfig = {
   /** The single resolved definition file. */
@@ -10,6 +11,11 @@ export type DtgConfig = {
   cssFormat: CssFormat;
   /** Only emitted when configured. */
   dtcgOut?: string;
+  /**
+   * The colour space every DTCG value is written in. Figma holds one profile
+   * per document, so this has to match the file it is being synced into.
+   */
+  dtcgColorSpace: Gamut;
 };
 
 const DEFAULT_DIR = "design-tokens";
@@ -24,6 +30,7 @@ export function loadConfig(flags: {
   css?: string;
   cssFormat?: string;
   dtcg?: string;
+  dtcgColorSpace?: string;
 }): DtgConfig {
   let fileConfig: Record<string, unknown> = {};
   if (existsSync("dtg.yaml")) {
@@ -39,6 +46,7 @@ export function loadConfig(flags: {
     );
   }
   const css = parseCssOutput(outputs.css);
+  const dtcg = parseDtcgOutput(outputs.dtcg);
 
   return {
     definition:
@@ -47,7 +55,11 @@ export function loadConfig(flags: {
     cssOut: flags.css ?? css.path ?? join(DEFAULT_DIR, "tokens.generated.css"),
     cssFormat:
       assertCssFormat(flags.cssFormat, "--css-format") ?? css.format ?? "plain",
-    dtcgOut: flags.dtcg ?? (outputs.dtcg as string | undefined),
+    dtcgOut: flags.dtcg ?? dtcg.path,
+    dtcgColorSpace:
+      assertColorSpace(flags.dtcgColorSpace, "--dtcg-color-space") ??
+      dtcg.colorSpace ??
+      "srgb",
   };
 }
 
@@ -75,6 +87,45 @@ function parseCssOutput(value: unknown): {
     path: block.path as string | undefined,
     format: assertCssFormat(block.format, "dtg.yaml outputs.css.format"),
   };
+}
+
+/** `dtcg: <path>` or `dtcg: { path, colorSpace }`. */
+function parseDtcgOutput(value: unknown): {
+  path?: string;
+  colorSpace?: Gamut;
+} {
+  if (value == null) return {};
+  if (typeof value === "string") return { path: value };
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(
+      "dtg.yaml outputs.dtcg: expected a path or { path, colorSpace }",
+    );
+  }
+  const block = value as Record<string, unknown>;
+  for (const key of Object.keys(block)) {
+    if (key !== "path" && key !== "colorSpace") {
+      throw new Error(
+        `dtg.yaml outputs.dtcg: unknown key "${key}" (known: path, colorSpace)`,
+      );
+    }
+  }
+  return {
+    path: block.path as string | undefined,
+    colorSpace: assertColorSpace(
+      block.colorSpace,
+      "dtg.yaml outputs.dtcg.colorSpace",
+    ),
+  };
+}
+
+function assertColorSpace(value: unknown, context: string): Gamut | undefined {
+  if (value == null) return undefined;
+  if (typeof value === "string" && DTCG_COLOR_SPACES.includes(value as Gamut)) {
+    return value as Gamut;
+  }
+  throw new Error(
+    `${context}: expected one of ${DTCG_COLOR_SPACES.join(", ")}, got ${JSON.stringify(value)}`,
+  );
 }
 
 function assertCssFormat(

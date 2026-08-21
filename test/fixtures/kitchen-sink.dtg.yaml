@@ -7,6 +7,7 @@ modes: [light, dark]
 
 changelog:
   - 2026-08-21: fixture for the golden-output test
+  - 2026-08-21: wide-gamut anchors, so the @supports layer is covered
 
 defaults:
   oklch-scale:
@@ -57,6 +58,20 @@ systems:
     algorithm: overlay
     params: { color: "#000000" }
 
+  vivid: "color(display-p3 1 0 0)"
+  lush: "oklch(0.72 0.28 145)"
+
+  wide:
+    algorithm: ink-ramp
+    params: { base: "#ffffff", ink: "color(display-p3 1 0 0)" }
+
+  widemix:
+    algorithm: blend
+    params:
+      space: display-p3
+      base: "#ffffff"
+      toward: { deep: "color(display-p3 0 0.4 1)" }
+
   grouped:
     alias: { css: renamed, figma: Renamed }
     inner:
@@ -72,6 +87,8 @@ roles:
     scale: [theme/50, theme/950]
     nested: [grouped.inner/10, grouped.inner/20]
     echo: [surface.canvas, surface.canvas]
+    wide: [wide/60, widemix/deep@80]
+    lush: [lush, vivid]
 
   label:
     primary:
@@ -87,3 +104,4 @@ roles:
     deferred: [warm/red@6/alpha, warm/blue@6/alpha]
     scrim: [shadow/40, shadow/60]
     faded: [transparent(paper 70), transparent(ink.body 40)]
+    widefade: [transparent(vivid 30), transparent(paper 30)]

@@ -18,6 +18,10 @@
   --color-theme-50: #f1f9fe;
   --color-theme-500: #03a2e8;
   --color-theme-950: #011f31;
+  /* wide (ink-ramp) */
+  --color-wide-60: #ff7070;
+  /* widemix (blend) */
+  --color-widemix-deep-80: #0788ff;
   /* grouped.inner (ink-ramp) */
   --color-renamed-inner-10: #ffe6e6;
   --color-renamed-inner-20: #ffcccc;
@@ -25,6 +29,8 @@
   --color-paper: #ffffff;
   --color-ink-body: #313133;
   --color-ink-muted: #828282;
+  --color-vivid: #ff3428;
+  --color-lush: #00c737;
 }
 
 :root {
@@ -35,6 +41,8 @@
   --surface-scale: var(--color-theme-50);
   --surface-nested: var(--color-renamed-inner-10);
   --surface-echo: var(--surface-canvas);
+  --surface-wide: var(--color-wide-60);
+  --surface-lush: var(--color-lush);
   --label: var(--color-ink-body);
   --label-muted: var(--color-ink-muted);
   --label-renamed-label: var(--color-paper);
@@ -42,6 +50,7 @@
   --state-deferred: rgba(179, 10, 10, 0.06);
   --state-scrim: rgba(0, 0, 0, 0.4);
   --state-faded: rgba(255, 255, 255, 0.7);
+  --state-widefade: rgba(255, 52, 40, 0.3);
 }
 
 .dark {
@@ -52,6 +61,8 @@
   --surface-scale: var(--color-theme-950);
   --surface-nested: var(--color-renamed-inner-20);
   --surface-echo: var(--surface-canvas);
+  --surface-wide: var(--color-widemix-deep-80);
+  --surface-lush: var(--color-vivid);
   --label: var(--color-paper);
   --label-muted: var(--color-ink-muted);
   --label-renamed-label: var(--color-ink-body);
@@ -59,6 +70,21 @@
   --state-deferred: rgba(97, 146, 187, 0.06);
   --state-scrim: rgba(0, 0, 0, 0.6);
   --state-faded: rgba(49, 49, 51, 0.4);
+  --state-widefade: rgba(255, 255, 255, 0.3);
+}
+
+/* Wider than sRGB — shown at full strength where supported */
+@supports (color: color(display-p3 1 1 1)) {
+  :root {
+    --color-wide-60: color(display-p3 1 0.4 0.4);
+    --color-widemix-deep-80: color(display-p3 0.2 0.52 1);
+    --color-vivid: color(display-p3 1 0 0);
+    --color-lush: color(display-p3 0.2261 0.7896 0.1678);
+  }
+
+  :root {
+    --state-widefade: color(display-p3 1 0 0 / 0.3);
+  }
 }
 
 /* Semantic tokens wired into Tailwind utilities */
@@ -70,6 +96,8 @@
   --color-surface-scale: var(--surface-scale);
   --color-surface-nested: var(--surface-nested);
   --color-surface-echo: var(--surface-echo);
+  --color-surface-wide: var(--surface-wide);
+  --color-surface-lush: var(--surface-lush);
   --color-label: var(--label);
   --color-label-muted: var(--label-muted);
   --color-label-renamed-label: var(--label-renamed-label);
@@ -77,4 +105,5 @@
   --color-state-deferred: var(--state-deferred);
   --color-state-scrim: var(--state-scrim);
   --color-state-faded: var(--state-faded);
+  --color-state-widefade: var(--state-widefade);
 }

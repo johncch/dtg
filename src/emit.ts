@@ -1,4 +1,13 @@
-import { formatColor, isOpaque } from "./color-math.js";
+import {
+  convert,
+  formatColor,
+  isOpaque,
+  needsMapping,
+  rgbToHex,
+  type Color,
+  type Gamut,
+  type Rgb,
+} from "./color-math.js";
 import {
   aliasedName,
   buildLineage,
@@ -27,30 +36,45 @@ function cssVarName(role: ResolvedRole): string {
   return publicRoleName(role, "css", "-");
 }
 
-function cssValueFor(resolved: ResolvedDefinition, entry: ResolvedRef): string {
+/**
+ * `inlined` is true when the value is the colour itself rather than a
+ * pointer at a primitive. Only an inlined value needs repeating in the
+ * wide-gamut layer — a `var()` picks up whatever the primitive was
+ * redefined to.
+ */
+function cssValueFor(
+  resolved: ResolvedDefinition,
+  entry: ResolvedRef,
+): { css: string; inlined: boolean } {
   const target = entry.target;
   if (target.kind === "step" && isOpaque(entry.color)) {
     const system = resolved.systems.find((s) => s.system === target.system);
     const step = system?.steps.find((s) => s.selector === target.selector);
     if (system && step) {
-      return `var(--color-${publicSystemName(system, "css")}-${step.publicStep})`;
+      return {
+        css: `var(--color-${publicSystemName(system, "css")}-${step.publicStep})`,
+        inlined: false,
+      };
     }
   }
   if (target.kind === "constant" && isOpaque(entry.color)) {
     const constant = resolved.statics.find((c) => c.path === target.name);
     if (constant) {
-      return `var(--color-${publicPath(constant.segments, "css", "-")})`;
+      return {
+        css: `var(--color-${publicPath(constant.segments, "css", "-")})`,
+        inlined: false,
+      };
     }
   }
   if (target.kind === "role") {
     const role = resolved.roles.find(
       (r) => r.domain === target.domain && r.role === target.role,
     );
-    if (role) return `var(--${cssVarName(role)})`;
+    if (role) return { css: `var(--${cssVarName(role)})`, inlined: false };
   }
   // transparent() results and overlay steps have no primitive variable to
   // point at; they inline their computed value.
-  return formatColor(entry.color, "srgb");
+  return { css: formatColor(entry.color, "srgb"), inlined: true };
 }
 
 export function emitCss(
@@ -84,11 +108,13 @@ export function emitCss(
     lines.push(i === 0 ? ":root {" : `.${mode} {`);
     for (const role of resolved.roles) {
       lines.push(
-        `  --${cssVarName(role)}: ${cssValueFor(resolved, role.perMode[i])};`,
+        `  --${cssVarName(role)}: ${cssValueFor(resolved, role.perMode[i]).css};`,
       );
     }
     lines.push("}", "");
   });
+
+  lines.push(...wideGamutLayer(resolved));
 
   if (format === "tailwind") {
     lines.push(
@@ -103,6 +129,66 @@ export function emitCss(
   }
   while (lines[lines.length - 1] === "") lines.pop();
   return lines.join("\n") + "\n";
+}
+
+/**
+ * Colours outside sRGB are written twice: mapped into sRGB above, for every
+ * browser, then again here at full strength for displays that can show them.
+ * The order matters — the fallback has to be the one a browser that cannot
+ * parse `color()` keeps.
+ *
+ * Only values that actually leave sRGB are repeated. An in-gamut colour
+ * renders identically either way, so redefining it would be bytes for
+ * nothing, and a definition authored entirely in sRGB emits no layer at all.
+ */
+function wideGamutLayer(resolved: ResolvedDefinition): string[] {
+  const blocks: string[] = [];
+
+  const primitives: string[] = [];
+  for (const system of resolved.systems) {
+    const name = publicSystemName(system, "css");
+    for (const step of system.steps) {
+      if (!isOpaque(step.color) || !needsMapping(step.color, "srgb")) continue;
+      primitives.push(
+        `    --color-${name}-${step.publicStep}: ${formatColor(step.color, "display-p3")};`,
+      );
+    }
+  }
+  for (const s of resolved.statics) {
+    if (!needsMapping(s.color, "srgb")) continue;
+    primitives.push(
+      `    --color-${publicPath(s.segments, "css", "-")}: ${formatColor(s.color, "display-p3")};`,
+    );
+  }
+
+  const roleBlocks: string[] = [];
+  resolved.modes.forEach((mode, i) => {
+    const decls: string[] = [];
+    for (const role of resolved.roles) {
+      const entry = role.perMode[i];
+      if (!cssValueFor(resolved, entry).inlined) continue;
+      if (!needsMapping(entry.color, "srgb")) continue;
+      decls.push(
+        `    --${cssVarName(role)}: ${formatColor(entry.color, "display-p3")};`,
+      );
+    }
+    if (decls.length === 0) return;
+    if (roleBlocks.length > 0) roleBlocks.push("");
+    roleBlocks.push(`  ${i === 0 ? ":root" : `.${mode}`} {`, ...decls, "  }");
+  });
+
+  if (primitives.length === 0 && roleBlocks.length === 0) return [];
+  blocks.push("/* Wider than sRGB — shown at full strength where supported */");
+  blocks.push("@supports (color: color(display-p3 1 1 1)) {");
+  if (primitives.length > 0) {
+    // Primitives and roles share :root, but stay separate blocks — the same
+    // split the sRGB pass makes, and it keeps roles last so one can override
+    // the primitive it was derived from.
+    blocks.push("  :root {", ...primitives, "  }");
+    if (roleBlocks.length > 0) blocks.push("");
+  }
+  blocks.push(...roleBlocks, "}", "");
+  return blocks;
 }
 
 /**
@@ -133,9 +219,47 @@ function placeAt(
   node[keys[keys.length - 1]] = value;
 }
 
-export function emitDtcg(resolved: ResolvedDefinition): unknown {
+/** The two colour profiles a Figma document can be in. */
+export const DTCG_COLOR_SPACES: Gamut[] = ["srgb", "display-p3"];
+
+/**
+ * Colours the DTCG emit has to gamut-map to reach `colorSpace`, by token path.
+ * Writing a P3 anchor into an sRGB export is lossy and silent otherwise — the
+ * value still emits, just duller than it was authored.
+ */
+export function dtcgClipped(
+  resolved: ResolvedDefinition,
+  colorSpace: Gamut,
+): string[] {
+  const clipped: string[] = [];
+  for (const system of resolved.systems) {
+    for (const step of system.steps) {
+      if (needsMapping(step.color, colorSpace)) {
+        clipped.push(`${system.system}/${step.selector}`);
+      }
+    }
+  }
+  for (const s of resolved.statics) {
+    if (needsMapping(s.color, colorSpace)) clipped.push(s.path);
+  }
+  return clipped;
+}
+
+export function emitDtcg(
+  resolved: ResolvedDefinition,
+  colorSpace: Gamut = "srgb",
+): unknown {
   const lineage = buildLineage(resolved);
-  const meta: Record<string, unknown> = { modes: resolved.modes };
+  const meta: Record<string, unknown> = {
+    modes: resolved.modes,
+    colorSpace,
+    // The file is read by an agent syncing it into Figma, so it carries its
+    // own handling note. Figma stores an unadorned RGB triple and reads it in
+    // the document's colour profile, so `components` goes straight in while
+    // `hex` — this colour rendered into sRGB — is only right in an sRGB file.
+    writingIntoFigma:
+      `Set the Figma document colour profile to ${colorSpace} first — it cannot be set through the plugin API, only by hand. Then write each $value's components as {r, g, b, a}, or its hex where an API takes only hex; both name the same colour in that profile. Nothing here is converted on import, so a document in any other profile will render every one of these wrong.`,
+  };
   if (resolved.changelog.length > 0) meta.changelog = resolved.changelog;
 
   const out: Record<string, unknown> = {
@@ -180,7 +304,7 @@ export function emitDtcg(resolved: ResolvedDefinition): unknown {
       if (step.overridden) ext.generated = formatColor(step.generated!, "srgb");
       group[step.publicStep] = {
         $type: "color",
-        $value: dtcgColor(formatColor(step.color, "srgb")),
+        $value: dtcgColor(step.color, colorSpace),
         $description: stepIdentity(lineage, system, step),
         $extensions: { [DTCG_NS]: ext },
       };
@@ -192,7 +316,7 @@ export function emitDtcg(resolved: ResolvedDefinition): unknown {
     for (const s of resolved.statics) {
       placeAt(group, s.path, {
         $type: "color",
-        $value: formatColor(s.color, "srgb"),
+        $value: dtcgColor(s.color, colorSpace),
         $description: `static.${s.path}`,
         $extensions: {
           [DTCG_NS]: { name: `static/${publicPath(s.segments, "figma", "/")}` },
@@ -208,13 +332,13 @@ export function emitDtcg(resolved: ResolvedDefinition): unknown {
     const domain = (section[role.domain] ??= {}) as Record<string, unknown>;
     domain[role.role] = {
       $type: "color",
-      $value: dtcgRef(resolved, role.perMode[0]),
+      $value: dtcgRef(resolved, role.perMode[0], colorSpace),
       $description: `${role.domain}.${role.role}`,
       $extensions: {
         [DTCG_NS]: {
           name: publicRoleName(role, "figma", "/"),
           modes: Object.fromEntries(
-            resolved.modes.map((m, i) => [m, dtcgRef(resolved, role.perMode[i])]),
+            resolved.modes.map((m, i) => [m, dtcgRef(resolved, role.perMode[i], colorSpace)]),
           ),
           refs: Object.fromEntries(
             resolved.modes.map((m, i) => [m, role.perMode[i].ref]),
@@ -227,21 +351,44 @@ export function emitDtcg(resolved: ResolvedDefinition): unknown {
   return out;
 }
 
-/** DTCG colors are hex; translucent values take the 8-digit form. */
-function dtcgColor(css: string): string {
-  const m =
-    /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+)\s*)?\)$/.exec(
-      css,
-    );
-  if (!m) return css;
-  const byte = (n: number) =>
-    Math.max(0, Math.min(255, Math.round(n)))
-      .toString(16)
-      .padStart(2, "0");
-  const alpha = m[4] == null ? 1 : Number(m[4]);
-  return `#${byte(Number(m[1]))}${byte(Number(m[2]))}${byte(Number(m[3]))}${
-    alpha >= 1 ? "" : byte(alpha * 255)
-  }`;
+/**
+ * A DTCG colour value, shaped for the consumer that matters: `components` is
+ * an RGB triple 0..1, which is exactly what Figma's plugin API takes, so a
+ * courier writes it straight in with no conversion.
+ *
+ * Every colour in one emit shares `colorSpace`, and it is always an RGB space
+ * — never oklab or oklch, which Figma cannot store. Figma holds one colour
+ * profile per document and interprets every stored triple in it, so a value
+ * tagged with a different space than the document would have to be converted
+ * on the way in. Choosing per colour by what fits would make that per token.
+ *
+ * `hex` byte-encodes those same components rather than rendering the colour
+ * into sRGB, because Figma's hex field is document-relative too — it shows the
+ * stored triple, whatever profile reads it. Written this way the two fields
+ * never disagree, and importers that read only hex (Figma's DTCG import is
+ * one) land the same colour as importers that read components. 6-digit per
+ * the spec, so it cannot contradict `alpha`.
+ */
+type DtcgColor = {
+  colorSpace: Gamut;
+  components: [number, number, number];
+  alpha?: number;
+  hex: string;
+};
+
+function dtcgColor(color: Color, colorSpace: Gamut): DtcgColor {
+  const { coords, alpha } = convert(color, colorSpace);
+  // hex is derived from the rounded components, not the raw ones, so a
+  // consumer that byte-encodes components itself lands on the same value. A
+  // channel sitting exactly on a .5 boundary rounds one way from the full
+  // float and the other from the published component.
+  const components = coords.map((c) => Number(c.toFixed(6))) as Rgb;
+  return {
+    colorSpace,
+    components,
+    ...(alpha < 1 ? { alpha: Number(alpha.toFixed(6)) } : {}),
+    hex: rgbToHex(components.map((c) => c * 255) as Rgb),
+  };
 }
 
 function stepIdentity(
@@ -256,7 +403,11 @@ function stepIdentity(
     .join(", ");
 }
 
-function dtcgRef(resolved: ResolvedDefinition, entry: ResolvedRef): string {
+function dtcgRef(
+  resolved: ResolvedDefinition,
+  entry: ResolvedRef,
+  colorSpace: Gamut,
+): string | DtcgColor {
   const target = entry.target;
   if (target.kind === "role") {
     const role = resolved.roles.find(
@@ -272,5 +423,5 @@ function dtcgRef(resolved: ResolvedDefinition, entry: ResolvedRef): string {
     const step = system?.steps.find((s) => s.selector === target.selector);
     if (system && step) return `{systems.${system.system}.${step.publicStep}}`;
   }
-  return dtcgColor(formatColor(entry.color, "srgb"));
+  return dtcgColor(entry.color, colorSpace);
 }

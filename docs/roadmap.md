@@ -180,6 +180,74 @@ compute the same bytes but define different selector grammars, and
 `--color-light-15` only reads as "15% ink" because ink-ramp's selector is a
 bare number. Configuration that changes syntax is worse than four small files.
 
+### Wide-gamut input and output
+
+`parseColor` replaced `assertHex`, so a definition can anchor on
+`oklch(L C H)`, `oklab(L a b)`, `color(srgb ...)` or `color(display-p3 ...)`
+as well as hex. A colour keeps the space it was written in rather than being
+canonicalised, and a transform runs in the widest gamut its inputs use — one
+P3 anchor widens the whole operation, because compositing it in sRGB would
+clip it before the arithmetic ran. Observable: P3 red at 60% over white lands
+on `#ff7070`, where sRGB red lands on `#ff6666`.
+
+Emit writes those colours twice. The sRGB pass gamut-maps them as before, then
+an `@supports (color: color(display-p3 1 1 1))` block redefines the same
+custom properties at full strength — so consumers are untouched, and a browser
+that cannot parse `color()` keeps the fallback. Only values that actually
+leave sRGB are repeated; a definition authored entirely in sRGB emits no layer
+at all, which is why both real definitions stayed byte-identical.
+
+This retired the `emittable` flag on `BLEND_SPACES`, whose whole purpose was
+gating `display-p3` until this fallback existed. All four blend spaces are
+now selectable.
+
+DTCG values moved to the stable 2025.10 colour object — `{colorSpace,
+components, alpha?, hex}` — where a plain hex string is no longer valid.
+`components` is an RGB triple 0..1, which is exactly what Figma's plugin API
+takes, so a courier writes it in with no conversion.
+
+Every colour in one emit shares a single `colorSpace`, set by
+`outputs.dtcg.colorSpace` or `--dtcg-color-space` (default `srgb`). That is
+not a simplification: Figma holds one colour profile per *document* and
+interprets every stored triple in it, so a value tagged with some other space
+would have to be converted on the way in, and choosing per colour by what fits
+would make that per token. The space is a property of the destination file,
+not of the colour.
+
+`hex` byte-encodes those same components rather than rendering the colour into
+sRGB. Figma's own hex field is document-relative — it shows the stored triple,
+whatever profile reads it — so a hex pinned to sRGB would disagree with what
+Figma displays. It is derived from the *rounded* components so a consumer that
+byte-encodes them itself lands on the same value; `sky/3` sits exactly on 242.5
+and would otherwise round one way from the float and the other from the
+published component.
+
+The consequence to know: an in-gamut colour gets different components in each
+space — `#b30a0a` is `[0.702, 0.039, 0.039]` in srgb and
+`[0.643, 0.142, 0.104]` in display-p3, hex `#b30a0a` and `#a4241b`. The same
+colour; wider primaries need less of them.
+
+### What Figma actually does with it
+
+Tested against Figma Desktop through the figma-console MCP, 2026-08-21:
+
+- **`colorSpace: "srgb"` imports `components` directly**, at full float
+  precision — hex is not needed and hex's 8 bits would be a downgrade.
+- **`colorSpace: "display-p3"` is refused.** With `hex` present the importer
+  uses it; without one it *skips the value and leaves the variable white*,
+  which is worse than being wrong because it looks deliberate. This is why hex
+  has to byte-encode components: it is the only channel a P3 export has.
+- **Import never converts.** It writes raw numbers, so they must already be in
+  the document's profile.
+- **`documentColorProfile` is readable but has no setter** — an agent cannot
+  put a file into P3, a person must, and Figma's own dialog offers Convert
+  (rewrite values, keep appearance) or Assign (keep values, change appearance).
+  Convert quantises everything to 8 bits.
+- Figma's own sRGB→P3 conversion matches `color-math.ts` byte for byte on
+  every colour tried (`#b30a0a`→`#a4241b`, `#ff0000`→`#ea3323`,
+  `#ff3428`→`#eb4938`), and a P3 export re-imported into a converted document
+  lands bit-identical to what Figma produced itself.
+
 ## Later
 
 - **Write the definition back from the browser.** The tuner already renders
@@ -210,11 +278,6 @@ bare number. Configuration that changes syntax is worse than four small files.
   genuine build-time needs. Not Sass variables as the primary target —
   those are compile-time and would preserve the per-theme-stylesheet
   architecture that runtime custom properties delete.
-- **p3 parity.** Emit an `@supports (color: color(display-p3 1 1 1))` block
-  that redefines the same custom properties, so consumers are untouched.
-  Nearly free once on custom properties; effectively impossible with Sass
-  variables without duplicating every rule. Needs gamut support in
-  `color-math.ts`, which is sRGB-only today.
 - **JSON / `_data` emit** for consumers that need values outside CSS.
 - **Export `color-math.ts`** with a stability promise. A third-party
   algorithm author currently has no primitives and would reimplement the

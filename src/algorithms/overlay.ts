@@ -13,6 +13,10 @@ export const overlay: AlgorithmImpl = {
     return null;
   },
 
+  inputColors(params) {
+    return [parseColor(params.color, "overlay param 'color'")];
+  },
+
   resolveStep(params, selector) {
     const opacityPct = Number(selector);
     if (!Number.isFinite(opacityPct) || opacityPct < 0 || opacityPct > 100) {

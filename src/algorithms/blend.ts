@@ -49,6 +49,19 @@ export const blend: AlgorithmImpl = {
     return { color: mixIn(color, base, alpha / 100, spaceOf(params)) };
   },
 
+  inputColors(params) {
+    return [
+      parseColor(params.base, "blend param 'base'"),
+      ...Object.values(parseToward(params)),
+    ];
+  },
+
+  workingGamut(params) {
+    const space = spaceOf(params);
+    if (space === "oklab") return null;
+    return space.startsWith("display-p3") ? "display-p3" : "srgb";
+  },
+
   publicStep(params, selector) {
     const { name, alphaOnly } = parseSelector(params, selector);
     const at = selector.indexOf("@");
@@ -74,7 +87,7 @@ export const blend: AlgorithmImpl = {
         path: "space",
         label: "blend in",
         value: spaceOf(params),
-        options: BLEND_SPACES.filter((s) => s.emittable).map((s) => ({
+        options: BLEND_SPACES.map((s) => ({
           value: s.id,
           label: s.label,
         })),
@@ -119,18 +132,10 @@ export const blend: AlgorithmImpl = {
 function spaceOf(params: Record<string, unknown>): BlendSpace {
   const raw = params.space;
   if (raw == null) return "srgb";
-  const emittable = BLEND_SPACES.filter((s) => s.emittable).map((s) => s.id);
-  if (typeof raw === "string" && !emittable.includes(raw as BlendSpace)) {
-    const known = BLEND_SPACES.find((s) => s.id === raw);
-    if (known) {
-      throw new Error(
-        `blend param 'space': "${raw}" is not emittable yet — a blend there produces a value the CSS emitter cannot ship with an sRGB fallback, so the stylesheet would silently define nothing. Compare the spaces at /blend in the dev server.`,
-      );
-    }
-  }
-  if (typeof raw !== "string" || !emittable.includes(raw as BlendSpace)) {
+  const known = BLEND_SPACES.map((s) => s.id);
+  if (typeof raw !== "string" || !known.includes(raw as BlendSpace)) {
     throw new Error(
-      `blend param 'space': expected one of ${emittable.join(", ")}, got ${JSON.stringify(raw)}`,
+      `blend param 'space': expected one of ${known.join(", ")}, got ${JSON.stringify(raw)}`,
     );
   }
   return raw as BlendSpace;

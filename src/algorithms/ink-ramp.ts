@@ -36,6 +36,13 @@ export const inkRamp: AlgorithmImpl = {
     };
   },
 
+  inputColors(params) {
+    return [
+      parseColor(params.base, "ink-ramp param 'base'"),
+      parseColor(params.ink, "ink-ramp param 'ink'"),
+    ];
+  },
+
   publicStep(_params, selector) {
     // Derived from the selector text, never from the parsed float — a
     // round-trip through alpha turns "3.5" into "3.5000000000000004".
