@@ -3,11 +3,11 @@ import assert from "node:assert/strict";
 import { algorithmFor } from "../dist/resolve.js";
 
 const inkRamp = algorithmFor("ink-ramp")!;
-const compose = algorithmFor("compose")!;
+const blend = algorithmFor("blend")!;
 const overlay = algorithmFor("overlay")!;
 
 const SKY = { base: "#fafdff", ink: "#001a28" };
-const WARM = { bottom: "#ffffff", tops: { red: "#b30a0a", blue: "#6192bb" } };
+const WARM = { base: "#ffffff", toward: { red: "#b30a0a", blue: "#6192bb" } };
 
 
 
@@ -42,30 +42,30 @@ describe("ink-ramp", () => {
   });
 });
 
-describe("compose", () => {
-  test("composites a named top; /top returns the layer", () => {
-    assert.deepEqual(compose.resolveStep(WARM, "red@6"), {
+describe("blend", () => {
+  test("blends toward a named colour; /alpha defers to the browser", () => {
+    assert.deepEqual(blend.resolveStep(WARM, "red@6"), {
       css: "#faf0f0",
       opaque: true,
     });
-    assert.deepEqual(compose.resolveStep(WARM, "red@6/top"), {
+    assert.deepEqual(blend.resolveStep(WARM, "red@6/alpha"), {
       css: "rgba(179, 10, 10, 0.06)",
       opaque: false,
     });
-    assert.equal(compose.resolveStep(WARM, "red@100").css, "#b30a0a");
+    assert.equal(blend.resolveStep(WARM, "red@100").css, "#b30a0a");
   });
-  test("selectors need a weight and a known top", () => {
-    assert.throws(() => compose.resolveStep(WARM, "red"), /needs a weight/);
-    assert.throws(() => compose.resolveStep(WARM, "green@6"), /unknown color/);
-    assert.throws(() => compose.resolveStep(WARM, "red@"), /must be a number/);
-    assert.throws(() => compose.resolveStep(WARM, "red@6/x"), /unknown form "x"/);
+  test("selectors need a weight and a known colour", () => {
+    assert.throws(() => blend.resolveStep(WARM, "red"), /needs a weight/);
+    assert.throws(() => blend.resolveStep(WARM, "green@6"), /unknown colour/);
+    assert.throws(() => blend.resolveStep(WARM, "red@"), /must be a number/);
+    assert.throws(() => blend.resolveStep(WARM, "red@6/x"), /unknown form "x"/);
   });
   test("orders by declaration, then weight, then form", () => {
-    const order = ["blue@6", "red@100", "red@6", "red@6/top"]
-      .map((s) => [s, compose.stepOrder!(WARM, s)] as const)
+    const order = ["blue@6", "red@100", "red@6", "red@6/alpha"]
+      .map((s) => [s, blend.stepOrder!(WARM, s)] as const)
       .sort((a, b) => (a[1] < b[1] ? -1 : 1))
       .map(([s]) => s);
-    assert.deepEqual(order, ["red@6", "red@6/top", "red@100", "blue@6"]);
+    assert.deepEqual(order, ["red@6", "red@6/alpha", "red@100", "blue@6"]);
   });
 });
 
@@ -91,8 +91,55 @@ describe("params", () => {
       /unknown param "tint"/,
     );
     assert.throws(
-      () => compose.declaredSelectors({ ...WARM, weight: 6 }),
+      () => blend.declaredSelectors({ ...WARM, weight: 6 }),
       /unknown param "weight"/,
+    );
+  });
+});
+
+describe("blend space", () => {
+  const P = { base: "#ffffff", toward: { red: "#b30a0a" } };
+
+  test("defaults to srgb, which is what a browser would render", () => {
+    assert.equal(blend.resolveStep(P, "red@6").css, "#faf0f0");
+    assert.equal(
+      blend.resolveStep({ ...P, space: "srgb" }, "red@6").css,
+      "#faf0f0",
+    );
+  });
+
+  test("each space lands somewhere different", () => {
+    const at = (space: string) =>
+      blend.resolveStep({ ...P, space }, "red@6").css;
+    assert.equal(at("srgb-linear"), "#fbf8f8");
+    assert.equal(at("oklab"), "#fdf2f0");
+    assert.match(at("display-p3"), /^color\(display-p3 /);
+  });
+
+  test("endpoints agree in every space", () => {
+    for (const space of ["srgb", "srgb-linear", "oklab"]) {
+      assert.equal(blend.resolveStep({ ...P, space }, "red@100").css, "#b30a0a");
+      assert.equal(blend.resolveStep({ ...P, space }, "red@0").css, "#ffffff");
+    }
+  });
+
+  test("an unknown space is rejected", () => {
+    assert.throws(
+      () => blend.declaredSelectors({ ...P, space: "cmyk" }),
+      /expected one of srgb, srgb-linear, oklab, display-p3/,
+    );
+  });
+
+  test("/alpha is refused unless the system blends in srgb", () => {
+    // The browser blends a translucent value in srgb, so deferring the blend
+    // from an oklab system would silently disagree with its flattened steps.
+    assert.equal(
+      blend.resolveStep(P, "red@6/alpha").css,
+      "rgba(179, 10, 10, 0.06)",
+    );
+    assert.throws(
+      () => blend.resolveStep({ ...P, space: "oklab" }, "red@6/alpha"),
+      /always blends in srgb/,
     );
   });
 });

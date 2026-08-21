@@ -41,9 +41,9 @@ three now read `step.publicStep`.
 Verified byte-identical against Sunnyday: 74 primitives, 2 statics, 41 roles ×
 2 modes, CSS and Figma payload both unchanged.
 
-### `compose`
+### `blend` (was `compose`)
 
-`src/algorithms/compose.ts`. Params `bottom` (required hex) and `tops` (name →
+`src/algorithms/blend.ts`. Params `base` (required hex) and `toward` (name →
 `{ color, alpha }`, both required — total, no optional-parameter modes).
 Selector is `top` or `top@alpha`. `publicStep` maps `blush@3.5` → `blush-3_5`;
 `stepOrder` sorts by declaration order then weight. `declaredSelectors` returns
@@ -140,15 +140,62 @@ raw hex, the comma diagnostic, determinism. One test pins a real regression —
 deriving a public name from the parsed float turned `3.5` into
 `3_5000000000000004`, and only Sunnyday's use of a fractional alpha caught it.
 
+### Colour tools in the dev server
+
+`/colors` is a picker: a space dropdown (OKLCH / OKLab / sRGB / P3), a 2D
+field parameterised by that space with the sRGB gamut boundary drawn as a
+contour, and a third-axis slider painted with the colours it selects. It
+reports the expected ΔE of any gamut mapping, so "these look the same" can be
+distinguished from "this display is not showing P3" — with a primaries strip
+as the calibration.
+
+`/blend` shows one mix carried out in all four spaces at once.
+
+Both `import` from `/color-math.js`, which the dev server serves straight out
+of `dist/` — it has no node specifiers, so the pages and the emitters run the
+same implementation rather than a second copy.
+
+The gamut layer under them: `inGamut`, `gamutMap` (CSS Color 4 chroma
+reduction), `maxChroma`, `encodeIn`, `formatIn`, `mixIn`, OKLab↔OKLCH. The
+primary matrices are derived from primaries and a shared D65 rather than
+pasted, because published rounded matrices do not share a white point and
+white landed at 1.00013 in P3 — which made every in-gamut check near white a
+coin toss.
+
+### One seam, recorded
+
+`color-math` owns colour; algorithms own vocabulary. Measured before
+deciding: `overlay` is 23 lines of its own and contains no arithmetic,
+`ink-ramp` 53, `oklch-scale` 63, `blend` 171 of which roughly 70 is preview
+UI — against 351 lines of primitives. The architecture was already this; what
+was missing was the rule written down and one leak closed.
+
+The leak: formatting a translucent colour existed in four places (three
+algorithms and the resolver) and they disagreed about whether alpha arrived
+as a percent or a fraction. Now `translucent()` in `color-math`, with a test
+asserting all three algorithms agree.
+
+Rejected: folding `ink-ramp`/`overlay` into `blend` as configuration. They
+compute the same bytes but define different selector grammars, and
+`--color-light-15` only reads as "15% ink" because ink-ramp's selector is a
+bare number. Configuration that changes syntax is worse than four small files.
+
 ## Later
 
+- **Write the definition back from the browser.** The tuner already renders
+  an algorithm's params as live controls and re-runs the algorithm
+  server-side; what is missing is the return path — POST a param change and
+  have the server rewrite the definition comment-preservingly, via the yaml
+  document API. The file stays the single source of truth and the browser
+  becomes another editor of it. Needs the param schema below to know which
+  controls are safe to write.
 - **Param schema on `AlgorithmImpl`.** One construct, three jobs: subsumes
-  `assertKnownParams` (including nested params like compose's `tops`), tells
+  `assertKnownParams` (including nested params like blend's `toward`), tells
   `render.ts` that a param is a color instead of guessing with the
   `/^#[0-9a-fA-F]{6}$/` heuristic in `paramValue`, and supplies the control
   type and range that in-browser tweaking needs. Prerequisite for the
   tweaking item already on the README roadmap. Worth designing before
-  compose hardens, since compose sets the nested-param precedent.
+  blend hardens, since it sets the nested-param precedent.
 - **Gradients as a composition tier** above roles, not an algorithm.
   Gradient stops stay refs, so CSS emits a live
   `linear-gradient(178deg, var(--blush-4) 0%, …)`. Geometry (angle, stop
@@ -157,7 +204,7 @@ deriving a public name from the parsed float turned `3.5` into
   which forces N-way duplication when a variant only differs in a few
   values. Wanted shape is `extends` plus overrides; CSS then emits the base
   in `:root` and each theme as a class carrying only its divergences, with
-  the cascade performing the inheritance. Themeable `bottom` on compose
+  the cascade performing the inheritance. A themeable `base` on blend
   turns a light/dark pair into one system.
 - **SCSS emit** as a thin wrapper over the custom properties, plus a map for
   genuine build-time needs. Not Sass variables as the primary target —
@@ -204,13 +251,17 @@ deriving a public name from the parsed float turned `3.5` into
   conversion produces different numbers that look the same. The version
   worth building authors in OKLCH and renders per gamut, so p3 carries
   chroma sRGB cannot reach.
-- **What space does `compose` composite in?** `alphaComposite`
-  (`color-math.ts:32`) lerps in gamma-encoded sRGB bytes, which matches what
-  a browser does for `rgba()` over a background and is the right default for
-  parity. But the same file already does the linear/OKLab round-trip for
-  `oklch-scale`. Once compose is a primitive the space becomes a real
-  parameter, and it is entangled with the gamut question: compositing in
-  sRGB then converting to p3 is not compositing in p3.
+- ~~What space does the blend happen in?~~ **Answered.** It is a declared
+  param, `space`, defaulting to `srgb`. The four options are CSS's own
+  interpolation spaces and they land in genuinely different places: the same
+  anchor at 6% over white gives `#faf0f0` in srgb, `#fbf8f8` in srgb-linear,
+  `#fdf2f0` in oklab. Only srgb reproduces what a browser or design tool
+  renders, which is why it is the default and why fifthrevision needs it.
+  Two findings settled it. Mixing toward a neutral is a *radial* path in
+  OKLab's (a,b) plane — white is exactly (1,0,0) — so OKLab holds hue to four
+  decimals where srgb rotates it 11°. And a P3 output is not a re-encoding of
+  the srgb output, it is the same recipe re-run in P3, so the compositing
+  space follows the output target rather than being a separate choice.
 - **Should a system declare whether it is a ramp or a palette?** Would
   resolve the ΔE-on-a-palette problem honestly rather than per-algorithm
   render code. Confirmed empirically once `compose` shipped: the dev server

@@ -11,6 +11,13 @@ export type StepValue = {
 export type PreviewControl =
   | { kind: "color"; path: string; label: string; value: string }
   | {
+      kind: "select";
+      path: string;
+      label: string;
+      value: string;
+      options: { value: string; label: string }[];
+    }
+  | {
       kind: "number";
       path: string;
       label: string;

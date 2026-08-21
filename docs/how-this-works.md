@@ -85,6 +85,35 @@ Three built-ins, each *total*, with no optional-parameter modes.
   kind of value a system produces is the **algorithm's nature**, declared
   once in the systems block, never a per-role flag.
 
+### The seam: colour-math owns colour, algorithms own vocabulary
+
+`color-math.ts` holds every arithmetic operation and every colour format.
+An algorithm holds a selector grammar, a public-name mapping, an ordering, a
+set of param names, its error messages, and a description. Nothing else.
+
+This is why the built-ins look redundant and are not. `ink-ramp` with one
+ink, `blend` with one colour to blend toward, and `overlay` all produce
+byte-identical values — `rgba(0, 26, 40, 0.03)` for the same input, verified
+in the tests. They differ in what a *reader* sees:
+
+    ink-ramp  sky/3          emits --color-light-3
+    blend     sky/ink@3      emits --color-light-ink-3
+    overlay   shadow/3       never flattens, and says so declaratively
+
+`--color-light-15` only reads as "15% ink" because ink-ramp gets to define a
+bare-number selector. Folding these into one configurable algorithm would put
+selector grammar behind a param — configuration that changes syntax, which is
+harder to read than four separately-named files of twenty to sixty lines.
+
+The failure mode to watch is the opposite one: arithmetic drifting *up* into
+the algorithms. It has happened twice. `publicStep` was derived in three
+places and one copy silently emitted a broken Figma alias. Formatting a
+translucent colour was implemented four times — three algorithms and the
+resolver — and they disagreed about whether alpha arrived as a percent or a
+fraction. Both are now single functions in `color-math.ts`. If you find
+yourself writing colour arithmetic or a colour string inside
+`algorithms/`, it belongs one level down.
+
 ### The algorithm contract
 
 `src/contract.ts` defines `AlgorithmImpl`:

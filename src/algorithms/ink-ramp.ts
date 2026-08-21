@@ -4,6 +4,7 @@ import {
   assertHex,
   hexToRgb,
   rgbToHex,
+  translucent,
 } from "../color-math.js";
 
 /**
@@ -23,10 +24,7 @@ export const inkRamp: AlgorithmImpl = {
     const { alpha, inkOnly } = parse(selector);
     const ink = hexToRgb(assertHex(params.ink, "ink-ramp param 'ink'"));
     if (inkOnly) {
-      return {
-        css: `rgba(${ink[0]}, ${ink[1]}, ${ink[2]}, ${alpha})`,
-        opaque: false,
-      };
+      return { css: translucent(ink, alpha * 100), opaque: false };
     }
     const base = hexToRgb(assertHex(params.base, "ink-ramp param 'base'"));
     return { css: rgbToHex(alphaComposite(ink, base, alpha)), opaque: true };

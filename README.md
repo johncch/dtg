@@ -228,7 +228,7 @@ core: # any non-reserved top-level key is a section you name;
   - `sky/3` — a step. Dots walk the systems tree; the slash hands off, and
     everything after it belongs to the algorithm (`sky/3` is 3% ink,
     `sky/3/ink` is that ink uncomposited, `theme/600` is a stop name,
-    `warm/red@6` is a compose anchor at 6%)
+    `warm/red@6` is 6% of the way toward a blend colour)
   - `domain.role` — another decision in the same mode
   - `transparent(paper 70)` — a constant at an opacity. Constants only:
     they have no recipe, so this is a plain function of a color and an
@@ -275,11 +275,18 @@ Each built-in algorithm has one complete behavior.
   base remaining. `hueShift` 0 locks every stop to the base hue, 100
   follows the natural interpolated path. Declared stops emit in full, as a
   public palette.
-- **`compose`** (`bottom`, `tops`): a palette of named colors over one
-  shared ground. The selector carries both coordinates — `warm/red@6` is
-  that anchor at 6% over the ground, `warm/red@100` is the anchor itself —
-  so one palette serves tints and full-strength use. `/top` gives the
-  anchor uncomposited.
+- **`blend`** (`base`, `toward`, `space`): one base colour and several named
+  colours to blend toward. The selector carries both coordinates —
+  `warm/red@6` is six percent of the way from the base toward red,
+  `warm/red@100` is red itself — so one palette serves tints and full
+  strength. This is CSS's own `color-mix(in <space>, red 6%, base)`, and
+  `space` takes CSS's interpolation-space names: `srgb` (the default, and
+  what browsers and design tools do), `srgb-linear`, `oklab`,
+  `display-p3`. The same two colours land somewhere different in each, so
+  the space is a decision, not a detail. `/alpha` emits the toward colour
+  carrying the weight as opacity for the browser to blend at render time —
+  refused unless the system blends in `srgb`, since that is what the
+  browser will do.
 - **`overlay`** (`color`): color at selector % opacity, never flattened.
   Shadows and scrims.
 

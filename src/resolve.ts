@@ -5,14 +5,14 @@ import {
   defaultStepOrder,
   type AlgorithmImpl,
 } from "./contract.js";
-import { assertHex, hexToRgb } from "./color-math.js";
-import { compose } from "./algorithms/compose.js";
+import { assertHex, hexToRgb, translucent } from "./color-math.js";
+import { blend } from "./algorithms/blend.js";
 import { inkRamp } from "./algorithms/ink-ramp.js";
 import { oklchScale } from "./algorithms/oklch-scale.js";
 import { overlay } from "./algorithms/overlay.js";
 
 const builtinAlgorithms: Record<string, AlgorithmImpl> = {
-  compose,
+  blend,
   "ink-ramp": inkRamp,
   "oklch-scale": oklchScale,
   overlay: overlay,
@@ -349,6 +349,12 @@ export function resolveDefinition(
         continue;
       }
       const algoName = String(block.algorithm);
+      if (algoName === "compose") {
+        errors.push(
+          `system "${path}": \`compose\` was renamed to \`blend\` — its params are now \`base\`, \`toward\` and \`space\``,
+        );
+        continue;
+      }
       const algo = algorithms[algoName];
       if (!algo) {
         errors.push(`system "${path}": unknown algorithm "${algoName}"`);
@@ -658,11 +664,10 @@ export function resolveDefinition(
           );
           return undefined;
         }
-        const [r, g, b] = hexToRgb(constant.hex);
         return {
           ref,
           target: { kind: "constant", name: inner, alpha },
-          css: `rgba(${r}, ${g}, ${b}, ${alpha / 100})`,
+          css: translucent(hexToRgb(constant.hex), alpha),
           opaque: false,
         };
       }

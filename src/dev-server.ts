@@ -1,5 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { readFileSync, watch } from "node:fs";
+import { createHash } from "node:crypto";
+import { readFileSync, readdirSync, watch } from "node:fs";
+import { join } from "node:path";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stringify } from "yaml";
@@ -13,9 +15,11 @@ import {
 } from "./resolve.js";
 import { watchDefinition } from "./watch.js";
 import {
+  renderBlend,
   renderConstants,
   renderDomain,
   renderOverview,
+  renderPicker,
   renderSystem,
 } from "./render.js";
 
@@ -31,11 +35,22 @@ export function startDevServer(definitionPath: string, port: number): void {
   const sseClients = new Set<ServerResponse>();
 
   // The server holds dtg's own code from startup, so a rebuild leaves it
-  // serving stale results that look like definition errors. Say so instead.
+  // serving stale results that look like definition errors. Say so instead —
+  // but compare content, since `tsc` rewrites every file on every build and
+  // a banner that cries wolf is one you learn to ignore.
   let stale = false;
+  const own = dirname(fileURLToPath(import.meta.url));
+  const fingerprint = () => {
+    const hash = createHash("sha1");
+    for (const name of readdirSync(own).sort()) {
+      if (name.endsWith(".js")) hash.update(readFileSync(join(own, name)));
+    }
+    return hash.digest("hex");
+  };
   try {
-    watch(dirname(fileURLToPath(import.meta.url)), () => {
-      if (stale) return;
+    const built = fingerprint();
+    watch(own, () => {
+      if (stale || fingerprint() === built) return;
       stale = true;
       console.log("dtg's own code changed — restart the dev server");
       for (const client of sseClients) client.write("data: reload\n\n");
@@ -73,6 +88,15 @@ export function startDevServer(definitionPath: string, port: number): void {
       return;
     }
 
+    if (url.pathname === "/color-math.js") {
+      res.writeHead(200, {
+        "content-type": "text/javascript; charset=utf-8",
+        "cache-control": "no-cache",
+      });
+      res.end(readFileSync(new URL("./color-math.js", import.meta.url), "utf8"));
+      return;
+    }
+
     if (url.pathname === "/preview" && req.method === "POST") {
       readBody(req).then((body) => {
         res.writeHead(200, { "content-type": "application/json" });
@@ -94,6 +118,10 @@ export function startDevServer(definitionPath: string, port: number): void {
       html = renderOverview(state.resolved, banner);
     } else if (url.pathname === "/constants") {
       html = renderConstants(state.resolved, state.lineage, banner);
+    } else if (url.pathname === "/colors") {
+      html = renderPicker(state.resolved, banner);
+    } else if (url.pathname === "/blend") {
+      html = renderBlend(state.resolved, banner);
     } else {
       const [, kind, name] = url.pathname.split("/");
       if (kind === "system" && name)
