@@ -278,3 +278,101 @@ roles:
     );
   });
 });
+
+describe("~ omits a mode", () => {
+  const SRC = `
+dtg: 1
+modes: [warm, cooldusk, dark]
+systems:
+  ink: "#313133"
+  paper: "#ffffff"
+roles:
+  label:
+    primary: [ink, ~, paper]
+    accent: [ink, ~, ~]
+    spelled: [ink, ink, paper]
+`;
+  const r = resolveDefinition(SRC);
+  const role = (n: string) => r.roles.find((x) => x.role === n)!;
+
+  test("records which modes were never declared", () => {
+    assert.deepEqual(role("primary").inherited, [false, true, false]);
+    assert.deepEqual(role("accent").inherited, [false, true, true]);
+  });
+
+  test("an omitted mode still carries mode 0's colour", () => {
+    const p = role("primary");
+    assert.equal(
+      formatColor(p.perMode[1].color, "srgb"),
+      formatColor(p.perMode[0].color, "srgb"),
+    );
+  });
+
+  test("spelling the same value out is not the same as omitting it", () => {
+    // Coincidence and intent are different facts; only `~` declares the second.
+    assert.deepEqual(role("spelled").inherited, [false, false, false]);
+  });
+
+  test("mode 0 cannot be omitted — it is what the others fall back to", () => {
+    assert.throws(
+      () =>
+        resolveDefinition(`
+dtg: 1
+modes: [warm, dark]
+systems:
+  ink: "#313133"
+roles:
+  label: { primary: [~, ink] }
+`),
+      /the first mode is what the others fall back to/,
+    );
+  });
+});
+
+describe("a definition with no modes", () => {
+  const SRC = `
+dtg: 1
+systems:
+  ink: "#313133"
+  paper: "#ffffff"
+roles:
+  warmdusk:
+    canvas: paper
+  ink:
+    primary: ink
+`;
+  test("a role is a bare colour when there is no axis to spread across", () => {
+    const r = resolveDefinition(SRC);
+    assert.equal(r.roles.length, 2);
+    assert.equal(formatColor(r.roles[0].perMode[0].color, "srgb"), "#ffffff");
+  });
+
+  test("the single mode is implicit, so the pipeline needs no special case", () => {
+    assert.deepEqual(resolveDefinition(SRC).modes, ["default"]);
+  });
+
+  test("a list still works — one entry", () => {
+    assert.equal(resolveDefinition(SRC.replace("canvas: paper", "canvas: [paper]")).roles.length, 2);
+  });
+
+  test("a bare colour is refused once an axis exists", () => {
+    assert.throws(
+      () => resolveDefinition(`
+dtg: 1
+modes: [light, dark]
+systems:
+  ink: "#313133"
+roles:
+  label: { primary: ink }
+`),
+      /expected 2 refs \(one per mode: light, dark\), got a single value/,
+    );
+  });
+
+  test("an empty modes list is still an error", () => {
+    assert.throws(
+      () => resolveDefinition(`dtg: 1\nmodes: []\nsystems:\n  ink: "#313133"\nroles:\n  label: { primary: ink }`),
+      /must be a non-empty list/,
+    );
+  });
+});

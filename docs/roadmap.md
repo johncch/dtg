@@ -248,6 +248,27 @@ Tested against Figma Desktop through the figma-console MCP, 2026-08-21:
   `#ff3428`→`#eb4938`), and a P3 export re-imported into a converted document
   lands bit-identical to what Figma produced itself.
 
+### The mode axis is a rendering, not a structure
+
+Three emitters were each answering "what do I do with N values per role" their
+own way — CSS made selectors, DTCG made a mode map, and a flat Sass emitter
+would have made separate files. A fourth format would have invented a fourth
+answer. That is a grammar/output mismatch, and adding an emitter per output
+shape is brute force.
+
+So the axis is named and chosen instead: `nested` puts each mode in its own
+structure and the consumer picks by being inside it; `flat` folds the mode into
+the name and the consumer picks by naming it. Set per output —
+`outputs.css.modes`, or `--css-modes`.
+
+A format supports what it can express. CSS does both and defaults to `nested`,
+since the cascade is the point of custom properties. **SCSS is flat and only
+flat** — a Sass variable is compile-time and has no structure to nest a mode
+into. That is not a limitation to route around: a project whose themes are
+separate stylesheets, chosen server-side, gets nothing from runtime
+indirection. `emitScss` is a format, not a second structural answer, which is
+why it is about twenty lines.
+
 ## Later
 
 - **Write the definition back from the browser.** The tuner already renders
@@ -274,10 +295,6 @@ Tested against Figma Desktop through the figma-console MCP, 2026-08-21:
   in `:root` and each theme as a class carrying only its divergences, with
   the cascade performing the inheritance. A themeable `base` on blend
   turns a light/dark pair into one system.
-- **SCSS emit** as a thin wrapper over the custom properties, plus a map for
-  genuine build-time needs. Not Sass variables as the primary target —
-  those are compile-time and would preserve the per-theme-stylesheet
-  architecture that runtime custom properties delete.
 - **JSON / `_data` emit** for consumers that need values outside CSS.
 - **Export `color-math.ts`** with a stability promise. A third-party
   algorithm author currently has no primitives and would reimplement the

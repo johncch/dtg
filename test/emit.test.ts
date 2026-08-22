@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveDefinition } from "../dist/resolve.js";
-import { dtcgClipped, emitCss, emitDtcg } from "../dist/emit.js";
+import { dtcgClipped, emitCss, emitDtcg, emitScss } from "../dist/emit.js";
 
 const SRC = `
 dtg: 1
@@ -223,5 +223,102 @@ roles:
   test("an all-sRGB definition is silent in either space", () => {
     assert.deepEqual(dtcgClipped(resolved, "srgb"), []);
     assert.deepEqual(dtcgClipped(resolved, "display-p3"), []);
+  });
+});
+
+describe("the mode axis", () => {
+  test("nested puts each mode in its own selector", () => {
+    const css = emitCss(resolved, "plain", "nested");
+    assert.ok(css.includes("--surface-canvas: var(--color-light-3);"));
+    assert.ok(css.includes(".dark {"));
+    assert.ok(!css.includes("--light-surface-canvas"));
+  });
+
+  test("flat folds the mode into the name, in one selector", () => {
+    const css = emitCss(resolved, "plain", "flat");
+    assert.ok(css.includes("--light-surface-canvas:"));
+    assert.ok(css.includes("--dark-surface-canvas:"));
+    assert.ok(!css.includes(".dark {"));
+  });
+
+  test("both renderings carry the same values", () => {
+    const grab = (css: string, re: RegExp) =>
+      [...css.matchAll(re)].map((m) => m[1]);
+    const nested = grab(emitCss(resolved, "plain", "nested"), /--surface-canvas: (.+);/g);
+    const flat = grab(emitCss(resolved, "plain", "flat"), /--(?:light|dark)-surface-canvas: (.+);/g);
+    assert.deepEqual(nested, flat);
+  });
+
+  test("scss is flat because a Sass variable has nothing to nest into", () => {
+    const scss = emitScss(resolved);
+    assert.ok(scss.includes("$light-surface-canvas:"));
+    assert.ok(scss.includes("$dark-surface-canvas:"));
+  });
+
+  test("scss resolves references — there is no var() to defer to", () => {
+    const scss = emitScss(resolved);
+    assert.ok(!scss.includes("var("));
+    assert.match(scss, /\$light-surface-canvas: #[0-9a-f]{6};/);
+  });
+});
+
+describe("~ across the formats", () => {
+  const omitted = resolveDefinition(`
+dtg: 1
+modes: [warm, cooldusk, dark]
+systems:
+  ink: "#313133"
+  paper: "#ffffff"
+roles:
+  surface:
+    canvas: [paper, ink, ink]
+  label:
+    primary: [ink, ~, paper]
+`);
+
+  test("nested css leaves the mode out — the cascade is the inheritance", () => {
+    const css = emitCss(omitted, "plain", "nested");
+    const dusk = css.slice(css.indexOf(".cooldusk {"), css.indexOf("}", css.indexOf(".cooldusk {")));
+    assert.ok(dusk.includes("--surface-canvas"));
+    assert.ok(!dusk.includes("--label-primary"));
+  });
+
+  test("flat css emits no variable for an omitted mode", () => {
+    const css = emitCss(omitted, "plain", "flat");
+    assert.ok(css.includes("--cooldusk-surface-canvas:"));
+    assert.ok(!css.includes("--cooldusk-label-primary:"));
+  });
+
+  test("scss likewise", () => {
+    const scss = emitScss(omitted);
+    assert.ok(scss.includes("$cooldusk-surface-canvas:"));
+    assert.ok(!scss.includes("$cooldusk-label-primary:"));
+  });
+
+  test("dtcg expands every mode — Figma fills an unset mode with white", () => {
+    const ext = (emitDtcg(omitted) as any).roles.label.primary.$extensions[NS];
+    assert.equal(Object.keys(ext.modes).length, 3);
+    assert.equal(ext.modes.cooldusk, ext.modes.warm);
+    assert.deepEqual(ext.inheritsFirstMode, ["cooldusk"]);
+  });
+});
+
+describe("emit with no modes", () => {
+  const flat = resolveDefinition(`
+dtg: 1
+systems:
+  ink: "#313133"
+roles:
+  ink:
+    primary: ink
+`);
+
+  test("no mode prefix — there is no axis to disambiguate", () => {
+    assert.ok(emitScss(flat).includes("$ink-primary:"));
+    assert.ok(!emitScss(flat).includes("$default-"));
+  });
+
+  test("flat and nested coincide", () => {
+    assert.equal(emitCss(flat, "plain", "flat"), emitCss(flat, "plain", "nested"));
   });
 });

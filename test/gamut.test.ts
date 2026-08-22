@@ -8,8 +8,10 @@ import {
   hexToOklab,
   inGamut,
   maxChroma,
+  convert,
   formatColor,
   oklabToOklch,
+  parseColor,
   oklchToOklab,
   translucent,
 } from "../dist/color-math.js";
@@ -107,6 +109,38 @@ describe("translucent", () => {
     assert.equal(
       formatColor(overlay.resolveStep({ color: "#001a28" }, "3").color, "srgb"),
       expected,
+    );
+  });
+});
+
+describe("gamut round trips", () => {
+  test("sRGB -> display-p3 -> sRGB returns the original, every colour", () => {
+    // An in-gamut colour loses nothing going wide and coming back; if this
+    // drifts, the primaries or the transfer function are wrong.
+    let checked = 0;
+    for (let r = 0; r < 256; r += 17)
+      for (let g = 0; g < 256; g += 17)
+        for (let b = 0; b < 256; b += 17) {
+          const hex =
+            "#" + [r, g, b].map((x) => x.toString(16).padStart(2, "0")).join("");
+          const wide = convert(parseColor(hex, "t"), "display-p3");
+          assert.equal(formatColor(wide, "srgb"), hex);
+          checked++;
+        }
+    assert.ok(checked > 3000);
+  });
+
+  test("a display-p3 colour emits its own coordinates untouched", () => {
+    const css = "color(display-p3 0.9123 0.0456 0.0789)";
+    assert.equal(formatColor(parseColor(css, "t"), "display-p3"), css);
+  });
+
+  test("a wide colour survives sRGB only as an approximation", () => {
+    const wide = parseColor("color(display-p3 1 0 0)", "t");
+    const viaSrgb = parseColor(formatColor(wide, "srgb"), "t");
+    assert.notEqual(
+      formatColor(viaSrgb, "display-p3"),
+      formatColor(wide, "display-p3"),
     );
   });
 });

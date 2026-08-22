@@ -167,7 +167,12 @@ export type ResolvedSystem = {
 export type ChangelogEntry = { date?: string; note: string };
 
 /** One step of a systems-tree path, with the alias that renames it on emit. */
-export type PathSegment = { name: string; alias?: AliasValue };
+export type PathSegment = {
+  name: string;
+  alias?: AliasValue;
+  /** Dropped from the emitted name; the path still uses it for identity. */
+  omit?: boolean;
+};
 
 /** A declared constant. `path` is its internal identity; segments carry aliases. */
 export type ResolvedStatic = {
@@ -204,14 +209,25 @@ export type ResolvedRef = {
 
 export type ResolvedRole = {
   section: string;
+  /**
+   * The full path, one entry per level. Roles nest as deep as the definition
+   * nests them, the same as the systems tree — `light.ink.primary` is three
+   * segments, `label.primary` is two.
+   */
+  segments: PathSegment[];
+  /** Everything but the last segment, dotted. Derived; `segments` is the truth. */
   domain: string;
-  domainAlias?: AliasValue;
-  domainOmit: boolean;
+  /** The last segment. Derived. */
   role: string;
-  alias?: AliasValue;
   omit: boolean;
   /** One entry per mode, in `modes` order. */
   perMode: ResolvedRef[];
+  /**
+   * Index-parallel to `perMode`: true where the definition wrote `~` and the
+   * value was taken from mode 0 rather than declared. Formats that can leave a
+   * mode out check this; formats that cannot ignore it.
+   */
+  inherited: boolean[];
 };
 
 export type ResolvedDefinition = {
@@ -240,12 +256,10 @@ export function publicRoleName(
   target: string,
   separator: string,
 ): string {
-  const segments: string[] = [];
-  if (!role.domainOmit) {
-    segments.push(aliasedName(role.domainAlias, target, role.domain));
-  }
-  if (!role.omit) segments.push(aliasedName(role.alias, target, role.role));
-  return segments.join(separator);
+  return role.segments
+    .filter((seg) => !seg.omit)
+    .map((seg) => aliasedName(seg.alias, target, seg.name))
+    .join(separator);
 }
 
 export function resolveDefinition(
@@ -272,8 +286,17 @@ export function resolveDefinition(
   }
 
   const changelog = parseChangelog(doc.changelog, errors);
-  const modes = Array.isArray(doc.modes) ? doc.modes.map(String) : [];
-  if (modes.length === 0) errors.push("`modes` must be a non-empty list");
+  // `modes` is optional. A definition with none is not a degenerate case of a
+  // themed one — it is a colour dictionary, where every value has a name and
+  // nothing varies. The single mode is implicit so the rest of the pipeline
+  // (which is written against an axis) needs no special case.
+  if (doc.modes != null && (!Array.isArray(doc.modes) || doc.modes.length === 0)) {
+    errors.push("`modes`, when present, must be a non-empty list");
+  }
+  const modes = Array.isArray(doc.modes) && doc.modes.length > 0
+    ? doc.modes.map(String)
+    : ["default"];
+  const modeless = !Array.isArray(doc.modes) || doc.modes.length === 0;
 
   const defaults = (doc.defaults ?? {}) as Record<
     string,
@@ -453,13 +476,8 @@ export function resolveDefinition(
   // ---- sections: every non-reserved top-level key ----
   type RawRole = {
     section: string;
-    domain: string;
-    domainAlias?: AliasValue;
-    domainOmit: boolean;
-    role: string;
-    alias?: AliasValue;
-    omit: boolean;
-    refs: string[];
+    segments: PathSegment[];
+    refs: (string | null)[];
   };
   const sections: ResolvedSection[] = [];
   const roleIndex = new Map<string, RawRole>();
@@ -488,55 +506,60 @@ export function resolveDefinition(
       alias: parseAlias(sectionBlock.alias, `section "${sectionName}"`),
     });
 
-    for (const [domainName, domainRaw] of Object.entries(sectionBlock)) {
-      if (domainName === "alias" || domainName === "omit") continue;
-      if (
-        domainRaw == null ||
-        typeof domainRaw !== "object" ||
-        Array.isArray(domainRaw)
-      ) {
-        errors.push(`${sectionName}.${domainName}: a domain is a map of roles`);
-        continue;
-      }
-      const domainBlock = domainRaw as Record<string, unknown>;
-      const domainAlias = parseAlias(
-        domainBlock.alias,
-        `domain "${sectionName}.${domainName}"`,
-      );
-      const domainOmit = domainBlock.omit === true;
-
-      for (const [roleName, roleRaw] of Object.entries(domainBlock)) {
-        if (roleName === "alias" || roleName === "omit") continue;
-        const path = `${domainName}.${roleName}`;
+    // Roles nest as deep as the definition nests them. A node is a role when
+    // it is a colour, a ref list, or a block naming `refs` — the same
+    // reserved-key test the systems tree uses to tell a system from a group.
+    const walkRoles = (
+      node: Record<string, unknown>,
+      trail: PathSegment[],
+    ): void => {
+      for (const [name, raw] of Object.entries(node)) {
+        if (name === "alias" || name === "omit") continue;
+        const segments = [...trail, { name }];
+        const path = segments.map((seg) => seg.name).join(".");
         const context = `${sectionName}.${path}`;
-        let refs: string[] | undefined;
-        let alias: AliasValue | undefined;
-        let omit = false;
-        if (Array.isArray(roleRaw)) {
-          refs = roleRaw.map(String);
-        } else if (roleRaw != null && typeof roleRaw === "object") {
-          const block = roleRaw as Record<string, unknown>;
-          for (const key of Object.keys(block)) {
-            if (!["refs", "alias", "omit"].includes(key)) {
-              errors.push(`${context}: unknown role key "${key}"`);
-            }
+
+        let refs: (string | null)[] | undefined;
+        if (typeof raw === "string") {
+          // A bare scalar is the whole role. Only meaningful without an axis
+          // to spread across, so it is refused when one exists.
+          if (!modeless) {
+            errors.push(
+              `${context}: expected ${modes.length} refs (one per mode: ${modes.join(", ")}), got a single value`,
+            );
+            continue;
+          }
+          refs = [raw];
+        } else if (Array.isArray(raw)) {
+          refs = raw.map((r) => (r == null ? null : String(r)));
+        } else if (raw != null && typeof raw === "object") {
+          const block = raw as Record<string, unknown>;
+          segments[segments.length - 1] = {
+            name,
+            alias: parseAlias(block.alias, context),
+            omit: block.omit === true,
+          };
+          if (!("refs" in block)) {
+            walkRoles(block, segments);
+            continue;
           }
           if (!Array.isArray(block.refs)) {
             errors.push(`${context}: expected a \`refs\` list`);
             continue;
           }
-          refs = block.refs.map(String);
-          alias = parseAlias(block.alias, context);
-          omit = block.omit === true;
+          refs = block.refs.map((r) => (r == null ? null : String(r)));
         } else {
           errors.push(
-            `${context}: a role is a ref list or { refs, alias?, omit? }`,
+            modeless
+              ? `${context}: a role is a colour, a ref list, { refs, alias?, omit? }, or a group of roles`
+              : `${context}: a role is a ref list, { refs, alias?, omit? }, or a group of roles`,
           );
           continue;
         }
-        if (omit && domainOmit) {
+
+        if (segments.every((seg) => seg.omit)) {
           errors.push(
-            `${context}: domain and role are both omitted — nothing left to name`,
+            `${context}: every segment is omitted — nothing left to name`,
           );
         }
         if (roleIndex.has(path)) {
@@ -545,19 +568,11 @@ export function resolveDefinition(
           );
           continue;
         }
-        roleIndex.set(path, {
-          section: sectionName,
-          domain: domainName,
-          domainAlias,
-          domainOmit,
-          role: roleName,
-          alias,
-          omit,
-          refs,
-        });
+        roleIndex.set(path, { section: sectionName, segments, refs });
         roleOrder.push(path);
       }
-    }
+    };
+    walkRoles(sectionBlock, []);
   }
 
   for (const constant of statics) {
@@ -589,7 +604,9 @@ export function resolveDefinition(
     if (modes.length > 0 && raw.refs.length !== modes.length) {
       errors.push(
         `${path}: expected ${modes.length} refs (one per mode), got ${raw.refs.length}${
-          raw.refs.some((r) => /^transparent\(/.test(r) && !r.endsWith(")"))
+          raw.refs.some(
+            (r) => r != null && /^transparent\(/.test(r) && !r.endsWith(")"),
+          )
             ? " — a comma inside a `[ ]` list separates items. transparent() takes a space: transparent(shade 70)."
             : ""
         }`,
@@ -598,12 +615,36 @@ export function resolveDefinition(
       return undefined;
     }
 
+    if (raw.refs[0] == null) {
+      errors.push(
+        `${path}: mode "${modes[0] ?? 0}" is \`~\` — the first mode is what the others fall back to, so it has to name a colour`,
+      );
+      roleCache.set(path, undefined);
+      return undefined;
+    }
+
+    // `~` means this mode says nothing. perMode still carries a value for it,
+    // because a consumer that cannot express absence — Figma has no unset
+    // mode, it fills one with white — needs a colour to write. `inherited`
+    // records which of them were never declared, so the formats that *can*
+    // leave a mode out do.
     const perMode: ResolvedRef[] = [];
+    const inherited: boolean[] = [];
     for (let i = 0; i < raw.refs.length; i++) {
       const ref = raw.refs[i];
+      if (ref == null) {
+        if (perMode.length > 0) {
+          perMode.push(perMode[0]);
+          inherited.push(true);
+        }
+        continue;
+      }
       const context = `${path}[${modes[i] ?? i}]`;
       const resolved = resolveRef(ref, i, context, [...stack, path]);
-      if (resolved) perMode.push(resolved);
+      if (resolved) {
+        perMode.push(resolved);
+        inherited.push(false);
+      }
     }
 
     const complete = perMode.length === raw.refs.length;
@@ -614,13 +655,14 @@ export function resolveDefinition(
     }
     const resolvedRole: ResolvedRole = {
       section: raw.section,
-      domain: raw.domain,
-      domainAlias: raw.domainAlias,
-      domainOmit: raw.domainOmit,
-      role: raw.role,
-      alias: raw.alias,
-      omit: raw.omit,
+      segments: raw.segments,
+      // Derived from segments, for callers that want "the last bit" and
+      // "everything above it" — the dev server and the lineage index.
+      domain: raw.segments.slice(0, -1).map((seg) => seg.name).join("."),
+      role: raw.segments[raw.segments.length - 1].name,
+      omit: raw.segments[raw.segments.length - 1].omit === true,
       perMode,
+      inherited,
     };
     roleCache.set(path, complete ? resolvedRole : undefined);
     return complete ? resolvedRole : undefined;
