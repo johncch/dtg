@@ -14,7 +14,8 @@
     "build": "tsc",
     "prepare": "tsc",
     "test": "tsc && node --test --test-reporter=./test/reporter.mjs test/*.test.ts",
-    "test:spec": "tsc && node --test test/*.test.ts"
+    "test:spec": "tsc && node --test test/*.test.ts",
+    "release": "./scripts/release.sh"
   },
   "engines": {
     "node": ">=22"
