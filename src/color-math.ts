@@ -3,6 +3,16 @@ export type Rgb = [number, number, number];
 const COLOR_FORMS =
   "#rgb, #rrggbb, oklch(L C H), oklab(L a b), color(srgb r g b) or color(display-p3 r g b), each with an optional `/ alpha`";
 
+/** The deliberately narrower colour form used by flattened step overrides. */
+export function assertHex(value: unknown, context: string): string {
+  if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value)) {
+    throw new Error(
+      `${context}: expected a 6-digit hex color, got ${JSON.stringify(value)}`,
+    );
+  }
+  return value.toLowerCase();
+}
+
 /**
  * A colour literal from a definition file. Authoring is not limited to sRGB:
  * `oklch()` reaches colours no hex can name, and `color(display-p3 ...)` names

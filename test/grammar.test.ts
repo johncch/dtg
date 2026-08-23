@@ -181,6 +181,35 @@ s:
       /circular role reference/,
     );
   });
+
+  test("overrides remain six-digit hexes on flattened steps", () => {
+    const definition = (selector: string, override: string) => `
+dtg: 1
+systems:
+  sky:
+    algorithm: ink-ramp
+    params: { base: "#ffffff", ink: "#000000" }
+    overrides: { "${selector}": ${JSON.stringify(override)} }
+roles:
+  surface: { shade: sky/${selector} }
+`;
+    assert.throws(
+      () => resolveDefinition(definition("10", "color(srgb 1 0 0)")),
+      /expected a 6-digit hex color/,
+    );
+    assert.throws(
+      () => resolveDefinition(definition("10/ink", "#ff0000")),
+      /overrides pin flattened steps only/,
+    );
+    assert.equal(
+      formatColor(
+        resolveDefinition(definition("10", "#ff0000")).roles[0].perMode[0]
+          .color,
+        "srgb",
+      ),
+      "#ff0000",
+    );
+  });
 });
 
 describe("determinism", () => {
