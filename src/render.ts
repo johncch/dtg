@@ -767,7 +767,7 @@ export function renderBlend(
     "Blending · Colors",
     navFor(resolved),
     `<h1>Blending</h1>
-     <p class="desc">The same operation — <code>t</code> of A over B — carried out in four spaces. Endpoints always agree; everything between them is where the spaces disagree, because a straight line between two colours takes a different path in each.</p>
+     <p class="desc">The same operation — <code>t</code> of A over B — carried out in every supported space. Endpoints always agree; everything between them is where the spaces disagree, because a straight line between two colours takes a different path in each.</p>
      <div class="tool">
        <div class="pane">
          <div class="ctl"><label for="a">colour A</label><input type="color" id="a" value="#b30a0a"></div>
@@ -780,7 +780,7 @@ export function renderBlend(
        <div class="quad" id="quad"></div>
      </div>
      <script type="module">
-     import { mixIn, BLEND_SPACES, hexToOklab, oklabToOklch } from "/color-math.js";
+     import { mixIn, BLEND_SPACES, formatColor, parseColor, toOklab, oklabToOklch } from "/color-math.js";
      const $ = (id) => document.getElementById(id);
      const quad = $("quad");
      for (const s of BLEND_SPACES) {
@@ -790,16 +790,20 @@ export function renderBlend(
        quad.appendChild(box);
      }
      function paint() {
-       const A = $("a").value, B = $("b").value, t = Number($("t").value) / 100;
+       const A = parseColor($("a").value, "blend colour A");
+       const B = parseColor($("b").value, "blend colour B");
+       const t = Number($("t").value) / 100;
        for (const s of BLEND_SPACES) {
          const r = mixIn(A, B, t, s.id);
-         document.getElementById("sw-" + s.id).style.background = r.css;
-         document.getElementById("v-" + s.id).textContent = r.css === r.hex ? r.css : r.css + "  ~ " + r.hex;
+         const css = formatColor(r, s.id.startsWith("display-p3") ? "display-p3" : "srgb");
+         const hex = formatColor(r, "srgb");
+         document.getElementById("sw-" + s.id).style.background = css;
+         document.getElementById("v-" + s.id).textContent = css === hex ? css : css + "  ~ " + hex;
        }
-       const h = (hex) => oklabToOklch(hexToOklab(hex))[2];
+       const h = (color) => oklabToOklch(toOklab(color))[2];
        const base = h(A);
        const parts = BLEND_SPACES.map((s) => {
-         const got = h(mixIn(A, B, t, s.id).hex);
+         const got = h(mixIn(A, B, t, s.id));
          let d = ((got - base + 540) % 360) - 180;
          return s.label + " " + (d >= 0 ? "+" : "") + d.toFixed(1) + "deg";
        });

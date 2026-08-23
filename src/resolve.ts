@@ -6,9 +6,9 @@ import {
   type AlgorithmImpl,
 } from "./contract.js";
 import {
+  assertHex,
   colorFromHex,
   needsMapping,
-  colorFromRgb,
   parseColor,
   isOpaque,
   type Color,
@@ -450,10 +450,15 @@ export function resolveDefinition(
       try {
         const value = sys.algo.resolveStep(sys.params, selector);
         const override = sys.overrides[selector];
-        const overrideColor =
-          override != null
-            ? parseColor(override, `override "${key}"`)
-            : undefined;
+        let overrideColor: Color | undefined;
+        if (override != null) {
+          if (!isOpaque(value.color)) {
+            throw new Error(
+              `override "${key}": overrides pin flattened steps only; "${selector}" is translucent`,
+            );
+          }
+          overrideColor = colorFromHex(assertHex(override, `override "${key}"`));
+        }
         step = {
           selector,
           publicStep: assertNameFragment(
@@ -737,7 +742,7 @@ export function resolveDefinition(
       const targetRole = resolveRole(ref, stack);
       const entry = targetRole?.perMode[modeIndex];
       if (!entry) return undefined;
-      const dot = ref.indexOf(".");
+      const dot = ref.lastIndexOf(".");
       return {
         ref,
         target: {

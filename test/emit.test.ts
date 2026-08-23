@@ -84,6 +84,24 @@ describe("dtcg", () => {
     const d = emitDtcg(resolveDefinition(without)) as any;
     assert.equal("changelog" in d.$extensions[NS], false);
   });
+
+  test("a system named static is preserved beside constants", () => {
+    const collision = resolveDefinition(`
+dtg: 1
+systems:
+  paper: "#ffffff"
+  static:
+    algorithm: ink-ramp
+    params: { base: "#ffffff", ink: "#000000" }
+roles:
+  surface:
+    shade: static/10
+    paper: paper
+`);
+    const d = emitDtcg(collision) as any;
+    assert.equal(d.systems.static["10"].$value.hex, "#e6e6e6");
+    assert.equal(d.systems.static.paper.$value.hex, "#ffffff");
+  });
 });
 
 describe("wide-gamut emit", () => {
@@ -260,6 +278,40 @@ describe("the mode axis", () => {
     assert.ok(!scss.includes("var("));
     assert.match(scss, /\$light-surface-canvas: #[0-9a-f]{6};/);
   });
+
+  test("flat role aliases point at the target in the same mode", () => {
+    const aliases = resolveDefinition(`
+dtg: 1
+modes: [light, dark]
+systems:
+  ink: "#111111"
+  paper: "#ffffff"
+roles:
+  label:
+    base: [ink, paper]
+    echo: [label.base, label.base]
+`);
+    const css = emitCss(aliases, "plain", "flat");
+    assert.ok(css.includes("--light-label-echo: var(--light-label-base);"));
+    assert.ok(css.includes("--dark-label-echo: var(--dark-label-base);"));
+    assert.ok(!css.includes("var(--label-base)"));
+  });
+
+  test("nested role aliases keep the unprefixed cascade name", () => {
+    const aliases = resolveDefinition(`
+dtg: 1
+modes: [light, dark]
+systems: { ink: "#111111" }
+roles:
+  label:
+    base: [ink, ink]
+    echo: [label.base, label.base]
+`);
+    assert.match(
+      emitCss(aliases, "plain", "nested"),
+      /--label-echo: var\(--label-base\);/,
+    );
+  });
 });
 
 describe("~ across the formats", () => {
@@ -287,6 +339,27 @@ roles:
     const css = emitCss(omitted, "plain", "flat");
     assert.ok(css.includes("--cooldusk-surface-canvas:"));
     assert.ok(!css.includes("--cooldusk-label-primary:"));
+  });
+
+  test("flat Tailwind does not wire a utility for an omitted mode", () => {
+    const css = emitCss(omitted, "tailwind", "flat");
+    assert.ok(css.includes("--color-warm-label-primary:"));
+    assert.ok(!css.includes("--color-cooldusk-label-primary:"));
+  });
+
+  test("a flat role alias follows an inherited target back to mode zero", () => {
+    const aliases = resolveDefinition(`
+dtg: 1
+modes: [light, dark]
+systems: { ink: "#313133" }
+roles:
+  label:
+    base: [ink, ~]
+    echo: [label.base, label.base]
+`);
+    const css = emitCss(aliases, "plain", "flat");
+    assert.ok(!css.includes("--dark-label-base:"));
+    assert.ok(css.includes("--dark-label-echo: var(--light-label-base);"));
   });
 
   test("scss likewise", () => {
@@ -320,5 +393,31 @@ roles:
 
   test("flat and nested coincide", () => {
     assert.equal(emitCss(flat, "plain", "flat"), emitCss(flat, "plain", "nested"));
+  });
+});
+
+describe("nested role paths", () => {
+  const nested = resolveDefinition(`
+dtg: 1
+systems:
+  ink: "#112233"
+roles:
+  label:
+    strong:
+      base: ink
+      echo: label.strong.base
+`);
+
+  test("css preserves a nested role-to-role alias", () => {
+    const css = emitCss(nested);
+    assert.ok(css.includes("--label-strong-echo: var(--label-strong-base);"));
+  });
+
+  test("dtcg preserves a nested role-to-role alias", () => {
+    const d = emitDtcg(nested) as any;
+    assert.equal(
+      d.roles.label.strong.echo.$value,
+      "{roles.label.strong.base}",
+    );
   });
 });

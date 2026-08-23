@@ -73,6 +73,8 @@ function cssVarName(role: ResolvedRole): string {
 function cssValueFor(
   resolved: ResolvedDefinition,
   entry: ResolvedRef,
+  mode: string,
+  modes: ModeRendering,
 ): { css: string; inlined: boolean } {
   const target = entry.target;
   if (target.kind === "step" && isOpaque(entry.color)) {
@@ -98,7 +100,17 @@ function cssValueFor(
     const role = resolved.roles.find(
       (r) => r.domain === target.domain && r.role === target.role,
     );
-    if (role) return { css: `var(--${cssVarName(role)})`, inlined: false };
+    if (role) {
+      const modeIndex = resolved.modes.indexOf(mode);
+      const targetMode =
+        modes === "flat" && modeIndex >= 0 && role.inherited[modeIndex]
+          ? resolved.modes[0]
+          : mode;
+      return {
+        css: `var(--${roleVarName(role, targetMode, modes, resolved.modes.length)})`,
+        inlined: false,
+      };
+    }
   }
   // transparent() results and overlay steps have no primitive variable to
   // point at; they inline their computed value.
@@ -140,7 +152,7 @@ export function emitCss(
         .filter((role) => !role.inherited[i])
         .map(
           (role) =>
-            `  --${roleVarName(role, mode, modes, resolved.modes.length)}: ${cssValueFor(resolved, role.perMode[i]).css};`,
+            `  --${roleVarName(role, mode, modes, resolved.modes.length)}: ${cssValueFor(resolved, role.perMode[i], mode, modes).css};`,
         );
       if (decls.length === 0) return;
       // The per-mode header only earns its place when there is more than one.
@@ -154,7 +166,7 @@ export function emitCss(
         .filter((role) => !role.inherited[i])
         .map(
           (role) =>
-            `  --${cssVarName(role)}: ${cssValueFor(resolved, role.perMode[i]).css};`,
+            `  --${cssVarName(role)}: ${cssValueFor(resolved, role.perMode[i], mode, modes).css};`,
         );
       if (decls.length === 0) return;
       lines.push(i === 0 ? ":root {" : `.${mode} {`, ...decls, "}", "");
@@ -171,7 +183,11 @@ export function emitCss(
     const wired =
       modes === "flat"
         ? resolved.roles.flatMap((role) =>
-            resolved.modes.map((mode) => roleVarName(role, mode, modes, resolved.modes.length)),
+            resolved.modes.flatMap((mode, i) =>
+              role.inherited[i]
+                ? []
+                : [roleVarName(role, mode, modes, resolved.modes.length)],
+            ),
           )
         : resolved.roles.map((role) => cssVarName(role));
     for (const name of wired) {
@@ -252,7 +268,7 @@ function wideGamutLayer(
     for (const role of resolved.roles) {
       if (role.inherited[i]) continue;
       const entry = role.perMode[i];
-      if (!cssValueFor(resolved, entry).inlined) continue;
+      if (!cssValueFor(resolved, entry, mode, modes).inlined) continue;
       if (!needsMapping(entry.color, "srgb")) continue;
       decls.push(
         `    --${roleVarName(role, mode, modes, resolved.modes.length)}: ${formatColor(entry.color, "display-p3")};`,
@@ -305,9 +321,23 @@ function placeAt(
   const keys = path.split(".");
   let node = root;
   for (const key of keys.slice(0, -1)) {
-    node = (node[key] ??= {}) as Record<string, unknown>;
+    const existing = node[key];
+    if (existing == null) {
+      node[key] = {};
+    } else if (
+      typeof existing !== "object" ||
+      Array.isArray(existing) ||
+      "$type" in (existing as Record<string, unknown>)
+    ) {
+      throw new Error(`DTCG path "${path}" collides at "${key}"`);
+    }
+    node = node[key] as Record<string, unknown>;
   }
-  node[keys[keys.length - 1]] = value;
+  const leaf = keys[keys.length - 1];
+  if (Object.hasOwn(node, leaf)) {
+    throw new Error(`DTCG path "${path}" is emitted more than once`);
+  }
+  node[leaf] = value;
 }
 
 /** The two colour profiles a Figma document can be in. */
@@ -403,7 +433,7 @@ export function emitDtcg(
     placeAt(systems, system.system, group);
   }
   if (resolved.statics.length > 0) {
-    const group: Record<string, unknown> = {};
+    const group = (systems.static ??= {}) as Record<string, unknown>;
     for (const s of resolved.statics) {
       placeAt(group, s.path, {
         $type: "color",
@@ -414,7 +444,6 @@ export function emitDtcg(
         },
       });
     }
-    systems.static = group;
   }
   out.systems = systems;
 
