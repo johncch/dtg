@@ -1,5 +1,5 @@
 import { assertKnownParams, type AlgorithmImpl } from "../contract.js";
-import { assertHex, hexToRgb } from "../color-math.js";
+import { parseColor } from "../color-math.js";
 
 /**
  * A color at selector % opacity, never flattened — the system's values are
@@ -13,6 +13,10 @@ export const overlay: AlgorithmImpl = {
     return null;
   },
 
+  inputColors(params) {
+    return [parseColor(params.color, "overlay param 'color'")];
+  },
+
   resolveStep(params, selector) {
     const opacityPct = Number(selector);
     if (!Number.isFinite(opacityPct) || opacityPct < 0 || opacityPct > 100) {
@@ -20,12 +24,7 @@ export const overlay: AlgorithmImpl = {
         `overlay selector must be a number 0–100, got "${selector}"`,
       );
     }
-    const [r, g, b] = hexToRgb(
-      assertHex(params.color, "overlay param 'color'"),
-    );
-    return {
-      css: `rgba(${r}, ${g}, ${b}, ${opacityPct / 100})`,
-      opaque: false,
-    };
+    const color = parseColor(params.color, "overlay param 'color'");
+    return { color: { ...color, alpha: opacityPct / 100 } };
   },
 };

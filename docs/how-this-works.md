@@ -29,25 +29,35 @@ Canonical. The README carries the user-facing version of the same rules.
 - `dtg: 1` is the grammar version. The resolver assumes 1 with a warning when
   absent, and errors on versions it does not understand.
 - `modes: [light, dark]` sets the order role ref tuples are read in.
-- `systems`: `name → hex` for a static, or `name → { algorithm, ...params }`.
-  Reserved keys addressed to the tool, never the algorithm: `algorithm`,
-  `alias` (public-name override), `overrides` (selector → hex, pinning a
-  step's flattened value). Every other key passes through untouched.
+- `systems` is a tree of three node kinds, discriminated without extra
+  syntax: a **string** is a constant, an object with **`algorithm`** is a
+  system, any other object is a **group**. Groups nest, so a constant's
+  identity is its dotted path.
+- A system node's keys are the tool's: `algorithm` (a string naming it),
+  `params` (the algorithm's inputs, in their own block), `alias`,
+  `overrides`. Params are contained rather than passed through, so the
+  reserved list can grow without colliding with a parameter name.
 - `defaults`: shared params per algorithm, merged under each system's own
   params. One copy of each number.
-- Sections: every top-level key other than `dtg`/`modes`/`defaults`/`systems`
-  is a section. Arbitrary name, becomes a Figma collection, holds
-  `domain → role → [ref per mode]`. A role may also be
-  `{ refs, alias?, omit? }`. `alias` (on the systems block, a system, a
-  section, a domain, or a role; string or per-target map) replaces a public
-  name; `omit: true` drops a segment. Refs always use internal names. That is
-  the *entire* role grammar. No flags, no options, no other object form.
+- Sections: every top-level key other than
+  `dtg`/`modes`/`defaults`/`systems`/`changelog` is a section. Arbitrary
+  name, becomes a collection, holds `domain → role → [ref per mode]`. A
+  role may also be `{ refs, alias?, omit? }`. `alias` (on a group, a
+  system, the systems block, a section, a domain, or a role; string or
+  per-target map) replaces a public name; `omit: true` drops a segment.
+  Refs always use internal names. That is the *entire* role grammar. No
+  flags, no options, no other object form.
 - A **ref** is one of:
-  - `system/selector`, where everything after the slash belongs to the
-    algorithm (`sky/3.5` is 3.5% ink over base, `theme/600` is a stop name,
-    `shadow/40` is a 40% opacity overlay)
-  - `domain.role`, aliasing another semantic decision in the same mode
-  - `transparent(system/selector)`, the step's unflattened form
+  - `paper`, `ink.body` — a constant by path
+  - `system/selector` — dots walk the tree, the slash hands off, and
+    everything after it belongs to the algorithm (`sky/3.5` is 3.5% ink,
+    `sky/3/ink` that ink uncomposited, `theme/600` a stop name,
+    `warm/red@6` a compose anchor at 6%)
+  - `domain.role` — another decision in the same mode
+  - `transparent(paper 70)` — a constant at an opacity, constants only
+- **One meaning per separator: `.` navigates, `/` hands off.** A constant
+  path and a role path are the same shape, so the two namespaces must not
+  collide; the resolver errors if they do.
 - **Raw hex is legal only inside `systems`.** The semantic tier points and
   derives; every color traces back to an anchor. This is the core invariant:
   a literal is a value that has forgotten its reason.
@@ -75,6 +85,35 @@ Three built-ins, each *total*, with no optional-parameter modes.
   kind of value a system produces is the **algorithm's nature**, declared
   once in the systems block, never a per-role flag.
 
+### The seam: colour-math owns colour, algorithms own vocabulary
+
+`color-math.ts` holds every arithmetic operation and every colour format.
+An algorithm holds a selector grammar, a public-name mapping, an ordering, a
+set of param names, its error messages, and a description. Nothing else.
+
+This is why the built-ins look redundant and are not. `ink-ramp` with one
+ink, `blend` with one colour to blend toward, and `overlay` all produce
+byte-identical values — `rgba(0, 26, 40, 0.03)` for the same input, verified
+in the tests. They differ in what a *reader* sees:
+
+    ink-ramp  sky/3          emits --color-light-3
+    blend     sky/ink@3      emits --color-light-ink-3
+    overlay   shadow/3       never flattens, and says so declaratively
+
+`--color-light-15` only reads as "15% ink" because ink-ramp gets to define a
+bare-number selector. Folding these into one configurable algorithm would put
+selector grammar behind a param — configuration that changes syntax, which is
+harder to read than four separately-named files of twenty to sixty lines.
+
+The failure mode to watch is the opposite one: arithmetic drifting *up* into
+the algorithms. It has happened twice. `publicStep` was derived in three
+places and one copy silently emitted a broken Figma alias. Formatting a
+translucent colour was implemented four times — three algorithms and the
+resolver — and they disagreed about whether alpha arrived as a percent or a
+fraction. Both are now single functions in `color-math.ts`. If you find
+yourself writing colour arithmetic or a colour string inside
+`algorithms/`, it belongs one level down.
+
 ### The algorithm contract
 
 `src/contract.ts` defines `AlgorithmImpl`:
@@ -87,10 +126,16 @@ Three built-ins, each *total*, with no optional-parameter modes.
   than silently.
 - `resolveStep(params, selector)` returns `{ css, opaque }` and throws with a
   human-readable message on a bad selector or bad params.
-- `resolveTranslucent(params, selector)` is optional. Its absence means the
-  system has nothing to unflatten, and `transparent()` on it is an error.
+- `publicStep` and `stepOrder` are optional. The core needs a name fragment
+  and a total order for every selector; absent these it assumes a decimal
+  coordinate, which is only true of the ramps. An algorithm with any other
+  selector shape supplies both.
 
-`transparent()` is an algorithm *capability*, not a generic color function,
+An algorithm that composites publishes its layer as a further selector —
+`sky/3/ink`, `warm/red@6/top`. That is not a core function, and was
+deliberately not made one: `X(ref)` would promise it works on any color
+while only working on algorithms that composite, with nothing at the call
+site to say which. It cannot be a transformation of the output either,
 because flattening destroys information: you cannot recover ink and alpha
 from a flattened hex. The system re-runs the recipe and stops before
 compositing.
@@ -114,10 +159,10 @@ methods, or shadow a built-in by name.
 4. **No sugar in the role grammar.** `translucent: true` (auto-twin) was
    designed and then deliberately killed: uniform `name: [refs]` beats saving
    two lines. Twins are declared as sibling roles
-   (`primary-translucent: [transparent(sky/15), ...]`), so twinship stays
+   (`primary-translucent: [sky/15/ink, ...]`), so twinship stays
    recoverable by inspection.
-5. **Overrides pin flattened hexes only.** `transparent()` always follows
-   pure ink math, and the resolver warns when the two overlap. Hand-tunes are
+5. **Overrides pin flattened hexes only.** The uncomposited form always
+   follows pure ink math, and the resolver warns when the two overlap. Hand-tunes are
    explicit, visible, and survive regeneration. Exceptions either get
    promoted into the system later or stay flagged, never silent.
 6. **Demand-driven primitives.** An ink-ramp step exists because a ref
@@ -146,7 +191,7 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `contract.ts` — the `AlgorithmImpl` interface and `assertKnownParams`.
 - `algorithms/` — the three built-ins.
 - `color-math.ts` — hex parsing, compositing, and the OKLCH and OKLAB math.
-- `emit.ts` — the CSS and `figma.json` emitters.
+- `emit.ts` — the CSS and DTCG emitters.
 - `render.ts`, `dev-server.ts`, `watch.ts` — the browsing UI, its HTTP and SSE
   server, and definition file watching.
 
@@ -186,10 +231,13 @@ Anything outside those three is a real defect. Promoting this check into a
       code.
 - [x] CSS emitter (`dtg emit`): `@theme` primitives block, `:root` and
       `.dark` semantic blocks, `@theme inline` wiring for every role. Public
-      naming is inline via `alias` and `omit`. Emit also writes `figma.json`:
-      a deterministic variable payload (collections, modes, hex values,
-      aliases by name) for a courier to replay. An agent may ferry the
-      payload; it never invents values.
+      naming is inline via `alias` and `omit`. `format: plain` (the default)
+      emits primitives into `:root` instead, for any project not on
+      Tailwind. Emit also writes DTCG when asked: the same collections,
+      modes, values and aliases, plus `$description` as a stable identity —
+      a role's internal path, a demand-driven step's lineage — so a courier
+      can tell a rename from a create. An agent may ferry the payload; it
+      never invents values.
 - [ ] Multi-file definitions (`shadows.dtg.yaml`, `type.dtg.yaml` as
       siblings, one resolver over all). Discovery exists; merging does not.
 - [ ] Designer tweaking in the browser: controls POST param changes, the
@@ -201,16 +249,18 @@ Anything outside those three is a real defect. Promoting this check into a
       components render under a proposed palette, plus auto-generated
       specimens (nested surfaces, labels at small sizes on every surface, 1px
       separators, states) for the portable case.
-- [ ] Figma sync. `emit` already writes the payload (collections, modes,
-      values, aliases by name, no file IDs). Delivery paths, ranked: (1) an
+- [ ] Figma sync. `emit` already writes the payload as DTCG (collections
+      via `$extensions`, modes, values, aliases by path, no file IDs).
+      Delivery paths, ranked: (1) an
       agent courier replaying the payload through a plugin console, required
       for a first sync that must reconcile drifted names in an existing file,
       where renaming keeps variable IDs so mockups stay wired and anything
       ambiguous is skipped and reported; (2) the endgame, a thin plugin
       fetching `/figma.json` from the dev server, putting the reconcile loop
       behind a button inside Figma with no Enterprise plan and no agent; (3)
-      DTCG export plus Figma's official import plugin is seed-only, since it
-      only adds and never updates, so it cannot sync. Every path is Plugin
+      Figma's *official* DTCG import plugin is seed-only, since it only adds
+      and never updates — emitting DTCG does not change that, it only makes
+      the payload standard for our own courier. Every path is Plugin
       API underneath: the REST variables API is Enterprise-only in both
       directions.
 - [ ] `check` command: definition versus emitted artifact drift, inert

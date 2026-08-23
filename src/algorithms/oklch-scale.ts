@@ -1,10 +1,11 @@
 import { assertKnownParams, type AlgorithmImpl } from "../contract.js";
 import {
-  assertHex,
   baseHueOf,
-  hexToRgb,
+  channelsIn,
+  colorFromRgb,
   oklchInterpolate,
-  rgbToHex,
+  parseColor,
+  widestGamut,
 } from "../color-math.js";
 
 /**
@@ -26,6 +27,16 @@ export const oklchScale: AlgorithmImpl = {
     return Object.keys(stopsOf(params));
   },
 
+  inputColors(params) {
+    const toward = Array.isArray(params.toward) ? params.toward : [];
+    return [
+      parseColor(params.base, "oklch-scale param 'base'"),
+      ...toward.map((t, i) =>
+        parseColor(t, `oklch-scale param 'toward[${i}]'`),
+      ),
+    ];
+  },
+
   resolveStep(params, selector) {
     const stops = stopsOf(params);
     const t = stops[selector];
@@ -34,8 +45,8 @@ export const oklchScale: AlgorithmImpl = {
         `oklch-scale has no stop "${selector}" (declared: ${Object.keys(stops).join(", ")})`,
       );
     }
-    const base = hexToRgb(assertHex(params.base, "oklch-scale param 'base'"));
-    if (t === 1) return { css: rgbToHex(base), opaque: true };
+    const baseColor = parseColor(params.base, "oklch-scale param 'base'");
+    if (t === 1) return { color: baseColor };
 
     const toward = params.toward;
     if (!Array.isArray(toward) || toward.length !== 2) {
@@ -43,6 +54,10 @@ export const oklchScale: AlgorithmImpl = {
         "oklch-scale param 'toward' must be [lightTarget, darkTarget]",
       );
     }
+    const light = parseColor(toward[0], "oklch-scale param 'toward[0]'");
+    const dark = parseColor(toward[1], "oklch-scale param 'toward[1]'");
+    const gamut = widestGamut([baseColor, light, dark]);
+    const base = channelsIn(baseColor, gamut);
     const hueShift = Number(params.hueShift ?? 0);
     const stopNumber = Number(selector);
     if (!Number.isFinite(stopNumber)) {
@@ -53,21 +68,15 @@ export const oklchScale: AlgorithmImpl = {
     const baseHue = baseHueOf(base);
     const rgb =
       stopNumber < 500
-        ? oklchInterpolate(
-            hexToRgb(assertHex(toward[0], "oklch-scale param 'toward[0]'")),
-            base,
-            t,
-            baseHue,
-            hueShift,
-          )
+        ? oklchInterpolate(channelsIn(light, gamut), base, t, baseHue, hueShift)
         : oklchInterpolate(
             base,
-            hexToRgb(assertHex(toward[1], "oklch-scale param 'toward[1]'")),
+            channelsIn(dark, gamut),
             1 - t,
             baseHue,
             hueShift,
           );
-    return { css: rgbToHex(rgb), opaque: true };
+    return { color: colorFromRgb(rgb, gamut) };
   },
 };
 

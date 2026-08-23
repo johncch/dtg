@@ -18,8 +18,11 @@ Working notes:
 - Conventions the tool promises (see README): definitions in
   `design-tokens/*.dtg.yaml`, optional `dtg.yaml` project config at root,
   outputs default beside the definitions. Flags > `dtg.yaml` > defaults.
-- No test files; verification is the dev server, and (for Sunnyday) parity
-  of emitted CSS against what the app shipped.
+- `pnpm test` builds, then runs `node --test` over `test/*.test.ts`. Tests
+  import from `dist/`, not `src/` — Node's type stripping does not remap a
+  `.js` specifier onto a `.ts` file — so the script builds first and a stale
+  artifact cannot give a false pass. Beyond that, verification is the dev
+  server and (for Sunnyday) parity of emitted CSS against what shipped.
 - Extend by conversation with John first, in small steps. If a feature
   can't be expressed as "edit one line of definition, regenerate," question
   the feature.
