@@ -120,6 +120,7 @@ pnpm add -D @fifthrevision/dtg
 
 ```
 dtg init                                           # write a placeholder dtg.yaml here
+dtg --version                                      # or -v; --help or -h lists every flag
 dtg dev  [--port <n>]                              # browse and edit: ramps, deltaE, lineage, roles
          [--emit]                                  # also write the outputs when the definition file changes
 dtg emit [--live] [--css <path>]                   # generate the CSS

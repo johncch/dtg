@@ -82,19 +82,13 @@ describe("gamut", () => {
     inProject(null, () => assert.equal(loadConfig({ definition: DEFINITION }).gamut, "display-p3"));
   });
 
-  test("dtg.yaml sets it, and a flag wins over the file", () => {
-    inProject("gamut: srgb\n", () => {
-      assert.equal(loadConfig({}).gamut, "srgb");
-      assert.equal(loadConfig({ gamut: "display-p3" }).gamut, "display-p3");
-    });
+  test("dtg.yaml sets it", () => {
+    inProject("gamut: srgb\n", () => assert.equal(loadConfig({}).gamut, "srgb"));
   });
 
-  test("an unknown gamut is an error naming where it came from", () => {
+  test("an unknown gamut is an error", () => {
     inProject("gamut: rec2020\n", () =>
       assert.throws(() => loadConfig({}), /dtg\.yaml gamut: expected one of srgb, display-p3/),
-    );
-    inProject(null, () =>
-      assert.throws(() => loadConfig({ definition: DEFINITION, gamut: "wide" }), /--gamut: expected one of/),
     );
   });
 });

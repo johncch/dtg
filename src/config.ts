@@ -68,7 +68,6 @@ export function loadConfig(flags: {
   scss?: string;
   dtcg?: string;
   dtcgColorSpace?: string;
-  gamut?: string;
 }): DtgConfig {
   let fileConfig: Record<string, unknown> = {};
   if (existsSync("dtg.yaml")) {
@@ -124,7 +123,6 @@ export function loadConfig(flags: {
       dtcg.colorSpace ??
       "srgb",
     gamut:
-      assertColorSpace(flags.gamut, "--gamut") ??
       assertColorSpace(fileConfig.gamut, "dtg.yaml gamut") ??
       "display-p3",
   };
