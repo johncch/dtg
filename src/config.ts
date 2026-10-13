@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { parse } from "yaml";
 import {
   CSS_FORMATS,
@@ -39,11 +39,25 @@ export type DtgConfig = {
   gamut: Gamut;
 };
 
-const DEFAULT_DIR = "design-tokens";
+const PLACEHOLDER_CONFIG = `# dtg project config. Paths are relative to this file.
+definitions: colors.dtg.yaml
+outputs:
+  css: colors.generated.css
+`;
+
+/** Writes a placeholder dtg.yaml into the current folder. Never replaces one that is there. */
+export function writePlaceholderConfig(): void {
+  try {
+    writeFileSync("dtg.yaml", PLACEHOLDER_CONFIG, { flag: "wx" });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    throw new Error("dtg.yaml is already here — edit it, or remove it first");
+  }
+}
 
 /**
- * Convention over configuration: with no dtg.yaml and no flags, definitions
- * are discovered in design-tokens/*.dtg.yaml and outputs land beside them.
+ * Where the definition is has no default: `dtg.yaml` or a flag says. An
+ * unnamed CSS output lands beside the definition.
  * Precedence: CLI flags > dtg.yaml > defaults.
  */
 export function loadConfig(flags: {
@@ -89,12 +103,13 @@ export function loadConfig(flags: {
   );
   if (requested.size === 0) requested.add("css");
 
+  const definition =
+    flags.definition ?? definitionIn(fileConfig.definitions as string | undefined);
+
   return {
-    definition:
-      flags.definition ??
-      discoverDefinition(fileConfig.definitions as string | undefined),
+    definition,
     cssOut: requested.has("css")
-      ? (flags.css ?? css.path ?? join(DEFAULT_DIR, "tokens.generated.css"))
+      ? (flags.css ?? css.path ?? join(dirname(definition), "tokens.generated.css"))
       : undefined,
     cssFormat:
       assertCssFormat(flags.cssFormat, "--css-format") ?? css.format ?? "plain",
@@ -211,13 +226,16 @@ function assertCssFormat(
   );
 }
 
-function discoverDefinition(configured: string | undefined): string {
-  const target = configured ?? DEFAULT_DIR;
+/** The definition file a `definitions` entry names: itself, or the one `*.dtg.yaml` in the directory it names. */
+function definitionIn(target: string | undefined): string {
+  if (target == null) {
+    throw new Error(
+      "no definition to read — run `dtg init` and point `definitions` in dtg.yaml at it, or pass --definition",
+    );
+  }
   if (target.endsWith(".yaml")) return target;
   if (!existsSync(target)) {
-    throw new Error(
-      `no ${target}/ directory found — create ${target}/<name>.dtg.yaml, add a dtg.yaml config, or pass --definition`,
-    );
+    throw new Error(`dtg.yaml definitions: no ${target}/ directory`);
   }
   const files = readdirSync(target).filter((f) => f.endsWith(".dtg.yaml"));
   if (files.length === 0) {

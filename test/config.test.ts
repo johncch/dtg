@@ -1,16 +1,25 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig } from "../dist/config.js";
+import { loadConfig, writePlaceholderConfig } from "../dist/config.js";
 
-/** loadConfig reads dtg.yaml from the cwd, so each case gets its own. */
+const DEFINITION = join("design-tokens", "c.dtg.yaml");
+
+/**
+ * loadConfig reads dtg.yaml from the cwd, so each case gets its own. The
+ * dtg.yaml written names the definition, since nothing finds one unnamed;
+ * a case with no dtg.yaml passes it as the flag.
+ */
 function inProject(dtgYaml: string | null, run: () => void) {
   const dir = mkdtempSync(join(tmpdir(), "dtg-cfg-"));
   mkdirSync(join(dir, "design-tokens"));
-  writeFileSync(join(dir, "design-tokens", "c.dtg.yaml"), "dtg: 1\n");
-  if (dtgYaml != null) writeFileSync(join(dir, "dtg.yaml"), dtgYaml);
+  writeFileSync(join(dir, DEFINITION), "dtg: 1\n");
+  if (dtgYaml != null) {
+    const named = dtgYaml.includes("definitions:") ? dtgYaml : `definitions: ${DEFINITION}\n${dtgYaml}`;
+    writeFileSync(join(dir, "dtg.yaml"), named);
+  }
   const cwd = process.cwd();
   try {
     process.chdir(dir);
@@ -24,8 +33,8 @@ function inProject(dtgYaml: string | null, run: () => void) {
 describe("outputs is a set, not a bag of defaults", () => {
   test("no dtg.yaml at all — css", () => {
     inProject(null, () => {
-      const c = loadConfig({});
-      assert.ok(c.cssOut);
+      const c = loadConfig({ definition: DEFINITION });
+      assert.equal(c.cssOut, join("design-tokens", "tokens.generated.css"), "beside the definition");
       assert.equal(c.scssOut, undefined);
       assert.equal(c.dtcgOut, undefined);
     });
@@ -55,7 +64,7 @@ describe("outputs is a set, not a bag of defaults", () => {
 
   test("a flag names an output too", () => {
     inProject(null, () => {
-      const c = loadConfig({ scss: "out/v.scss" });
+      const c = loadConfig({ definition: DEFINITION, scss: "out/v.scss" });
       assert.equal(c.cssOut, undefined);
       assert.equal(c.scssOut, "out/v.scss");
     });
@@ -70,7 +79,7 @@ describe("outputs is a set, not a bag of defaults", () => {
 
 describe("gamut", () => {
   test("defaults to display-p3", () => {
-    inProject(null, () => assert.equal(loadConfig({}).gamut, "display-p3"));
+    inProject(null, () => assert.equal(loadConfig({ definition: DEFINITION }).gamut, "display-p3"));
   });
 
   test("dtg.yaml sets it, and a flag wins over the file", () => {
@@ -85,7 +94,36 @@ describe("gamut", () => {
       assert.throws(() => loadConfig({}), /dtg\.yaml gamut: expected one of srgb, display-p3/),
     );
     inProject(null, () =>
-      assert.throws(() => loadConfig({ gamut: "wide" }), /--gamut: expected one of/),
+      assert.throws(() => loadConfig({ definition: DEFINITION, gamut: "wide" }), /--gamut: expected one of/),
     );
+  });
+});
+
+describe("init", () => {
+  test("writes a dtg.yaml the loader reads", () => {
+    inProject(null, () => {
+      writePlaceholderConfig();
+      const config = loadConfig({});
+      assert.equal(config.definition, "colors.dtg.yaml");
+      assert.equal(config.cssOut, "colors.generated.css");
+    });
+  });
+
+  test("never replaces one that is there", () => {
+    inProject("definitions: mine.dtg.yaml\n", () => {
+      assert.throws(() => writePlaceholderConfig(), /dtg\.yaml is already here/);
+      assert.equal(readFileSync("dtg.yaml", "utf8"), "definitions: mine.dtg.yaml\n");
+    });
+  });
+});
+
+describe("where the definition is", () => {
+  test("has no default: with nothing naming it, the error points at init", () => {
+    inProject(null, () => assert.throws(() => loadConfig({}), /no definition to read — run `dtg init`/));
+  });
+
+  test("dtg.yaml names a file, or a directory holding one", () => {
+    inProject(`definitions: ${DEFINITION}\n`, () => assert.equal(loadConfig({}).definition, DEFINITION));
+    inProject("definitions: design-tokens\n", () => assert.equal(loadConfig({}).definition, DEFINITION));
   });
 });

@@ -119,6 +119,7 @@ pnpm add -D @fifthrevision/dtg
 ## Commands
 
 ```
+dtg init                                           # write a placeholder dtg.yaml here
 dtg dev  [--port <n>]                              # browse and edit: ramps, deltaE, lineage, roles
          [--emit]                                  # also write the outputs when the definition file changes
 dtg emit [--live] [--css <path>]                   # generate the CSS
@@ -133,21 +134,25 @@ flag only, asked for per run: no setting in `dtg.yaml` turns it on, so
 opening a definition never overwrites the files an app ships.
 
 Definition resolution: `--definition <file>` if given; else the
-`definitions` entry in `dtg.yaml`; else discover `design-tokens/*.dtg.yaml`.
-The CSS output defaults to `design-tokens/tokens.generated.css`, beside the
-definitions. DTCG is written only when you name a path for it.
+`definitions` entry in `dtg.yaml`. There is no default place dtg looks:
+`dtg init` writes a `dtg.yaml` to fill in. The CSS output defaults to
+`tokens.generated.css` beside the definition. DTCG is written only when you
+name a path for it.
 
 ## Project layout
+
+The files can live wherever the project keeps its styles; `dtg.yaml` at the
+root says where. One arrangement:
 
 ```
 design-tokens/
   colors.dtg.yaml          # the definition (decisions)
   tokens.generated.css     # generated, committed, never hand-edited
   tokens.json              # generated DTCG, committed — opt in via dtg.yaml
-dtg.yaml                   # optional; only needed off-convention
+dtg.yaml                   # names the definition and the outputs
 ```
 
-`dtg.yaml`, when present:
+`dtg.yaml` for that arrangement:
 
 ```yaml
 definitions: design-tokens/ # a dir (globs *.dtg.yaml) or an explicit file

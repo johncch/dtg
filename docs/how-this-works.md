@@ -242,7 +242,8 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   explicit action — `dtg emit`, or the `--emit` flag on one `dev` run. No
   setting in `dtg.yaml` can turn it on: a config file must not be able to
   overwrite the files an app ships.
-- `config.ts` — `dtg.yaml` and convention discovery. Precedence is CLI flags,
+- `config.ts` — reading `dtg.yaml`, and `dtg init`'s placeholder for it. Where the
+  definition is has no default; the config or a flag names it. Precedence is CLI flags,
   then `dtg.yaml`, then defaults.
 - `resolve.ts` — the grammar lives here. YAML in, `ResolvedDefinition` out
   (systems with their steps, statics, sections, roles with a ref per mode,

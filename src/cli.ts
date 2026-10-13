@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-import { loadConfig } from "./config.js";
+import { loadConfig, writePlaceholderConfig } from "./config.js";
 import { startDevServer } from "./dev-server.js";
 import { writeOutputs } from "./outputs.js";
 import { resolveDefinition } from "./resolve.js";
@@ -24,7 +24,14 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-if (command === "dev" || command === "emit") {
+if (command === "init") {
+  try {
+    writePlaceholderConfig();
+  } catch (e) {
+    fail((e as Error).message);
+  }
+  console.log("wrote dtg.yaml — point `definitions` and `outputs` at your files");
+} else if (command === "dev" || command === "emit") {
   let config;
   try {
     config = loadConfig({
@@ -78,6 +85,7 @@ if (command === "dev" || command === "emit") {
   }
 } else {
   console.log(`usage:
+  init                                            write a placeholder dtg.yaml here
   emit [--live] [--css <path>] [--scss <path>] [--dtcg <path>]
                                                   write the configured outputs
                                                   --css-format <plain|tailwind>
@@ -94,14 +102,14 @@ if (command === "dev" || command === "emit") {
                                                   outputs, at startup and whenever the
                                                   definition file changes
 
-Definition resolution (both commands): --definition <file> if given; else the
-\`definitions\` entry in dtg.yaml; else discover design-tokens/*.dtg.yaml.
-\`outputs\` is a set: name nothing and you get CSS at
-design-tokens/tokens.generated.css; name any of css/scss/dtcg — in dtg.yaml or
+Definition resolution (emit and dev): --definition <file> if given; else the
+\`definitions\` entry in dtg.yaml. There is no default place: \`dtg init\` writes
+a dtg.yaml to fill in. \`outputs\` is a set: name nothing and you get CSS at
+tokens.generated.css beside the definition; name any of css/scss/dtcg — in dtg.yaml or
 as a flag — and you get exactly those. Every DTCG color is written in one
 space, because Figma holds one color profile per document.
 
---gamut <srgb|display-p3> (both commands; \`gamut\` in dtg.yaml; default
+--gamut <srgb|display-p3> (emit and dev; \`gamut\` in dtg.yaml; default
 display-p3) is the widest colors the project means to author. The picker
 stops at it and a color above it warns; nothing is altered.`);
   process.exit(command ? 1 : 0);
