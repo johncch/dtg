@@ -119,7 +119,7 @@ that composite, and nothing at the call site said which those were. Two
 alternatives were rejected on evidence. An explicit ground argument
 (`unflatten(sky/3, sky.base)`) is decorative, because the ground is
 determined by the ref. Recovering the layer by subtraction is numerically
-dead: quantisation amplifies by 1/α, so at 3% a ±0.5 rounding error becomes
+dead: quantization amplifies by 1/α, so at 3% a ±0.5 rounding error becomes
 ±16.7 per channel and `#001a28` comes back as `#111437`.
 
 `transparent(name 70)` survives for constants, where it is a genuine pure
@@ -140,11 +140,11 @@ raw hex, the comma diagnostic, determinism. One test pins a real regression —
 deriving a public name from the parsed float turned `3.5` into
 `3_5000000000000004`, and only Sunnyday's use of a fractional alpha caught it.
 
-### Colour tools in the dev server
+### Color tools in the dev server
 
 `/colors` is a picker: a space dropdown (OKLCH / OKLab / sRGB / P3), a 2D
-field parameterised by that space with the sRGB gamut boundary drawn as a
-contour, and a third-axis slider painted with the colours it selects. It
+field parameterized by that space with the sRGB gamut boundary drawn as a
+contour, and a third-axis slider painted with the colors it selects. It
 reports the expected ΔE of any gamut mapping, so "these look the same" can be
 distinguished from "this display is not showing P3" — with a primaries strip
 as the calibration.
@@ -164,13 +164,13 @@ coin toss.
 
 ### One seam, recorded
 
-`color-math` owns colour; algorithms own vocabulary. Measured before
+`color-math` owns color; algorithms own vocabulary. Measured before
 deciding: `overlay` is 23 lines of its own and contains no arithmetic,
 `ink-ramp` 53, `oklch-scale` 63, `blend` 171 of which roughly 70 is preview
 UI — against 351 lines of primitives. The architecture was already this; what
 was missing was the rule written down and one leak closed.
 
-The leak: formatting a translucent colour existed in four places (three
+The leak: formatting a translucent color existed in four places (three
 algorithms and the resolver) and they disagreed about whether alpha arrived
 as a percent or a fraction. Now `translucent()` in `color-math`, with a test
 asserting all three algorithms agree.
@@ -184,13 +184,13 @@ bare number. Configuration that changes syntax is worse than four small files.
 
 `parseColor` replaced `assertHex`, so a definition can anchor on
 `oklch(L C H)`, `oklab(L a b)`, `color(srgb ...)` or `color(display-p3 ...)`
-as well as hex. A colour keeps the space it was written in rather than being
-canonicalised, and a transform runs in the widest gamut its inputs use — one
+as well as hex. A color keeps the space it was written in rather than being
+canonicalized, and a transform runs in the widest gamut its inputs use — one
 P3 anchor widens the whole operation, because compositing it in sRGB would
 clip it before the arithmetic ran. Observable: P3 red at 60% over white lands
 on `#ff7070`, where sRGB red lands on `#ff6666`.
 
-Emit writes those colours twice. The sRGB pass gamut-maps them as before, then
+Emit writes those colors twice. The sRGB pass gamut-maps them as before, then
 an `@supports (color: color(display-p3 1 1 1))` block redefines the same
 custom properties at full strength — so consumers are untouched, and a browser
 that cannot parse `color()` keeps the fallback. Only values that actually
@@ -201,20 +201,20 @@ This retired the `emittable` flag on `BLEND_SPACES`, whose whole purpose was
 gating `display-p3` until this fallback existed. All four blend spaces are
 now selectable.
 
-DTCG values moved to the stable 2025.10 colour object — `{colorSpace,
+DTCG values moved to the stable 2025.10 color object — `{colorSpace,
 components, alpha?, hex}` — where a plain hex string is no longer valid.
 `components` is an RGB triple 0..1, which is exactly what Figma's plugin API
 takes, so a courier writes it in with no conversion.
 
-Every colour in one emit shares a single `colorSpace`, set by
+Every color in one emit shares a single `colorSpace`, set by
 `outputs.dtcg.colorSpace` or `--dtcg-color-space` (default `srgb`). That is
-not a simplification: Figma holds one colour profile per *document* and
+not a simplification: Figma holds one color profile per *document* and
 interprets every stored triple in it, so a value tagged with some other space
-would have to be converted on the way in, and choosing per colour by what fits
+would have to be converted on the way in, and choosing per color by what fits
 would make that per token. The space is a property of the destination file,
-not of the colour.
+not of the color.
 
-`hex` byte-encodes those same components rather than rendering the colour into
+`hex` byte-encodes those same components rather than rendering the color into
 sRGB. Figma's own hex field is document-relative — it shows the stored triple,
 whatever profile reads it — so a hex pinned to sRGB would disagree with what
 Figma displays. It is derived from the *rounded* components so a consumer that
@@ -222,10 +222,10 @@ byte-encodes them itself lands on the same value; `sky/3` sits exactly on 242.5
 and would otherwise round one way from the float and the other from the
 published component.
 
-The consequence to know: an in-gamut colour gets different components in each
+The consequence to know: an in-gamut color gets different components in each
 space — `#b30a0a` is `[0.702, 0.039, 0.039]` in srgb and
 `[0.643, 0.142, 0.104]` in display-p3, hex `#b30a0a` and `#a4241b`. The same
-colour; wider primaries need less of them.
+color; wider primaries need less of them.
 
 ### What Figma actually does with it
 
@@ -242,9 +242,9 @@ Tested against Figma Desktop through the figma-console MCP, 2026-08-21:
 - **`documentColorProfile` is readable but has no setter** — an agent cannot
   put a file into P3, a person must, and Figma's own dialog offers Convert
   (rewrite values, keep appearance) or Assign (keep values, change appearance).
-  Convert quantises everything to 8 bits.
+  Convert quantizes everything to 8 bits.
 - Figma's own sRGB→P3 conversion matches `color-math.ts` byte for byte on
-  every colour tried (`#b30a0a`→`#a4241b`, `#ff0000`→`#ea3323`,
+  every color tried (`#b30a0a`→`#a4241b`, `#ff0000`→`#ea3323`,
   `#ff3428`→`#eb4938`), and a P3 export re-imported into a converted document
   lands bit-identical to what Figma produced itself.
 

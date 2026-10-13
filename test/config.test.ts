@@ -67,3 +67,25 @@ describe("outputs is a set, not a bag of defaults", () => {
     });
   });
 });
+
+describe("gamut", () => {
+  test("defaults to display-p3", () => {
+    inProject(null, () => assert.equal(loadConfig({}).gamut, "display-p3"));
+  });
+
+  test("dtg.yaml sets it, and a flag wins over the file", () => {
+    inProject("gamut: srgb\n", () => {
+      assert.equal(loadConfig({}).gamut, "srgb");
+      assert.equal(loadConfig({ gamut: "display-p3" }).gamut, "display-p3");
+    });
+  });
+
+  test("an unknown gamut is an error naming where it came from", () => {
+    inProject("gamut: rec2020\n", () =>
+      assert.throws(() => loadConfig({}), /dtg\.yaml gamut: expected one of srgb, display-p3/),
+    );
+    inProject(null, () =>
+      assert.throws(() => loadConfig({ gamut: "wide" }), /--gamut: expected one of/),
+    );
+  });
+});

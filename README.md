@@ -31,12 +31,12 @@ plus a few anchors.
 ```yaml
 systems:
   sky:
-    algorithm: ink-ramp
-    params: { base: "#fafdff", ink: "#001a28" }
+    algorithm: tint
+    params: { base: "#fafdff", tint: "#001a28" }
 ```
 
-That system can produce any step on demand. `sky/3` is 3% ink over the
-base. `sky/3.5` is 3.5%. The selector is a coordinate on a continuous ramp,
+That system can produce any step on demand. `sky(3)` is 3% ink over the
+base. `sky(3.5)` is 3.5%. The selector is a coordinate on a continuous ramp,
 not a position in a list. A step exists because something references it,
 and disappears when nothing does.
 
@@ -119,11 +119,18 @@ pnpm add -D @fifthrevision/dtg
 ## Commands
 
 ```
-dtg dev  [--port <n>]                              # browse ramps, deltaE, lineage; live-reloads on save
+dtg dev  [--port <n>]                              # browse and edit: ramps, deltaE, lineage, roles
+         [--emit]                                  # also write the outputs when the definition file changes
 dtg emit [--live] [--css <path>]                   # generate the CSS
          [--css-format <plain|tailwind>]           # default plain
          [--dtcg <path>]                           # DTCG; written only when asked
 ```
+
+`dtg dev --emit` writes the same outputs `dtg emit` does, once at startup and
+again whenever the definition file changes — a save from the app or an edit
+by hand. They follow the file, never the unsaved edits on top of it. It is a
+flag only, asked for per run: no setting in `dtg.yaml` turns it on, so
+opening a definition never overwrites the files an app ships.
 
 Definition resolution: `--definition <file>` if given; else the
 `definitions` entry in `dtg.yaml`; else discover `design-tokens/*.dtg.yaml`.
@@ -158,6 +165,32 @@ outputs:
     format: tailwind # default: plain
 ```
 
+`gamut` is the widest colors the project means to author:
+
+```yaml
+gamut: srgb # default: display-p3
+```
+
+It is a ceiling, not a clamp. The picker in `dtg dev` stops at it, and a
+color above it — a constant or a system input — is reported as a warning.
+Nothing is altered: the color resolves and emits exactly as written until
+you change it. Under the default, only colors no P3 screen can show warn.
+
+`dev.backgrounds` is the page colors `dtg dev` can be looked at against, in
+the order its selector lists them:
+
+```yaml
+dev:
+  backgrounds:
+    paper: "#ffffff"
+    dusk: oklch(0.3 0.05 260)
+```
+
+The app's Settings page edits this list and writes each change to `dtg.yaml`
+at once, creating the file if the project has none. It is config, not the
+definition, so it is outside the app's unsaved changes and undo. Nothing
+under `dev` affects what is emitted.
+
 Precedence: CLI flags, then `dtg.yaml`, then convention defaults.
 
 ## The definition file
@@ -176,36 +209,36 @@ systems:
     body: "#313133"
     muted: "#828282"
   sky: # a system: an object with `algorithm`
-    algorithm: ink-ramp
-    params: { base: "#fafdff", ink: "#001a28" }
+    algorithm: tint
+    params: { base: "#fafdff", tint: "#001a28" }
   night:
-    algorithm: ink-ramp
-    params: { base: "#151c1f", ink: "#001a28" }
+    algorithm: tint
+    params: { base: "#151c1f", tint: "#001a28" }
   theme:
-    algorithm: oklch-scale
+    algorithm: scale
     params: { base: "#03a2e8" }
   shadow:
     algorithm: overlay
     params: { color: "#000000" }
 
 defaults: # shared params, per algorithm
-  oklch-scale:
+  scale:
     toward: ["#fafdff", "#001a28"]
     hueShift: 15
     stops: { "50": 0.05, "500": 1, "950": 0.05 }
 
 core: # any non-reserved top-level key is a section you name;
   surface: #   each section becomes a design-tool collection
-    canvas: [sky/3, night/0] # one ref per mode
-    card: [sky/0, night/4]
-    floating: [surface.card, night/6] # roles can point at roles
+    canvas: [sky(3), night(0)] # one ref per mode
+    card: [sky(0), night(4)]
+    floating: [surface.card, night(6)] # roles can point at roles
   state:
-    hover: [sky/3/ink, night/3.5/ink] # ink-ramp's uncomposited form
+    hover: [sky(3 tint), night(3.5 tint)] # tint's uncomposited form
     veil: [transparent(white 70), transparent(ink.body 40)]
   label:
     primary: # omit drops the segment: emits --label
       omit: true
-      refs: [night/0, sky/0]
+      refs: [night(0), sky(0)]
     secondary: [ink.muted, ink.muted] # emits --label-secondary
 ```
 
@@ -225,16 +258,18 @@ core: # any non-reserved top-level key is a section you name;
   system's own params. One copy of each number.
 - A **ref** is one of:
   - `paper`, or `ink.body` — a constant, by path
-  - `sky/3` — a step. Dots walk the systems tree; the slash hands off, and
-    everything after it belongs to the algorithm (`sky/3` is 3% ink,
-    `sky/3/ink` is that ink uncomposited, `theme/600` is a stop name,
-    `warm/red@6` is 6% of the way toward a blend colour)
+  - `sky(3)` — a step. Dots walk the systems tree; the parentheses hand
+    off, and everything inside them belongs to the algorithm, separated by
+    spaces (`sky(3)` is 3% ink,
+    `sky(3 tint)` is that ink uncomposited, `theme(600)` is a stop name,
+    `warm(red 6)` is 6% of the way toward a blend color)
   - `domain.role` — another decision in the same mode
   - `transparent(paper 70)` — a constant at an opacity. Constants only:
     they have no recipe, so this is a plain function of a color and an
     amount. A system's uncomposited form is a selector instead, because it
     re-runs the recipe rather than transforming the output.
-- One meaning per separator: **`.` navigates, `/` hands off.**
+- One meaning each: **`.` navigates, parentheses hand off.** Inside them,
+  spaces separate — never commas, which end an item in a `[ ]` list.
 - **A raw color is legal only inside `systems`.** A color literal is
   `#rgb`, `#rrggbb`, `oklch(L C H)`, `oklab(L a b)`, `color(srgb r g b)` or
   `color(display-p3 r g b)`, each with an optional `/ alpha`. A color keeps
@@ -242,6 +277,13 @@ core: # any non-reserved top-level key is a section you name;
   on the way in — the transform runs in the widest space its inputs use.
 - A **role** is a list of refs, one per mode, or `{ refs, alias?, omit? }`
   when its public name diverges. This is the complete role grammar.
+- **`modes`** is a list of names, or a map when a mode needs more:
+  `dark-hc: { extends: dark, scheme: dark }`. A mode that extends another
+  says only what differs. A role's list must reach the last mode that
+  extends nothing; modes after it may be left off, and `~` holds the place
+  of an extending mode that says nothing. A silent mode takes its parent's
+  ref, resolved again in its own mode, so overriding one role moves every
+  role that points at it.
 - **`changelog`** is an optional list of `<date>: <note>` entries, passed
   through to the DTCG output untouched. It is prose for whoever replays the
   system into a design tool — "renamed `shadow.2` to `shadow.3`, rename in
@@ -269,25 +311,25 @@ historical ones, such as shipped names that predate the definition.
 
 Each built-in algorithm has one complete behavior.
 
-- **`ink-ramp`** (`base`, `ink`): ink composited over a base. The selector
-  is the ink's alpha percent, so the token name is the recipe — `sky/15` is
-  15% ink. Adding `/ink` gives the same ink at the same alpha without the
-  base, for a value that must sit over an unknown surface.
-- **`oklch-scale`** (`base`, `toward`, `hueShift`, `stops`): a chromatic
+- **`tint`** (`base`, `tint`): a tint composited over a base. The selector
+  is the tint's alpha percent, so the token name is the recipe — `sky(15)` is
+  15% tint. Adding `tint` — `sky(15 tint)` — gives the tint alone at the same
+  alpha, without the base, for a value that must sit over an unknown surface.
+- **`scale`** (`base`, `toward`, `hueShift`, `stops`): a chromatic
   scale blended from the base in OKLCH. Stops below 500 blend toward
   `toward[0]`, above toward `toward[1]`; a stop's value is the fraction of
   base remaining. `hueShift` 0 locks every stop to the base hue, 100
   follows the natural interpolated path. Declared stops emit in full, as a
   public palette.
-- **`blend`** (`base`, `toward`, `space`): one base colour and several named
-  colours to blend toward. The selector carries both coordinates —
-  `warm/red@6` is six percent of the way from the base toward red,
-  `warm/red@100` is red itself — so one palette serves tints and full
+- **`blend`** (`base`, `toward`, `space`): one base color and several named
+  colors to blend toward. The selector carries both coordinates —
+  `warm(red 6)` is six percent of the way from the base toward red,
+  `warm(red 100)` is red itself — so one palette serves tints and full
   strength. This is CSS's own `color-mix(in <space>, red 6%, base)`, and
   `space` takes CSS's interpolation-space names: `srgb` (the default, and
   what browsers and design tools do), `srgb-linear`, `oklab`,
-  `display-p3`. The same two colours land somewhere different in each, so
-  the space is a decision, not a detail. `/alpha` emits the toward colour
+  `display-p3`. The same two colors land somewhere different in each, so
+  the space is a decision, not a detail. Adding `alpha` emits the toward color
   carrying the weight as opacity for the browser to blend at render time —
   refused unless the system blends in `srgb`, since that is what the
   browser will do.
@@ -300,7 +342,7 @@ used. A shadow, for example, uses `overlay` because overlays stay
 translucent.
 
 An algorithm that composites can also publish the layer *before* it meets
-the ground — `sky/3/ink`, `warm/red@6/top`. That is a selector rather than a
+the ground — `sky(3 tint)`, `warm(red 6 top)`. That is a selector rather than a
 core function, because it re-runs the recipe rather than transforming the
 output: the ink and its alpha cannot be recovered from a flattened hex, and
 at low alpha the arithmetic is hopeless anyway. Each algorithm names the
@@ -348,4 +390,5 @@ separate concern and not an emit target.
   definition comment-preserving, the watcher re-resolves. The file stays
   the single source of truth and the browser is just another editor of it.
 - Custom algorithm loading from a project path. The resolver API already
-  accepts a registry; the CLI does not load one yet.
+  accepts a registry; the CLI does not load one yet. Designed in
+  `docs/project-algorithms.md`.

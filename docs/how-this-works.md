@@ -28,7 +28,26 @@ Canonical. The README carries the user-facing version of the same rules.
 
 - `dtg: 1` is the grammar version. The resolver assumes 1 with a warning when
   absent, and errors on versions it does not understand.
-- `modes: [light, dark]` sets the order role ref tuples are read in.
+- `modes: [light, dark]` sets the order role ref tuples are read in. The
+  longform is a map, `light:` / `dark-hc: { extends: dark, scheme: dark }`,
+  both keys optional. A mode with no `extends` is a **root** and names every
+  color. A mode that extends another says only what differs: a role tuple
+  must reach the last root mode, modes after it may be left off, and `~`
+  holds the place of an extending mode that says nothing. A silent mode takes
+  its parent's *ref*, resolved again in its own mode, so overriding one role
+  moves every role pointing at it. A parent is declared above its child. A
+  mode name cannot be a number: a map hands number-like keys back sorted, and
+  mode order decides which ref lands in which mode. `scheme` (`light` or
+  `dark`) is declared, never read off the name, and comes along through
+  `extends`.
+- How `extends` reaches each format. Nested CSS selects a mode's block for
+  the mode and everything extending it (`.dark, .dark-hc { … }`), then the
+  child's block holds only what it declared; `scheme` becomes
+  `color-scheme` in that block. Flat CSS and SCSS have no cascade, so they
+  leave out a role only when its value is its parent's by construction — an
+  inherited role whose target moved is written. DTCG fills every mode and
+  records `inherits: { dark-hc: dark }`. What applies `.dark` to an element
+  is the app's business, not the definition's.
 - `systems` is a tree of three node kinds, discriminated without extra
   syntax: a **string** is a constant, an object with **`algorithm`** is a
   system, any other object is a **group**. Groups nest, so a constant's
@@ -49,90 +68,123 @@ Canonical. The README carries the user-facing version of the same rules.
   flags, no options, no other object form.
 - A **ref** is one of:
   - `paper`, `ink.body` — a constant by path
-  - `system/selector` — dots walk the tree, the slash hands off, and
-    everything after it belongs to the algorithm (`sky/3.5` is 3.5% ink,
-    `sky/3/ink` that ink uncomposited, `theme/600` a stop name,
-    `warm/red@6` a compose anchor at 6%)
+  - `system(selector)` — dots walk the tree, the parentheses hand off, and
+    everything inside them belongs to the algorithm, its parts separated by
+    spaces (`sky(3.5)` is 3.5% ink,
+    `sky(3 tint)` that ink uncomposited, `theme(600)` a stop name,
+    `warm(red 6)` a compose anchor at 6%)
   - `domain.role` — another decision in the same mode
-  - `transparent(paper 70)` — a constant at an opacity, constants only
-- **One meaning per separator: `.` navigates, `/` hands off.** A constant
+  - `transparent(paper 70)` — a constant at an opacity, constants only.
+    It is written like a system and read by the same parser, so no system
+    can be named `transparent`
+- **One meaning each: `.` navigates, parentheses hand off.** Inside them,
+  spaces separate, as in CSS's own color functions — a comma would end the
+  item in a `[ ]` list and force quotes around every ref. A constant
   path and a role path are the same shape, so the two namespaces must not
   collide; the resolver errors if they do.
 - **Raw hex is legal only inside `systems`.** The semantic tier points and
   derives; every color traces back to an anchor. This is the core invariant:
   a literal is a value that has forgotten its reason.
 
-Two removed spellings are still detected and error with a pointer, rather
-than being silently ignored: a top-level `emit:` block (replaced by inline
-`alias`/`omit`) and `emits:` on a system (renamed to `alias`). Keep that
-pattern for any future grammar change.
+Removed spellings are still detected and error with a pointer, rather than
+being silently ignored: a top-level `emit:` block (replaced by inline
+`alias`/`omit`), `emits:` on a system (renamed to `alias`), the algorithm
+names `ink-ramp` and `oklch-scale` (now `tint` and `scale`), and the slash
+spelling of a ref (`sky/3/ink`, now `sky(3 tint)`), where the error spells out
+the replacement. Keep that pattern for any future grammar change.
 
 ## Algorithms
 
 Three built-ins, each *total*, with no optional-parameter modes.
 
-- **`ink-ramp`** (`base`, `ink`, both required): ink composited over base;
-  the selector is the ink's alpha percent. The token name doubles as the
+- **`tint`** (`base`, `tint`, both required): a tint composited over base;
+  the selector is the tint's alpha percent. The token name doubles as the
   recipe, so `light-15` is 15% ink. Steps are opaque surface colors, and the
   ramp also backs `transparent()`.
-- **`oklch-scale`** (`base`, `toward: [light, dark]`, `hueShift`, `stops`):
+- **`scale`** (`base`, `toward: [light, dark]`, `hueShift`, `stops`):
   blends from the 500 base in OKLCH. Stop names are numeric; below 500 blends
   toward `toward[0]`, above toward `toward[1]`, and a stop's value is the
   fraction of base remaining (1 being the base itself). `hueShift` 0 locks
   every stop to the base hue, 100 follows the natural interpolated hue path.
 - **`overlay`** (`color`): color at selector % opacity, never flattened.
-  Shadows and scrims. This is why `shadow` is not a baseless ink-ramp: what
+  Shadows and scrims. This is why `shadow` is not a baseless tint: what
   kind of value a system produces is the **algorithm's nature**, declared
   once in the systems block, never a per-role flag.
 
-### The seam: colour-math owns colour, algorithms own vocabulary
+### The seam: color-math owns color, algorithms own vocabulary
 
-`color-math.ts` holds every arithmetic operation and every colour format.
-An algorithm holds a selector grammar, a public-name mapping, an ordering, a
-set of param names, its error messages, and a description. Nothing else.
+`color-math.ts` holds every arithmetic operation and every color format.
+An algorithm declares its params, declares what its selector is made of,
+turns a selector into a color, and describes itself. Nothing else.
 
-This is why the built-ins look redundant and are not. `ink-ramp` with one
-ink, `blend` with one colour to blend toward, and `overlay` all produce
+The algorithm chooses the vocabulary — which fields a selector has, what
+they are called, which forms it offers. How a selector is *written* is
+dtg's, in `selector.ts`, and so are the public name, the ordering and the
+error messages that follow from it. This was reopened on purpose on
+2026-10-12: algorithms used to parse their own selector text, which left
+dtg able to read a ref but not to explain, draw or write one.
+
+This is why the built-ins look redundant and are not. `tint` with one
+ink, `blend` with one color to blend toward, and `overlay` all produce
 byte-identical values — `rgba(0, 26, 40, 0.03)` for the same input, verified
 in the tests. They differ in what a *reader* sees:
 
-    ink-ramp  sky/3          emits --color-light-3
-    blend     sky/ink@3      emits --color-light-ink-3
-    overlay   shadow/3       never flattens, and says so declaratively
+    tint      sky(3)          emits --color-light-3
+    blend     sky(ink 3)      emits --color-light-ink-3
+    overlay   shadow(3)       never flattens, and says so declaratively
 
-`--color-light-15` only reads as "15% ink" because ink-ramp gets to define a
-bare-number selector. Folding these into one configurable algorithm would put
-selector grammar behind a param — configuration that changes syntax, which is
-harder to read than four separately-named files of twenty to sixty lines.
+`--color-light-15` only reads as "15% ink" because tint declares a
+selector of one number. Folding these into one configurable algorithm would
+put the selector's shape behind a param — configuration that changes syntax,
+which is harder to read than four separately-named files of twenty to sixty
+lines.
 
 The failure mode to watch is the opposite one: arithmetic drifting *up* into
 the algorithms. It has happened twice. `publicStep` was derived in three
 places and one copy silently emitted a broken Figma alias. Formatting a
-translucent colour was implemented four times — three algorithms and the
+translucent color was implemented four times — three algorithms and the
 resolver — and they disagreed about whether alpha arrived as a percent or a
 fraction. Both are now single functions in `color-math.ts`. If you find
-yourself writing colour arithmetic or a colour string inside
+yourself writing color arithmetic or a color string inside
 `algorithms/`, it belongs one level down.
 
 ### The algorithm contract
 
-`src/contract.ts` defines `AlgorithmImpl`:
+`src/contract.ts` defines `Algorithm`:
 
+- `name` is what a system's `algorithm:` names.
 - `description` is one short paragraph, rendered in the browsing UI.
-- `declaredSelectors(params)` returns the selectors this system publishes
-  regardless of demand (a public palette), or `null` for demand-driven
-  systems whose steps exist only because refs ask for them. Call
-  `assertKnownParams` from here so param typos fail once per system rather
-  than silently.
-- `resolveStep(params, selector)` returns `{ css, opaque }` and throws with a
-  human-readable message on a bad selector or bad params.
-- `publicStep` and `stepOrder` are optional. The core needs a name fragment
-  and a total order for every selector; absent these it assumes a decimal
-  coordinate, which is only true of the ramps. An algorithm with any other
-  selector shape supplies both.
+- `params` declares each param's kind: a color, a number, a choice, or a
+  list or map of those. dtg checks a system's params against it once —
+  unknown, missing and malformed params all fail there — and hands every
+  hook the parsed result: colors as colors, defaults filled in. It is also
+  how dtg knows which params are colors, for the gamut warnings and for the
+  browsing UI; the resolver adds whether each came from the system's own
+  `params` or the shared `defaults` block.
+- `selector(params)` returns the selector's shape: its `fields` in written
+  order (a number in a range, or a choice among options the params supply)
+  and the `forms` it offers.
+- `emit` is optional: `"all"` writes out every option of a system's
+  selector regardless of demand (a public palette); `"demanded"`, the
+  default, writes only the steps refs ask for. It is neither a param nor
+  part of the selector: it changes no color, and dtg reads it to decide
+  what exists. What can be *addressed* is a separate matter and is the
+  selector's — a list of stops, or any number in a range.
+- `resolve(selector, params)` returns a color. The selector arrives parsed,
+  one value per field plus `form`. It throws with a human-readable message
+  on a selector the system cannot produce.
+- `workingGamut(params)` is optional: the gamut the arithmetic runs in, when
+  it has a fixed one.
+- `preview` is optional and holds `shape`: a ramp, where neighbor deltas
+  mean something, or a palette, where they do not.
+
+There are no naming or ordering hooks. A step's public name is its fields
+joined by `-`, then the form (`sky(3.5 tint)` emits as `3_5-tint`), and steps sort
+field by field with the plain value before its forms. Add a hook when an
+algorithm needs something else, not before.
 
 An algorithm that composites publishes its layer as a further selector —
-`sky/3/ink`, `warm/red@6/top`. That is not a core function, and was
+`sky(3 tint)`, `warm(red 6 top)`. That is not a core function, and was
 deliberately not made one: `X(ref)` would promise it works on any color
 while only working on algorithms that composite, with nothing at the call
 site to say which. It cannot be a transformation of the output either,
@@ -142,7 +194,8 @@ compositing.
 
 The registry is open. `resolveDefinition(yaml, extraAlgorithms)` merges
 project algorithms over built-ins, so a project can bring its own generation
-methods, or shadow a built-in by name.
+methods, or shadow a built-in by name. Nothing loads one yet; the design for
+doing so is in `project-algorithms.md`.
 
 ## Rules the design settled (and why)
 
@@ -159,15 +212,15 @@ methods, or shadow a built-in by name.
 4. **No sugar in the role grammar.** `translucent: true` (auto-twin) was
    designed and then deliberately killed: uniform `name: [refs]` beats saving
    two lines. Twins are declared as sibling roles
-   (`primary-translucent: [sky/15/ink, ...]`), so twinship stays
+   (`primary-translucent: [sky(15 tint), ...]`), so twinship stays
    recoverable by inspection.
 5. **Overrides pin flattened hexes only.** The uncomposited form always
    follows pure ink math, and the resolver warns when the two overlap. Hand-tunes are
    explicit, visible, and survive regeneration. Exceptions either get
    promoted into the system later or stay flagged, never silent.
-6. **Demand-driven primitives.** An ink-ramp step exists because a ref
+6. **Demand-driven primitives.** A tint step exists because a ref
    demands it; there is no maintained step list. Declared palettes
-   (oklch-scale stops) are the exception, emitting in full as public
+   (scale stops) are the exception, emitting in full as public
    utilities. `transparent()` demands only the unflattened form, not the
    opaque step.
 7. **Repetition is a promotion signal.** A derivation appearing twice is a
@@ -182,18 +235,52 @@ ESM TypeScript in `src/`, with explicit `.js` extensions on relative imports
 Consumers run `dist/`, so rebuild after edits or they see stale code.
 
 - `cli.ts` — command dispatch and flag parsing for `dev` and `emit`.
+- `outputs.ts` — writing the configured outputs for a resolved definition.
+  `emit` calls it once, or on every change with `--live`; `dev --emit` calls
+  it whenever the definition file changes. Outputs follow the file on disk,
+  never the working copy's unsaved edits. Writing outputs is always an
+  explicit action — `dtg emit`, or the `--emit` flag on one `dev` run. No
+  setting in `dtg.yaml` can turn it on: a config file must not be able to
+  overwrite the files an app ships.
 - `config.ts` — `dtg.yaml` and convention discovery. Precedence is CLI flags,
   then `dtg.yaml`, then defaults.
 - `resolve.ts` — the grammar lives here. YAML in, `ResolvedDefinition` out
   (systems with their steps, statics, sections, roles with a ref per mode,
   plus accumulated warnings). Public-name resolution is here too:
   `aliasedName`, `publicSystemName`, `publicRoleName`.
-- `contract.ts` — the `AlgorithmImpl` interface and `assertKnownParams`.
+- `contract.ts` — the `Algorithm` interface.
+- `params.ts` — a system's params checked against what its algorithm
+  declares, and parsed.
+- `selector.ts` — how a selector is written, and the public name and
+  ordering that follow from it. The only file that knows the spelling.
 - `algorithms/` — the three built-ins.
 - `color-math.ts` — hex parsing, compositing, and the OKLCH and OKLAB math.
 - `emit.ts` — the CSS and DTCG emitters.
-- `render.ts`, `dev-server.ts`, `watch.ts` — the browsing UI, its HTTP and SSE
-  server, and definition file watching.
+- `dev-server.ts`, `watch.ts` — the HTTP and SSE server and definition file
+  watching. The server holds no markup: it serves one HTML shell, the built
+  browser bundle, and `/api/snapshot`.
+- `edit.ts` — writing one value into the definition's text: an authored
+  color, or the ref a role holds for a mode. The
+  new value is spliced over the old one's exact span, so an edit is the
+  one-line diff a person would have typed; re-serialising the YAML restyles
+  the whole file. A ref edit can also carry `~`, putting a mode back to
+  inheriting; a ref for a mode past the end of the role's list is added to
+  it, with `~` holding any modes in between.
+- `dev-settings.ts` — what a project keeps under `dev` in `dtg.yaml` for the
+  app's own use: today the backgrounds to view against. The dev server reads
+  it, watches it, and writes it straight to the file when the Settings page
+  changes it. It is config, not the definition, so it stays out of the
+  working copy and its undo, and `emit` never reads it.
+- `working-copy.ts` — the file's text plus the edits not yet written to it.
+  An edit names a color, not a line, so unsaved edits survive the file
+  changing underneath them. The dev server holds one working copy, draws the
+  app from it, and writes the file only when asked to save.
+- `snapshot.ts` — the definition as plain JSON for the browser. Anything that
+  needs an algorithm or an alias is worked out here; colors travel as exact
+  values and the browser formats them.
+- `ui/` (outside `src/`) — the browsing UI, a React app bundled by Vite into
+  `dist/ui/`. It imports `color-math.ts` directly, so the pages and the
+  emitters run the same arithmetic.
 
 Errors accumulate rather than throwing on the first problem, so one resolve
 reports everything wrong with a definition. Keep that.
@@ -270,7 +357,7 @@ Anything outside those three is a real defect. Promoting this check into a
 - [ ] Playground (parked). The tool's edge over a picker is that play happens
       in parameter and ref space rather than color space. Candidates: a ΔE
       and contrast comparator that accepts refs rather than hexes (compare
-      `sky/8` against `night/8`, asking whether the modes step at the same
+      `sky(8)` against `night(8)`, asking whether the modes step at the same
       rate); generated candidate ramps from structured randomization of
       algorithm params, rendered beside the current system with delta rows
       aligned; more generally, ephemeral browser-only systems with full

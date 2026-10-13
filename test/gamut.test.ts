@@ -1,6 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { algorithmFor } from "../dist/resolve.js";
+import { step } from "./step.ts";
 import {
   encodeIn,
   formatIn,
@@ -17,7 +18,7 @@ import {
 } from "../dist/color-math.js";
 
 describe("gamut", () => {
-  test("every sRGB colour is in the sRGB gamut and in P3", () => {
+  test("every sRGB color is in the sRGB gamut and in P3", () => {
     for (const hex of ["#000000", "#ffffff", "#b30a0a", "#49beff", "#c9ff55"]) {
       const lab = hexToOklab(hex);
       assert.ok(inGamut(lab, "srgb"), `${hex} srgb`);
@@ -25,7 +26,7 @@ describe("gamut", () => {
     }
   });
 
-  test("P3 holds colours sRGB cannot", () => {
+  test("P3 holds colors sRGB cannot", () => {
     // hue 200 at mid lightness: sRGB tops out well below P3
     const lab = oklchToOklab([0.6, 0.13, 200]);
     assert.equal(inGamut(lab, "srgb"), false);
@@ -51,7 +52,7 @@ describe("gamut", () => {
     assert.ok(inGamut(mapped, "srgb"), "result fits");
   });
 
-  test("an in-gamut colour is returned untouched", () => {
+  test("an in-gamut color is returned untouched", () => {
     const lab = hexToOklab("#6192bb");
     assert.deepEqual(gamutMap(lab, "srgb"), lab);
   });
@@ -91,31 +92,30 @@ describe("translucent", () => {
   test("every algorithm that emits a translucent value agrees", () => {
     // These three used to format it independently and disagreed about
     // whether alpha arrived as a percent or a fraction.
-    const ink = algorithmFor("ink-ramp")!;
+    const ink = algorithmFor("tint")!;
     const blend = algorithmFor("blend")!;
     const overlay = algorithmFor("overlay")!;
     const expected = "rgba(0, 26, 40, 0.03)";
     assert.equal(
-      formatColor(ink.resolveStep({ base: "#fafdff", ink: "#001a28" }, "3/ink").color, "srgb"),
+      formatColor(step(ink, { base: "#fafdff", tint: "#001a28" }, "3 tint").color, "srgb"),
       expected,
     );
     assert.equal(
-      formatColor(blend.resolveStep(
-        { base: "#fafdff", toward: { ink: "#001a28" } },
-        "ink@3/alpha",
+      formatColor(step(blend, { base: "#fafdff", toward: { ink: "#001a28" } },
+        "ink 3 alpha",
       ).color, "srgb"),
       expected,
     );
     assert.equal(
-      formatColor(overlay.resolveStep({ color: "#001a28" }, "3").color, "srgb"),
+      formatColor(step(overlay, { color: "#001a28" }, "3").color, "srgb"),
       expected,
     );
   });
 });
 
 describe("gamut round trips", () => {
-  test("sRGB -> display-p3 -> sRGB returns the original, every colour", () => {
-    // An in-gamut colour loses nothing going wide and coming back; if this
+  test("sRGB -> display-p3 -> sRGB returns the original, every color", () => {
+    // An in-gamut color loses nothing going wide and coming back; if this
     // drifts, the primaries or the transfer function are wrong.
     let checked = 0;
     for (let r = 0; r < 256; r += 17)
@@ -130,12 +130,12 @@ describe("gamut round trips", () => {
     assert.ok(checked > 3000);
   });
 
-  test("a display-p3 colour emits its own coordinates untouched", () => {
+  test("a display-p3 color emits its own coordinates untouched", () => {
     const css = "color(display-p3 0.9123 0.0456 0.0789)";
     assert.equal(formatColor(parseColor(css, "t"), "display-p3"), css);
   });
 
-  test("a wide colour survives sRGB only as an approximation", () => {
+  test("a wide color survives sRGB only as an approximation", () => {
     const wide = parseColor("color(display-p3 1 0 0)", "t");
     const viaSrgb = parseColor(formatColor(wide, "srgb"), "t");
     assert.notEqual(

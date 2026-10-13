@@ -48,7 +48,7 @@ describe("parseColor", () => {
     assert.equal(srgb("#f80"), "#ff8800");
   });
 
-  test("a colour keeps the space it was authored in", () => {
+  test("a color keeps the space it was authored in", () => {
     assert.equal(parseColor("#ff8000", "ctx").space, "srgb");
     assert.equal(parseColor("oklch(0.7 0.15 40)", "ctx").space, "oklab");
     assert.equal(parseColor("oklab(0.7 0.1 0.1)", "ctx").space, "oklab");
@@ -56,7 +56,7 @@ describe("parseColor", () => {
     assert.equal(parseColor("color(srgb 1 0 0)", "ctx").space, "srgb");
   });
 
-  test("color(srgb 1 .5 0) and its hex are the same colour", () => {
+  test("color(srgb 1 .5 0) and its hex are the same color", () => {
     assert.equal(srgb("color(srgb 1 0.5 0)"), "#ff8000");
   });
 
@@ -66,7 +66,7 @@ describe("parseColor", () => {
     assert.equal(formatColor(p3, "display-p3"), "color(display-p3 1 0 0)");
   });
 
-  test("oklch and oklab name the same colour", () => {
+  test("oklch and oklab name the same color", () => {
     const a = toOklab(parseColor("oklch(0.7 0.1 90)", "ctx"));
     const b = toOklab(parseColor("oklab(0.7 0 0.1)", "ctx"));
     a.forEach((c, i) => assert.ok(Math.abs(c - b[i]) < 1e-12));

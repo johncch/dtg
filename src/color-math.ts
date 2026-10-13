@@ -3,7 +3,7 @@ export type Rgb = [number, number, number];
 const COLOR_FORMS =
   "#rgb, #rrggbb, oklch(L C H), oklab(L a b), color(srgb r g b) or color(display-p3 r g b), each with an optional `/ alpha`";
 
-/** The deliberately narrower colour form used by flattened step overrides. */
+/** The deliberately narrower color form used by flattened step overrides. */
 export function assertHex(value: unknown, context: string): string {
   if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value)) {
     throw new Error(
@@ -14,9 +14,9 @@ export function assertHex(value: unknown, context: string): string {
 }
 
 /**
- * A colour literal from a definition file. Authoring is not limited to sRGB:
- * `oklch()` reaches colours no hex can name, and `color(display-p3 ...)` names
- * a colour in the gamut it was picked in. The parsed colour keeps that space —
+ * A color literal from a definition file. Authoring is not limited to sRGB:
+ * `oklch()` reaches colors no hex can name, and `color(display-p3 ...)` names
+ * a color in the gamut it was picked in. The parsed color keeps that space —
  * see Color — so nothing is clipped on the way in.
  */
 export function parseColor(value: unknown, context: string): Color {
@@ -151,14 +151,14 @@ export function rgbToHex(rgb: Rgb): string {
   );
 }
 
-/** Channels round half-up. No snapping: a colour formatted in its own space
+/** Channels round half-up. No snapping: a color formatted in its own space
  * never round-trips, so there is no float noise to snap away. */
 export function roundChannel(c: number): number {
   return Math.round(c);
 }
 
 /**
- * A colour carrying an alpha, for a value that will be composited by
+ * A color carrying an alpha, for a value that will be composited by
  * something else. One implementation because four had already drifted —
  * three algorithms and the resolver each formatted this, and they disagreed
  * about whether the alpha arrived as a percent or a fraction.
@@ -274,8 +274,8 @@ export function oklabDeltaE(hexA: string, hexB: string): number {
 }
 
 // ---- gamuts -------------------------------------------------------------
-// A gamut is which colours exist; OKLab is unbounded and holds any of them.
-// Everything below is about landing an OKLab colour in a real display space.
+// A gamut is which colors exist; OKLab is unbounded and holds any of them.
+// Everything below is about landing an OKLab color in a real display space.
 
 export type Gamut = "srgb" | "display-p3";
 
@@ -357,7 +357,7 @@ export function oklchToOklab([L, C, h]: Oklch): Oklab {
   return [L, C * Math.cos(r), C * Math.sin(r)];
 }
 
-/** Does this colour exist in that display space at all? */
+/** Does this color exist in that display space at all? */
 export function inGamut(lab: Oklab, gamut: Gamut, epsilon = 1e-6): boolean {
   return oklabToLinear(lab, gamut).every(
     (c) => c >= -epsilon && c <= 1 + epsilon,
@@ -366,7 +366,7 @@ export function inGamut(lab: Oklab, gamut: Gamut, epsilon = 1e-6): boolean {
 
 /**
  * CSS Color 4 gamut mapping: hold lightness and hue, reduce chroma until the
- * colour fits. Naive per-channel clipping shifts hue instead, which is why
+ * color fits. Naive per-channel clipping shifts hue instead, which is why
  * an over-saturated red clips toward orange.
  */
 export function gamutMap(lab: Oklab, gamut: Gamut): Oklab {
@@ -468,7 +468,7 @@ export const BLEND_SPACES: {
   },
 ];
 
-/** Mix two colours by `t` of A over B, in the named space. */
+/** Mix two colors by `t` of A over B, in the named space. */
 export function mixIn(a: Color, b: Color, t: number, space: BlendSpace): Color {
   const lerp = (x: number, y: number) => t * x + (1 - t) * y;
 
@@ -498,9 +498,9 @@ export function mixIn(a: Color, b: Color, t: number, space: BlendSpace): Color {
 // ---- Color: tagged with the space it was authored in ---------------------
 
 /**
- * A colour keeps the space it arrived in and converts only when something
- * asks for a different one. Canonicalising everything up front looks tidier
- * but manufactures round trips: an sRGB colour emitted as sRGB would convert
+ * A color keeps the space it arrived in and converts only when something
+ * asks for a different one. Canonicalizing everything up front looks tidier
+ * but manufactures round trips: an sRGB color emitted as sRGB would convert
  * out and back for no reason, and a value landing exactly on a half-way
  * boundary — #ff0000 at 10% over white is exactly 229.5 — then rounds
  * whichever way the float noise fell.
@@ -545,7 +545,7 @@ export function toOklab(color: Color): Oklab {
   return encodedToOklab(color.coords, color.space);
 }
 
-/** Converts if the space differs; returns the colour untouched if it does not. */
+/** Converts if the space differs; returns the color untouched if it does not. */
 export function convert(color: Color, space: ColorSpace): Color {
   if (color.space === space) return color;
   const lab = toOklab(color);
@@ -554,14 +554,14 @@ export function convert(color: Color, space: ColorSpace): Color {
   return { space, coords, alpha: color.alpha };
 }
 
-/** True when the target has to reduce chroma to hold this colour. */
+/** True when the target has to reduce chroma to hold this color. */
 export function needsMapping(color: Color, gamut: Gamut): boolean {
   if (color.space === gamut) return false;
   return !inGamut(toOklab(color), gamut);
 }
 
 /**
- * Render a colour for one target. A colour already in the target space is
+ * Render a color for one target. A color already in the target space is
  * formatted straight from its own coordinates — no conversion, so no drift.
  */
 export function formatColor(color: Color, gamut: Gamut): string {
@@ -583,7 +583,7 @@ export function formatColor(color: Color, gamut: Gamut): string {
 
 /**
  * Encoded channels 0..255 in a gamut — the form the ramp arithmetic works in.
- * A colour already in that gamut comes back at its authored bytes exactly.
+ * A color already in that gamut comes back at its authored bytes exactly.
  */
 export function channelsIn(color: Color, gamut: Gamut): Rgb {
   return convert(color, gamut).coords.map((c) => c * 255) as Rgb;
@@ -591,9 +591,22 @@ export function channelsIn(color: Color, gamut: Gamut): Rgb {
 
 /**
  * The gamut a transform should work in: the widest any input was authored in.
- * Compositing a P3 colour in sRGB would clip it before the arithmetic ran,
+ * Compositing a P3 color in sRGB would clip it before the arithmetic ran,
  * so one wide input widens the whole operation.
  */
 export function widestGamut(colors: Color[]): Gamut {
   return colors.some((c) => c.space === "display-p3") ? "display-p3" : "srgb";
+}
+
+/**
+ * A color as a definition writes it: hex when sRGB holds it, because hex is
+ * what people read and a hex step is far below what an eye can tell apart;
+ * `oklch()` when it does not, or when it carries an alpha hex has no place for.
+ */
+export function formatAuthored(lab: Oklab, alpha = 1): string {
+  if (alpha >= 1 && inGamut(lab, "srgb")) return formatIn(lab, "srgb");
+  const [L, C, H] = oklabToOklch(lab);
+  const short = (n: number, digits: number) => String(Number(n.toFixed(digits)));
+  const body = `${short(L, 4)} ${short(C, 4)} ${short(C < 5e-5 ? 0 : H, 2)}`;
+  return alpha >= 1 ? `oklch(${body})` : `oklch(${body} / ${short(alpha, 4)})`;
 }

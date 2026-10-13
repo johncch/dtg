@@ -14,12 +14,12 @@ systems:
     alias: warm
     rose: "#ff0000"
   sky:
-    algorithm: ink-ramp
+    algorithm: tint
     alias: light
-    params: { base: "#fafdff", ink: "#001a28" }
+    params: { base: "#fafdff", tint: "#001a28" }
 roles:
   surface:
-    canvas: [sky/3, sky/8]
+    canvas: [sky(3), sky(8)]
     flat: [paper, reds.rose]
 `;
 const resolved = resolveDefinition(SRC);
@@ -29,7 +29,7 @@ describe("css", () => {
   test("plain puts primitives in :root; tailwind wraps them in @theme", () => {
     const plain = emitCss(resolved, "plain");
     const tw = emitCss(resolved, "tailwind");
-    assert.ok(plain.includes(":root {\n  /* sky (ink-ramp) */"));
+    assert.ok(plain.includes(":root {\n  /* sky (tint) */"));
     assert.ok(!plain.includes("@theme"));
     assert.ok(tw.includes("@theme {"));
     assert.ok(tw.includes("@theme inline {"));
@@ -58,7 +58,7 @@ describe("dtcg", () => {
     // a demand-driven step's is who demands it, so renumbering is safe
     assert.equal(d.systems.sky["3"].$description, "surface.canvas[light]");
     // the volatile recipe lives in extensions instead
-    assert.equal(d.systems.sky["3"].$extensions[NS].ref, "sky/3");
+    assert.equal(d.systems.sky["3"].$extensions[NS].ref, "sky(3)");
     assert.equal(d.systems.sky["3"].$extensions[NS].name, "light/3");
   });
 
@@ -91,11 +91,11 @@ dtg: 1
 systems:
   paper: "#ffffff"
   static:
-    algorithm: ink-ramp
-    params: { base: "#ffffff", ink: "#000000" }
+    algorithm: tint
+    params: { base: "#ffffff", tint: "#000000" }
 roles:
   surface:
-    shade: static/10
+    shade: static(10)
     paper: paper
 `);
     const d = emitDtcg(collision) as any;
@@ -115,11 +115,11 @@ systems:
   lush: "oklch(0.72 0.28 145)"
   brand: "#b30a0a"
   wide:
-    algorithm: ink-ramp
-    params: { base: "#ffffff", ink: "color(display-p3 1 0 0)" }
+    algorithm: tint
+    params: { base: "#ffffff", tint: "color(display-p3 1 0 0)" }
 roles:
   surface:
-    a: [wide/60, brand]
+    a: [wide(60), brand]
     veil: [transparent(vivid 30), transparent(paper 30)]
 `);
 
@@ -134,7 +134,7 @@ roles:
     assert.ok(css.includes("--color-wide-60: color(display-p3 1 0.4 0.4);"));
   });
 
-  test("an in-gamut colour is not repeated — it renders the same either way", () => {
+  test("an in-gamut color is not repeated — it renders the same either way", () => {
     const layer = emitCss(wide, "plain").split("@supports")[1];
     assert.ok(!layer.includes("--color-paper"));
   });
@@ -165,7 +165,7 @@ roles:
     assert.equal(ghost.hex, "#ff0000");
   });
 
-  test("every colour shares one space, so a courier never converts", () => {
+  test("every color shares one space, so a courier never converts", () => {
     for (const space of ["srgb", "display-p3"] as const) {
       const out = emitDtcg(wide, space) as any;
       const spaces = Object.values(out.systems.static as Record<string, any>)
@@ -187,8 +187,8 @@ roles:
     assert.deepEqual(asP3.components, [1, 0, 0]);
   });
 
-  test("an in-gamut colour still changes components between spaces", () => {
-    // Same colour, wider primaries — it takes less of them to reach it.
+  test("an in-gamut color still changes components between spaces", () => {
+    // Same color, wider primaries — it takes less of them to reach it.
     const asSrgb = (emitDtcg(wide, "srgb") as any).systems.static.brand.$value;
     const asP3 = (emitDtcg(wide, "display-p3") as any).systems.static.brand.$value;
     assert.notDeepEqual(asSrgb.components, asP3.components);
@@ -215,22 +215,22 @@ systems:
   brand: "#b30a0a"
   vivid: "color(display-p3 1 0 0)"
   ramp:
-    algorithm: ink-ramp
-    params: { base: "#ffffff", ink: "color(display-p3 1 0 0)" }
+    algorithm: tint
+    params: { base: "#ffffff", tint: "color(display-p3 1 0 0)" }
 roles:
   label:
     a: [brand]
     b: [vivid]
-    c: [ramp/90]
+    c: [ramp(90)]
 `);
 
-  test("names the colours an sRGB export has to gamut-map", () => {
+  test("names the colors an sRGB export has to gamut-map", () => {
     const clipped = dtcgClipped(wide, "srgb");
     assert.ok(clipped.includes("vivid"));
-    assert.ok(clipped.includes("ramp/90"));
+    assert.ok(clipped.includes("ramp(90)"));
   });
 
-  test("an in-gamut colour is not reported — it loses nothing", () => {
+  test("an in-gamut color is not reported — it loses nothing", () => {
     assert.ok(!dtcgClipped(wide, "srgb").includes("brand"));
   });
 
@@ -317,7 +317,10 @@ roles:
 describe("~ across the formats", () => {
   const omitted = resolveDefinition(`
 dtg: 1
-modes: [warm, cooldusk, dark]
+modes:
+  warm:
+  cooldusk: { extends: warm }
+  dark:
 systems:
   ink: "#313133"
   paper: "#ffffff"
@@ -330,7 +333,8 @@ roles:
 
   test("nested css leaves the mode out — the cascade is the inheritance", () => {
     const css = emitCss(omitted, "plain", "nested");
-    const dusk = css.slice(css.indexOf(".cooldusk {"), css.indexOf("}", css.indexOf(".cooldusk {")));
+    const start = css.indexOf("\n.cooldusk {");
+    const dusk = css.slice(start, css.indexOf("}", start));
     assert.ok(dusk.includes("--surface-canvas"));
     assert.ok(!dusk.includes("--label-primary"));
   });
@@ -347,10 +351,12 @@ roles:
     assert.ok(!css.includes("--color-cooldusk-label-primary:"));
   });
 
-  test("a flat role alias follows an inherited target back to mode zero", () => {
+  test("a flat role alias follows an inherited target back to the mode that declared it", () => {
     const aliases = resolveDefinition(`
 dtg: 1
-modes: [light, dark]
+modes:
+  light:
+  dark: { extends: light }
 systems: { ink: "#313133" }
 roles:
   label:
@@ -372,7 +378,7 @@ roles:
     const ext = (emitDtcg(omitted) as any).roles.label.primary.$extensions[NS];
     assert.equal(Object.keys(ext.modes).length, 3);
     assert.equal(ext.modes.cooldusk, ext.modes.warm);
-    assert.deepEqual(ext.inheritsFirstMode, ["cooldusk"]);
+    assert.deepEqual(ext.inherits, { cooldusk: "warm" });
   });
 });
 
@@ -419,5 +425,88 @@ roles:
       d.roles.label.strong.echo.$value,
       "{roles.label.strong.base}",
     );
+  });
+});
+
+describe("a mode that extends a mode other than the first", () => {
+  const hc = resolveDefinition(`
+dtg: 1
+modes:
+  light: { scheme: light }
+  dark: { scheme: dark }
+  dark-hc: { extends: dark }
+systems: { ink: "#313133", paper: "#ffffff", loud: "#000000" }
+roles:
+  surface:
+    card: [paper, ink, loud]
+    floating: [surface.card, surface.card]
+  label:
+    primary: [ink, paper]
+    echo: [label.primary, label.primary]
+`);
+
+  test("nested css selects a mode's block for every mode that extends it", () => {
+    assert.equal(
+      emitCss(hc, "plain", "nested").split("\n\n").slice(2).join("\n\n"),
+      `:root {
+  color-scheme: light;
+  --surface-card: var(--color-paper);
+  --surface-floating: var(--surface-card);
+  --label-primary: var(--color-ink);
+  --label-echo: var(--label-primary);
+}
+
+.dark, .dark-hc {
+  color-scheme: dark;
+  --surface-card: var(--color-ink);
+  --surface-floating: var(--surface-card);
+  --label-primary: var(--color-paper);
+  --label-echo: var(--label-primary);
+}
+
+.dark-hc {
+  --surface-card: var(--color-loud);
+}
+`,
+    );
+  });
+
+  test("flat css writes an inherited role whose target moved, and only that", () => {
+    const css = emitCss(hc, "plain", "flat");
+    assert.ok(css.includes("--dark-hc-surface-card: var(--color-loud);"));
+    assert.ok(css.includes("--dark-hc-surface-floating: var(--dark-hc-surface-card);"));
+    assert.ok(!css.includes("--dark-hc-label-primary:"));
+    assert.ok(!css.includes("--dark-hc-label-echo:"));
+    assert.ok(!css.includes("color-scheme"));
+  });
+
+  test("scss likewise", () => {
+    const scss = emitScss(hc);
+    assert.ok(scss.includes("$dark-hc-surface-floating: #000000;"));
+    assert.ok(!scss.includes("$dark-hc-label-echo:"));
+  });
+
+  test("dtcg names the mode each silent mode tracks", () => {
+    const roles = (emitDtcg(hc) as any).roles;
+    assert.deepEqual(roles.surface.floating.$extensions[NS].inherits, { "dark-hc": "dark" });
+    assert.equal(roles.surface.card.$extensions[NS].inherits, undefined);
+  });
+
+  test("a chain selects the root's block for every descendant", () => {
+    const chained = resolveDefinition(`
+dtg: 1
+modes:
+  light:
+  dim: { extends: light }
+  dimmer: { extends: dim }
+systems: { ink: "#313133", paper: "#ffffff" }
+roles:
+  label:
+    primary: [ink, paper, ink]
+`);
+    const css = emitCss(chained, "plain", "nested");
+    assert.ok(css.includes("\n:root, .dim, .dimmer {"));
+    assert.ok(css.includes("\n.dim, .dimmer {"));
+    assert.ok(css.includes("\n.dimmer {"));
   });
 });

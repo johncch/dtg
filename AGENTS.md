@@ -15,6 +15,17 @@ Working notes:
 - Sunnyday (`~/Projects/sunnyday/sunnyday-app`) consumes this package as
   `link:../../dtg` until it's published — **consumers run `dist/`, so
   rebuild after edits or they see stale code**.
+- `pnpm dev --definition <file>` runs `tsc --watch`, `vite build --watch`, and
+  the dev server under `node --watch`: edits to `src/` rebuild, restart the
+  server, and reload the browser; edits to `ui/` rebuild the bundle and reload.
+  Extra flags pass through to `dtg dev`. `pnpm watch` is the two watchers
+  without the server, for running `dist/cli.js` from another project.
+- The browsing UI is a React app in `ui/`, bundled by Vite into `dist/ui/`.
+  The dev server serves one HTML shell for every page address plus
+  `/api/snapshot` (`src/snapshot.ts`), the definition as JSON; the app routes
+  and draws client-side and imports `src/color-math.ts` directly. It has its
+  own `ui/tsconfig.json`; `pnpm build` type-checks it. React and Vite are
+  devDependencies — the bundle is what ships.
 - Conventions the tool promises (see README): definitions in
   `design-tokens/*.dtg.yaml`, optional `dtg.yaml` project config at root,
   outputs default beside the definitions. Flags > `dtg.yaml` > defaults.

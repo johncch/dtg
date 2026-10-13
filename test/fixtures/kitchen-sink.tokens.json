@@ -7,7 +7,7 @@
         "dark"
       ],
       "colorSpace": "srgb",
-      "writingIntoFigma": "Set the Figma document colour profile to srgb first — it cannot be set through the plugin API, only by hand. Then write each $value's components as {r, g, b, a}, or its hex where an API takes only hex; both name the same colour in that profile. Nothing here is converted on import, so a document in any other profile will render every one of these wrong.",
+      "writingIntoFigma": "Set the Figma document color profile to srgb first — it cannot be set through the plugin API, only by hand. Then write each $value's components as {r, g, b, a}, or its hex where an API takes only hex; both name the same color in that profile. Nothing here is converted on import, so a document in any other profile will render every one of these wrong.",
       "changelog": [
         {
           "date": "2026-08-21",
@@ -39,8 +39,8 @@
               "dark": "{systems.night.4}"
             },
             "refs": {
-              "light": "sky/3",
-              "dark": "night/4"
+              "light": "sky(3)",
+              "dark": "night(4)"
             }
           }
         }
@@ -57,8 +57,8 @@
               "dark": "{systems.warm.blue-6}"
             },
             "refs": {
-              "light": "warm/red@6",
-              "dark": "warm/blue@6"
+              "light": "warm(red 6)",
+              "dark": "warm(blue 6)"
             }
           }
         }
@@ -75,8 +75,8 @@
               "dark": "{systems.warm.blue-100}"
             },
             "refs": {
-              "light": "warm/red@100",
-              "dark": "warm/blue@100"
+              "light": "warm(red 100)",
+              "dark": "warm(blue 100)"
             }
           }
         }
@@ -93,8 +93,8 @@
               "dark": "{systems.lightmix.red-6}"
             },
             "refs": {
-              "light": "perceptual/red@6",
-              "dark": "lightmix/red@6"
+              "light": "perceptual(red 6)",
+              "dark": "lightmix(red 6)"
             }
           }
         }
@@ -111,8 +111,8 @@
               "dark": "{systems.theme.950}"
             },
             "refs": {
-              "light": "theme/50",
-              "dark": "theme/950"
+              "light": "theme(50)",
+              "dark": "theme(950)"
             }
           }
         }
@@ -129,8 +129,8 @@
               "dark": "{systems.grouped.inner.20}"
             },
             "refs": {
-              "light": "grouped.inner/10",
-              "dark": "grouped.inner/20"
+              "light": "grouped.inner(10)",
+              "dark": "grouped.inner(20)"
             }
           }
         }
@@ -165,8 +165,8 @@
               "dark": "{systems.widemix.deep-80}"
             },
             "refs": {
-              "light": "wide/60",
-              "dark": "widemix/deep@80"
+              "light": "wide(60)",
+              "dark": "widemix(deep 80)"
             }
           }
         }
@@ -286,8 +286,8 @@
               }
             },
             "refs": {
-              "light": "sky/3/ink",
-              "dark": "night/4/ink"
+              "light": "sky(3 tint)",
+              "dark": "night(4 tint)"
             }
           }
         }
@@ -331,8 +331,8 @@
               }
             },
             "refs": {
-              "light": "warm/red@6/alpha",
-              "dark": "warm/blue@6/alpha"
+              "light": "warm(red 6 alpha)",
+              "dark": "warm(blue 6 alpha)"
             }
           }
         }
@@ -376,8 +376,8 @@
               }
             },
             "refs": {
-              "light": "shadow/40",
-              "dark": "shadow/60"
+              "light": "shadow(40)",
+              "dark": "shadow(60)"
             }
           }
         }
@@ -496,8 +496,8 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "light/3",
-            "ref": "sky/3",
-            "algorithm": "ink-ramp"
+            "ref": "sky(3)",
+            "algorithm": "tint"
           }
         }
       }
@@ -518,8 +518,8 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "night/4",
-            "ref": "night/4",
-            "algorithm": "ink-ramp"
+            "ref": "night(4)",
+            "algorithm": "tint"
           }
         }
       }
@@ -540,7 +540,7 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "warm/red-6",
-            "ref": "warm/red@6",
+            "ref": "warm(red 6)",
             "algorithm": "blend"
           }
         }
@@ -560,7 +560,7 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "warm/red-100",
-            "ref": "warm/red@100",
+            "ref": "warm(red 100)",
             "algorithm": "blend"
           }
         }
@@ -580,7 +580,7 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "warm/blue-6",
-            "ref": "warm/blue@6",
+            "ref": "warm(blue 6)",
             "algorithm": "blend"
           }
         }
@@ -600,7 +600,7 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "warm/blue-100",
-            "ref": "warm/blue@100",
+            "ref": "warm(blue 100)",
             "algorithm": "blend"
           }
         }
@@ -622,7 +622,7 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "perceptual/red-6",
-            "ref": "perceptual/red@6",
+            "ref": "perceptual(red 6)",
             "algorithm": "blend"
           }
         }
@@ -644,7 +644,7 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "lightmix/red-6",
-            "ref": "lightmix/red@6",
+            "ref": "lightmix(red 6)",
             "algorithm": "blend"
           }
         }
@@ -666,8 +666,8 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "theme/50",
-            "ref": "theme/50",
-            "algorithm": "oklch-scale"
+            "ref": "theme(50)",
+            "algorithm": "scale"
           }
         }
       },
@@ -682,12 +682,12 @@
           ],
           "hex": "#03a2e8"
         },
-        "$description": "theme/500",
+        "$description": "theme(500)",
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "theme/500",
-            "ref": "theme/500",
-            "algorithm": "oklch-scale"
+            "ref": "theme(500)",
+            "algorithm": "scale"
           }
         }
       },
@@ -706,8 +706,8 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "theme/950",
-            "ref": "theme/950",
-            "algorithm": "oklch-scale"
+            "ref": "theme(950)",
+            "algorithm": "scale"
           }
         }
       }
@@ -728,8 +728,8 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "wide/60",
-            "ref": "wide/60",
-            "algorithm": "ink-ramp"
+            "ref": "wide(60)",
+            "algorithm": "tint"
           }
         }
       }
@@ -750,7 +750,7 @@
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "widemix/deep-80",
-            "ref": "widemix/deep@80",
+            "ref": "widemix(deep 80)",
             "algorithm": "blend"
           }
         }
@@ -773,8 +773,8 @@
           "$extensions": {
             "com.fifthrevision.dtg": {
               "name": "Renamed/inner/10",
-              "ref": "grouped.inner/10",
-              "algorithm": "ink-ramp"
+              "ref": "grouped.inner(10)",
+              "algorithm": "tint"
             }
           }
         },
@@ -793,8 +793,8 @@
           "$extensions": {
             "com.fifthrevision.dtg": {
               "name": "Renamed/inner/20",
-              "ref": "grouped.inner/20",
-              "algorithm": "ink-ramp"
+              "ref": "grouped.inner(20)",
+              "algorithm": "tint"
             }
           }
         }

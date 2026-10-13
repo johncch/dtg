@@ -28,10 +28,15 @@ export type DtgConfig = {
   /** Only emitted when configured. */
   dtcgOut?: string;
   /**
-   * The colour space every DTCG value is written in. Figma holds one profile
+   * The color space every DTCG value is written in. Figma holds one profile
    * per document, so this has to match the file it is being synced into.
    */
   dtcgColorSpace: Gamut;
+  /**
+   * The widest colors the project means to author. A ceiling, not a clamp:
+   * the picker stops at it and a color above it warns, but nothing is altered.
+   */
+  gamut: Gamut;
 };
 
 const DEFAULT_DIR = "design-tokens";
@@ -49,6 +54,7 @@ export function loadConfig(flags: {
   scss?: string;
   dtcg?: string;
   dtcgColorSpace?: string;
+  gamut?: string;
 }): DtgConfig {
   let fileConfig: Record<string, unknown> = {};
   if (existsSync("dtg.yaml")) {
@@ -102,6 +108,10 @@ export function loadConfig(flags: {
       assertColorSpace(flags.dtcgColorSpace, "--dtcg-color-space") ??
       dtcg.colorSpace ??
       "srgb",
+    gamut:
+      assertColorSpace(flags.gamut, "--gamut") ??
+      assertColorSpace(fileConfig.gamut, "dtg.yaml gamut") ??
+      "display-p3",
   };
 }
 

@@ -1,22 +1,25 @@
 {
   "name": "@fifthrevision/dtg",
-  "version": "0.2.0",
+  "version": "0.3.0-dev",
   "description": "Design token generator: design decisions as a YAML definition, compiled deterministically into CSS, Figma payloads, and a browsable dev server.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/johncch/dtg.git"
   },
   "type": "module",
-  "packageManager": "pnpm@11.22.0+sha512.1ff870c4c6133dfd88fb2afc46dd13d47f09c9794b438c6fdb47ca98caf3bc16381ee0be93a091b8e3824cf01f889f46d7d9e20910fb0be1ab0fb5baa80dd621",
+  "packageManager": "pnpm@12.6.0+sha512.3ef68f951cb111ac204b4a5a16f0b2ddf0da56a96e0413e81d855d9f0b55ef926714709028e1cd00c405c2c5fb7b9e8ec4dc46777c805d0373c2f2ff00fd20ec",
   "bin": {
     "dtg": "./dist/cli.js"
   },
   "files": [
-    "dist"
+    "dist",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "build": "tsc",
-    "prepare": "tsc",
+    "build": "tsc && tsc -p ui && vite build",
+    "watch": "tsc --watch --preserveWatchOutput & vite build --watch",
+    "dev": "tsc --watch --preserveWatchOutput & vite build --watch & node --watch dist/cli.js dev",
+    "prepare": "tsc && vite build",
     "test": "tsc && node --test --test-reporter=./test/reporter.mjs test/*.test.ts",
     "test:spec": "tsc && node --test test/*.test.ts",
     "release": "./scripts/release.sh"
@@ -28,7 +31,16 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
+    "@radix-ui/react-dialog": "^1.2.0",
+    "@radix-ui/react-tooltip": "^1.3.0",
     "@types/node": "^24.0.0",
-    "typescript": "^5.7.0"
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "color-name-list": "^14.51.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^5.7.0",
+    "vite": "^8.3.4"
   }
 }

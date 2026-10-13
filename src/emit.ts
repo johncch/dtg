@@ -21,6 +21,7 @@ import {
   type ResolvedStep,
   type ResolvedSystem,
 } from "./resolve.js";
+import { formatRef } from "./selector.js";
 
 /**
  * `plain` emits primitives into `:root`, usable by any stylesheet.
@@ -64,8 +65,83 @@ function cssVarName(role: ResolvedRole): string {
   return publicRoleName(role, "css", "-");
 }
 
+function parentModeIndex(
+  resolved: ResolvedDefinition,
+  modeIndex: number,
+): number | undefined {
+  const parent = resolved.modeDetails[modeIndex].extends;
+  return parent === undefined ? undefined : resolved.modes.indexOf(parent);
+}
+
+function findRole(
+  resolved: ResolvedDefinition,
+  target: { domain: string; role: string },
+): ResolvedRole | undefined {
+  return resolved.roles.find(
+    (r) => r.domain === target.domain && r.role === target.role,
+  );
+}
+
 /**
- * `inlined` is true when the value is the colour itself rather than a
+ * True when a role's value in a mode is, by construction, its value in the
+ * mode that one extends. Inheriting the ref is not enough: an inherited ref
+ * to another role resolves again in this mode, so it only matches the parent
+ * if the role it points at does too.
+ */
+function sameAsParent(
+  resolved: ResolvedDefinition,
+  role: ResolvedRole,
+  modeIndex: number,
+): boolean {
+  if (!role.inherited[modeIndex]) return false;
+  const target = role.perMode[modeIndex].target;
+  if (target.kind !== "role") return true;
+  const targetRole = findRole(resolved, target);
+  return (
+    targetRole !== undefined && sameAsParent(resolved, targetRole, modeIndex)
+  );
+}
+
+/**
+ * Whether a rendering writes nothing for this role in this mode. Nested
+ * leaves out every inherited role, because the parent's declaration is
+ * selected for this mode too and its `var()` resolves here. Flat has no
+ * cascade, so it can only leave out a value the parent's variable already
+ * holds.
+ */
+function leftOut(
+  resolved: ResolvedDefinition,
+  role: ResolvedRole,
+  modeIndex: number,
+  modes: ModeRendering,
+): boolean {
+  return modes === "flat"
+    ? sameAsParent(resolved, role, modeIndex)
+    : role.inherited[modeIndex];
+}
+
+/**
+ * A nested mode's block is selected by the mode and by every mode that
+ * extends it, so an element carrying only `.dark-hc` still gets everything
+ * `.dark` declares. Blocks are written parent first; a child's own block
+ * comes later at equal specificity and wins.
+ */
+function modeSelector(resolved: ResolvedDefinition, modeIndex: number): string {
+  const descendants = resolved.modes.filter((_, candidate) => {
+    let ancestor = parentModeIndex(resolved, candidate);
+    while (ancestor !== undefined && ancestor !== modeIndex) {
+      ancestor = parentModeIndex(resolved, ancestor);
+    }
+    return ancestor === modeIndex;
+  });
+  return [
+    modeIndex === 0 ? ":root" : `.${resolved.modes[modeIndex]}`,
+    ...descendants.map((mode) => `.${mode}`),
+  ].join(", ");
+}
+
+/**
+ * `inlined` is true when the value is the color itself rather than a
  * pointer at a primitive. Only an inlined value needs repeating in the
  * wide-gamut layer — a `var()` picks up whatever the primitive was
  * redefined to.
@@ -97,17 +173,16 @@ function cssValueFor(
     }
   }
   if (target.kind === "role") {
-    const role = resolved.roles.find(
-      (r) => r.domain === target.domain && r.role === target.role,
-    );
+    const role = findRole(resolved, target);
     if (role) {
-      const modeIndex = resolved.modes.indexOf(mode);
-      const targetMode =
-        modes === "flat" && modeIndex >= 0 && role.inherited[modeIndex]
-          ? resolved.modes[0]
-          : mode;
+      let owner = resolved.modes.indexOf(mode);
+      if (modes === "flat") {
+        while (sameAsParent(resolved, role, owner)) {
+          owner = parentModeIndex(resolved, owner)!;
+        }
+      }
       return {
-        css: `var(--${roleVarName(role, targetMode, modes, resolved.modes.length)})`,
+        css: `var(--${roleVarName(role, resolved.modes[owner], modes, resolved.modes.length)})`,
         inlined: false,
       };
     }
@@ -149,7 +224,7 @@ export function emitCss(
     lines.push(":root {");
     resolved.modes.forEach((mode, i) => {
       const decls = resolved.roles
-        .filter((role) => !role.inherited[i])
+        .filter((role) => !leftOut(resolved, role, i, modes))
         .map(
           (role) =>
             `  --${roleVarName(role, mode, modes, resolved.modes.length)}: ${cssValueFor(resolved, role.perMode[i], mode, modes).css};`,
@@ -163,13 +238,22 @@ export function emitCss(
   } else {
     resolved.modes.forEach((mode, i) => {
       const decls = resolved.roles
-        .filter((role) => !role.inherited[i])
+        .filter((role) => !leftOut(resolved, role, i, modes))
         .map(
           (role) =>
             `  --${cssVarName(role)}: ${cssValueFor(resolved, role.perMode[i], mode, modes).css};`,
         );
+      // A mode that extends another is already inside its parent's block, so
+      // a scheme it only inherited is not written again.
+      const scheme = resolved.modeDetails[i].scheme;
+      const parent = parentModeIndex(resolved, i);
+      const parentScheme =
+        parent === undefined ? undefined : resolved.modeDetails[parent].scheme;
+      if (scheme !== undefined && scheme !== parentScheme) {
+        decls.unshift(`  color-scheme: ${scheme};`);
+      }
       if (decls.length === 0) return;
-      lines.push(i === 0 ? ":root {" : `.${mode} {`, ...decls, "}", "");
+      lines.push(`${modeSelector(resolved, i)} {`, ...decls, "}", "");
     });
   }
 
@@ -184,7 +268,7 @@ export function emitCss(
       modes === "flat"
         ? resolved.roles.flatMap((role) =>
             resolved.modes.flatMap((mode, i) =>
-              role.inherited[i]
+              leftOut(resolved, role, i, modes)
                 ? []
                 : [roleVarName(role, mode, modes, resolved.modes.length)],
             ),
@@ -202,7 +286,7 @@ export function emitCss(
 /**
  * Sass variables, resolved at compile time. Every value is a literal — there
  * is no `var()` to defer, so a role that points at a primitive is emitted as
- * the primitive's colour rather than a reference to it.
+ * the primitive's color rather than a reference to it.
  *
  * Flat only, and not by omission: a Sass variable has no structure to nest a
  * mode into, so the mode is part of the name. That is the same rendering
@@ -216,7 +300,7 @@ export function emitScss(resolved: ResolvedDefinition): string {
     if (resolved.modes.length > 1) lines.push(`// ${mode}`);
     let domain: string | null = null;
     for (const role of resolved.roles) {
-      if (role.inherited[i]) continue;
+      if (leftOut(resolved, role, i, "flat")) continue;
       if (role.domain !== domain) {
         domain = role.domain;
         lines.push(`// ${domain}`);
@@ -229,12 +313,12 @@ export function emitScss(resolved: ResolvedDefinition): string {
 }
 
 /**
- * Colours outside sRGB are written twice: mapped into sRGB above, for every
+ * Colors outside sRGB are written twice: mapped into sRGB above, for every
  * browser, then again here at full strength for displays that can show them.
  * The order matters — the fallback has to be the one a browser that cannot
  * parse `color()` keeps.
  *
- * Only values that actually leave sRGB are repeated. An in-gamut colour
+ * Only values that actually leave sRGB are repeated. An in-gamut color
  * renders identically either way, so redefining it would be bytes for
  * nothing, and a definition authored entirely in sRGB emits no layer at all.
  */
@@ -266,7 +350,7 @@ function wideGamutLayer(
   resolved.modes.forEach((mode, i) => {
     const decls: string[] = [];
     for (const role of resolved.roles) {
-      if (role.inherited[i]) continue;
+      if (leftOut(resolved, role, i, modes)) continue;
       const entry = role.perMode[i];
       if (!cssValueFor(resolved, entry, mode, modes).inlined) continue;
       if (!needsMapping(entry.color, "srgb")) continue;
@@ -280,7 +364,7 @@ function wideGamutLayer(
       return;
     }
     if (roleBlocks.length > 0) roleBlocks.push("");
-    roleBlocks.push(`  ${i === 0 ? ":root" : `.${mode}`} {`, ...decls, "  }");
+    roleBlocks.push(`  ${modeSelector(resolved, i)} {`, ...decls, "  }");
   });
   if (flatDecls.length > 0) roleBlocks.push("  :root {", ...flatDecls, "  }");
 
@@ -340,11 +424,11 @@ function placeAt(
   node[leaf] = value;
 }
 
-/** The two colour profiles a Figma document can be in. */
+/** The two color profiles a Figma document can be in. */
 export const DTCG_COLOR_SPACES: Gamut[] = ["srgb", "display-p3"];
 
 /**
- * Colours the DTCG emit has to gamut-map to reach `colorSpace`, by token path.
+ * Colors the DTCG emit has to gamut-map to reach `colorSpace`, by token path.
  * Writing a P3 anchor into an sRGB export is lossy and silent otherwise — the
  * value still emits, just duller than it was authored.
  */
@@ -356,7 +440,7 @@ export function dtcgClipped(
   for (const system of resolved.systems) {
     for (const step of system.steps) {
       if (needsMapping(step.color, colorSpace)) {
-        clipped.push(`${system.system}/${step.selector}`);
+        clipped.push(formatRef(system.system, step.selector));
       }
     }
   }
@@ -376,10 +460,10 @@ export function emitDtcg(
     colorSpace,
     // The file is read by an agent syncing it into Figma, so it carries its
     // own handling note. Figma stores an unadorned RGB triple and reads it in
-    // the document's colour profile, so `components` goes straight in while
-    // `hex` — this colour rendered into sRGB — is only right in an sRGB file.
+    // the document's color profile, so `components` goes straight in while
+    // `hex` — this color rendered into sRGB — is only right in an sRGB file.
     writingIntoFigma:
-      `Set the Figma document colour profile to ${colorSpace} first — it cannot be set through the plugin API, only by hand. Then write each $value's components as {r, g, b, a}, or its hex where an API takes only hex; both name the same colour in that profile. Nothing here is converted on import, so a document in any other profile will render every one of these wrong.`,
+      `Set the Figma document color profile to ${colorSpace} first — it cannot be set through the plugin API, only by hand. Then write each $value's components as {r, g, b, a}, or its hex where an API takes only hex; both name the same color in that profile. Nothing here is converted on import, so a document in any other profile will render every one of these wrong.`,
   };
   if (resolved.changelog.length > 0) meta.changelog = resolved.changelog;
 
@@ -419,7 +503,7 @@ export function emitDtcg(
     for (const step of steps) {
       const ext: Record<string, unknown> = {
         name: `${publicSystemName(system, "figma", "/")}/${step.publicStep}`,
-        ref: `${system.system}/${step.selector}`,
+        ref: formatRef(system.system, step.selector),
         algorithm: system.algorithm,
       };
       if (step.overridden) ext.generated = formatColor(step.generated!, "srgb");
@@ -466,13 +550,15 @@ export function emitDtcg(
             resolved.modes.map((m, i) => [m, role.perMode[i].ref]),
           ),
           // Figma has no unset mode — it fills one with white — so every mode
-          // carries a value. This is the omission the definition declared,
-          // kept so a round trip can tell "tracks mode 0" from "happens to
-          // match".
+          // carries a value. This is the silence the definition declared,
+          // each mode against the one it extends, kept so a round trip can
+          // tell "tracks its parent" from "happens to match".
           ...(role.inherited.some(Boolean)
             ? {
-                inheritsFirstMode: resolved.modes.filter(
-                  (_, i) => role.inherited[i],
+                inherits: Object.fromEntries(
+                  resolved.modeDetails
+                    .filter((_, i) => role.inherited[i])
+                    .map((mode) => [mode.name, mode.extends]),
                 ),
               }
             : {}),
@@ -485,21 +571,21 @@ export function emitDtcg(
 }
 
 /**
- * A DTCG colour value, shaped for the consumer that matters: `components` is
+ * A DTCG color value, shaped for the consumer that matters: `components` is
  * an RGB triple 0..1, which is exactly what Figma's plugin API takes, so a
  * courier writes it straight in with no conversion.
  *
- * Every colour in one emit shares `colorSpace`, and it is always an RGB space
- * — never oklab or oklch, which Figma cannot store. Figma holds one colour
+ * Every color in one emit shares `colorSpace`, and it is always an RGB space
+ * — never oklab or oklch, which Figma cannot store. Figma holds one color
  * profile per document and interprets every stored triple in it, so a value
  * tagged with a different space than the document would have to be converted
- * on the way in. Choosing per colour by what fits would make that per token.
+ * on the way in. Choosing per color by what fits would make that per token.
  *
- * `hex` byte-encodes those same components rather than rendering the colour
+ * `hex` byte-encodes those same components rather than rendering the color
  * into sRGB, because Figma's hex field is document-relative too — it shows the
  * stored triple, whatever profile reads it. Written this way the two fields
  * never disagree, and importers that read only hex (Figma's DTCG import is
- * one) land the same colour as importers that read components. 6-digit per
+ * one) land the same color as importers that read components. 6-digit per
  * the spec, so it cannot contradict `alpha`.
  */
 type DtcgColor = {
@@ -529,8 +615,8 @@ function stepIdentity(
   system: ResolvedSystem,
   step: ResolvedStep,
 ): string {
-  const uses = lineage.get(`${system.system}/${step.selector}`) ?? [];
-  if (uses.length === 0) return `${system.system}/${step.selector}`;
+  const uses = lineage.get(formatRef(system.system, step.selector)) ?? [];
+  if (uses.length === 0) return formatRef(system.system, step.selector);
   return uses
     .map((u) => `${u.domain}.${u.role}[${u.mode}]`)
     .join(", ");

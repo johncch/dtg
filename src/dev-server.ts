@@ -1,39 +1,142 @@
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createHash } from "node:crypto";
-import { readFileSync, readdirSync, watch } from "node:fs";
-import { join } from "node:path";
-import { dirname } from "node:path";
-import { fileURLToPath } from "node:url";
-import { stringify } from "yaml";
-import { formatColor, isOpaque } from "./color-math.js";
-import { withParamAt } from "./contract.js";
 import {
-  algorithmFor,
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, watch, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import type { Gamut } from "./color-math.js";
+import type { DtgConfig } from "./config.js";
+import {
+  DEFAULT_BACKGROUNDS,
+  readBackgrounds,
+  withBackgrounds,
+  type Background,
+} from "./dev-settings.js";
+import { writeOutputs } from "./outputs.js";
+import { applyEdits, describeTarget, type Edit } from "./edit.js";
+import {
   buildLineage,
   resolveDefinition,
   type Lineage,
   type ResolvedDefinition,
 } from "./resolve.js";
+import { buildSnapshot } from "./snapshot.js";
 import { watchDefinition } from "./watch.js";
 import {
-  renderBlend,
-  renderConstants,
-  renderDomain,
-  renderOverview,
-  renderPicker,
-  renderSystem,
-} from "./render.js";
+  changesOf,
+  discard,
+  openFile,
+  redo,
+  undo,
+  withEdit,
+  workingText,
+  type WorkingCopy,
+} from "./working-copy.js";
+
+const CONFIG_PATH = "dtg.yaml";
+
+const UI_CONTENT_TYPES: Record<string, string> = {
+  js: "text/javascript; charset=utf-8",
+  css: "text/css; charset=utf-8",
+  png: "image/png",
+};
+
+/**
+ * The app's only HTML. Every page address gets the same document; the bundle
+ * reads the path and draws the page.
+ */
+const appShell = (title: string) => `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</title>
+<link rel="icon" type="image/png" href="/ui/favicon.png">
+<link rel="stylesheet" href="/ui/dtg-ui.css">
+</head>
+<body>
+<div id="app"></div>
+<script type="module" src="/ui/dtg-ui.js"></script>
+</body>
+</html>`;
 
 type State = {
+  copy: WorkingCopy;
   resolved: ResolvedDefinition;
   lineage: Lineage;
   /** Set when the last re-resolve failed; the previous good state stays served. */
   error: string | null;
+  /** Unsaved changes that could not be carried over when the file changed. */
+  notices: string[];
 };
 
-export function startDevServer(definitionPath: string, port: number): void {
-  let state: State = load(definitionPath);
+export function startDevServer(
+  definitionPath: string,
+  port: number,
+  gamut: Gamut,
+  /** Where to write the outputs whenever the definition file changes, or null to leave them alone. */
+  outputs: DtgConfig | null,
+): void {
+  const readDisk = () => readFileSync(definitionPath, "utf8");
+
+  // The outputs follow the file on disk, never the unsaved edits on top of
+  // it: what is generated stays a function of the definition alone.
+  let emitted: string | null = null;
+  const emitFromDisk = () => {
+    if (!outputs) return;
+    const text = readDisk();
+    if (text === emitted) return;
+    try {
+      writeOutputs(outputs, resolveDefinition(text, [], gamut));
+      emitted = text;
+    } catch (e) {
+      console.error(`not emitted: ${(e as Error).message}`);
+    }
+  };
+  emitFromDisk();
+
+  // Backgrounds are settings, not the definition: they are read from and
+  // written to `dtg.yaml` directly, outside the working copy and its undo.
+  const readConfig = () => (existsSync(CONFIG_PATH) ? readFileSync(CONFIG_PATH, "utf8") : "");
+  let backgrounds: Background[] = [];
+  const takeBackgroundsFromConfig = () => {
+    try {
+      backgrounds = readBackgrounds(readConfig());
+    } catch (e) {
+      console.error(`${CONFIG_PATH} ${(e as Error).message} — keeping the backgrounds as they were`);
+    }
+  };
+  takeBackgroundsFromConfig();
+
+  let state: State = settle(openFile(readDisk()), gamut);
   const sseClients = new Set<ServerResponse>();
+  const tellBrowsers = (message: "changed" | "reload") => {
+    for (const client of sseClients) client.write(`data: ${message}\n\n`);
+  };
+  const snapshotOf = (current: State) =>
+    buildSnapshot({
+      resolved: {
+        ...current.resolved,
+        warnings: [...current.notices, ...current.resolved.warnings],
+      },
+      lineage: current.lineage,
+      error: current.error,
+      stale,
+      gamut,
+      changes: changesOf(current.copy),
+      undo: current.copy.edits.at(-1) ?? null,
+      redo: current.copy.undone.at(-1) ?? null,
+      definition: { path: resolve(definitionPath), text: workingText(current.copy).text },
+      configPath: resolve(CONFIG_PATH),
+      backgrounds: backgrounds.length > 0 ? backgrounds : DEFAULT_BACKGROUNDS,
+    });
+  const adopt = (copy: WorkingCopy) => {
+    state = settle(copy, gamut, state);
+    tellBrowsers("changed");
+  };
 
   // The server holds dtg's own code from startup, so a rebuild leaves it
   // serving stale results that look like definition errors. Say so instead —
@@ -54,15 +157,33 @@ export function startDevServer(definitionPath: string, port: number): void {
       if (stale || fingerprint() === built) return;
       stale = true;
       console.log("dtg's own code changed — restart the dev server");
-      for (const client of sseClients) client.write("data: reload\n\n");
+      tellBrowsers("changed");
     });
   } catch {
     // watching the install directory is a convenience, never a requirement
   }
 
+  let uiChanged: NodeJS.Timeout | undefined;
+  try {
+    watch(join(own, "ui"), () => {
+      // A rebuild empties the directory before writing; reload once it settles.
+      clearTimeout(uiChanged);
+      uiChanged = setTimeout(() => tellBrowsers("reload"), 150);
+    });
+  } catch {
+    // no browser bundle built yet; pages still render without it
+  }
+
+  watchDefinition(CONFIG_PATH, () => {
+    takeBackgroundsFromConfig();
+    tellBrowsers("changed");
+  });
+
   watchDefinition(definitionPath, () => {
-    state = load(definitionPath, state);
-    for (const client of sseClients) client.write("data: reload\n\n");
+    // Unsaved edits ride along: they name colors, not lines, so they are
+    // applied again to whatever the file says now.
+    adopt({ ...state.copy, diskText: readDisk() });
+    emitFromDisk();
   });
 
   const server = createServer((req, res) => {
@@ -89,54 +210,116 @@ export function startDevServer(definitionPath: string, port: number): void {
       return;
     }
 
-    if (url.pathname === "/color-math.js") {
-      res.writeHead(200, {
-        "content-type": "text/javascript; charset=utf-8",
+    const uiAsset = /^\/ui\/([\w.-]+\.(js|css|png))$/.exec(url.pathname);
+    if (uiAsset) {
+      try {
+        const body = readFileSync(new URL(`./ui/${uiAsset[1]}`, import.meta.url));
+        res.writeHead(200, {
+          "content-type": UI_CONTENT_TYPES[uiAsset[2]],
+          "cache-control": "no-cache",
+        });
+        res.end(body);
+      } catch {
+        res.writeHead(404, { "content-type": "text/plain" });
+        res.end("not found");
+      }
+      return;
+    }
+
+    const sendJson = (status: number, body: unknown) => {
+      res.writeHead(status, {
+        "content-type": "application/json",
         "cache-control": "no-cache",
       });
-      res.end(readFileSync(new URL("./color-math.js", import.meta.url), "utf8"));
+      res.end(JSON.stringify(body));
+    };
+
+    if (url.pathname === "/api/snapshot") {
+      sendJson(200, snapshotOf(state));
       return;
     }
 
-    if (url.pathname === "/preview" && req.method === "POST") {
-      readBody(req).then((body) => {
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify(preview(state.resolved, body)));
+    if (url.pathname === "/api/preview" && req.method === "POST") {
+      readJson(req).then((body) => {
+        try {
+          const tried = applyEdits(
+            workingText(state.copy).text,
+            (body as { edits: Edit[] }).edits,
+          );
+          const resolved = resolveDefinition(tried, [], gamut);
+          sendJson(
+            200,
+            snapshotOf({ ...state, resolved, lineage: buildLineage(resolved), error: null }),
+          );
+        } catch (e) {
+          sendJson(422, { error: (e as Error).message });
+        }
       });
       return;
     }
 
-    const staleBanner = stale
-      ? `<div class="banner">dtg was rebuilt since this server started — restart it, or what you see below is from the old build.</div>`
-      : "";
-    const banner =
-      staleBanner ||
-      (state.error
-        ? `<div class="banner">${state.error.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</div>`
-        : null);
-    let html: string | null = null;
-    if (url.pathname === "/") {
-      html = renderOverview(state.resolved, banner);
-    } else if (url.pathname === "/constants") {
-      html = renderConstants(state.resolved, state.lineage, banner);
-    } else if (url.pathname === "/colors") {
-      html = renderPicker(state.resolved, banner);
-    } else if (url.pathname === "/blend") {
-      html = renderBlend(state.resolved, banner);
-    } else {
-      const [, kind, name] = url.pathname.split("/");
-      if (kind === "system" && name)
-        html = renderSystem(state.resolved, name, state.lineage, banner);
-      if (kind === "domain" && name)
-        html = renderDomain(state.resolved, name, banner);
+    if (url.pathname === "/api/edits" && req.method === "POST") {
+      readJson(req).then((body) => {
+        const { edit } = body as { edit: Edit };
+        const next = settle(withEdit(state.copy, edit), gamut, state);
+        // An edit that cannot be applied, or leaves a definition that does
+        // not resolve, is refused rather than kept as a change nobody can see.
+        if (next.error || !next.copy.edits.includes(edit)) {
+          sendJson(422, { error: next.error ?? "that value is not in the definition" });
+          return;
+        }
+        state = next;
+        tellBrowsers("changed");
+        sendJson(200, {});
+      });
+      return;
     }
-    if (html == null) {
+
+    const step = { "/api/undo": undo, "/api/redo": redo, "/api/discard": discard }[url.pathname];
+    if (step && req.method === "POST") {
+      adopt(step(state.copy));
+      sendJson(200, {});
+      return;
+    }
+
+    if (url.pathname === "/api/save" && req.method === "POST") {
+      try {
+        // Read again rather than trust what was last seen: the write is the
+        // file as it is this instant, plus the edits.
+        const { text } = workingText({ ...state.copy, diskText: readDisk() });
+        writeFileSync(definitionPath, text);
+        // Saving wipes the board: no unsaved edits, and no history to undo into.
+        adopt(openFile(text));
+        sendJson(200, {});
+      } catch (e) {
+        sendJson(500, { error: (e as Error).message });
+      }
+      return;
+    }
+
+    if (url.pathname === "/api/backgrounds" && req.method === "POST") {
+      readJson(req).then((body) => {
+        try {
+          const wanted = (body as { backgrounds: Background[] }).backgrounds;
+          writeFileSync(CONFIG_PATH, withBackgrounds(readConfig(), wanted));
+          backgrounds = wanted;
+          tellBrowsers("changed");
+          sendJson(200, {});
+        } catch (e) {
+          sendJson(422, { error: (e as Error).message });
+        }
+      });
+      return;
+    }
+
+    if (url.pathname.startsWith("/api/")) {
       res.writeHead(404, { "content-type": "text/plain" });
       res.end("not found");
       return;
     }
+
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end(html);
+    res.end(appShell(`dtg · ${resolve(definitionPath)}`));
   });
 
   server.listen(port, () => {
@@ -145,65 +328,39 @@ export function startDevServer(definitionPath: string, port: number): void {
   });
 }
 
-function load(definitionPath: string, previous?: State): State {
+/**
+ * Resolve a working copy into what the app is drawn from. An edit the file
+ * can no longer take is dropped from the copy and reported. When the result
+ * does not resolve, the previous good picture is kept and the error shown.
+ */
+function settle(copy: WorkingCopy, gamut: Gamut, previous?: State): State {
+  const { text, dropped } = workingText(copy);
+  const kept = { ...copy, edits: copy.edits.filter((e) => !dropped.includes(e)) };
+  const notices = dropped.map(
+    (e) =>
+      `an unsaved change to ${describeTarget(e.target)} was dropped — the file no longer has that value`,
+  );
   try {
-    const resolved = resolveDefinition(readFileSync(definitionPath, "utf8"));
-    return { resolved, lineage: buildLineage(resolved), error: null };
+    const resolved = resolveDefinition(text, [], gamut);
+    return { copy: kept, resolved, lineage: buildLineage(resolved), error: null, notices };
   } catch (e) {
     const message = (e as Error).message;
-    if (previous) return { ...previous, error: message };
+    if (previous) return { ...previous, copy: kept, error: message, notices };
     console.error(message);
     process.exit(1);
   }
 }
 
-function readBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve) => {
     let raw = "";
     req.on("data", (chunk) => (raw += chunk));
     req.on("end", () => {
       try {
-        resolve(JSON.parse(raw) as Record<string, unknown>);
+        resolve(JSON.parse(raw));
       } catch {
         resolve({});
       }
     });
   });
-}
-
-/**
- * Re-run one system's algorithm with tweaked params. The math stays on the
- * server so the browser never carries a second implementation of it.
- */
-function preview(
-  resolved: ResolvedDefinition,
-  body: Record<string, unknown>,
-): unknown {
-  const system = resolved.systems.find((s) => s.system === body.system);
-  const algo = system && algorithmFor(system.algorithm);
-  if (!system || !algo) return { error: `unknown system "${body.system}"` };
-
-  let params = system.params;
-  for (const [path, value] of Object.entries(
-    (body.overrides ?? {}) as Record<string, unknown>,
-  )) {
-    params = withParamAt(params, path, value);
-  }
-
-  try {
-    algo.declaredSelectors(params);
-    const selectors = new Set(system.steps.map((s) => s.selector));
-    for (const s of (body.selectors ?? []) as string[]) selectors.add(s);
-    const steps = [...selectors].map((selector) => {
-      const value = algo.resolveStep(params, selector);
-      return {
-          selector,
-          css: formatColor(value.color, "srgb"),
-          opaque: isOpaque(value.color),
-        };
-    });
-    return { steps, yaml: stringify(params).trimEnd() };
-  } catch (e) {
-    return { error: (e as Error).message };
-  }
 }

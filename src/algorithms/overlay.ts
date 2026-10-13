@@ -1,30 +1,25 @@
-import { assertKnownParams, type AlgorithmImpl } from "../contract.js";
-import { parseColor } from "../color-math.js";
+import type { Algorithm } from "../contract.js";
+import type { Color } from "../color-math.js";
 
 /**
  * A color at selector % opacity, never flattened — the system's values are
  * overlays over whatever sits underneath (shadows, scrims).
  */
-export const overlay: AlgorithmImpl = {
+export const overlay: Algorithm = {
+  name: "overlay",
   description:
     "A color at selector % opacity, never flattened. For values that only exist over unknown content: shadows, scrims.",
-  declaredSelectors(params) {
-    assertKnownParams(params, ["color"], "overlay");
-    return null;
+
+  params: {
+    color: { kind: "color" },
   },
 
-  inputColors(params) {
-    return [parseColor(params.color, "overlay param 'color'")];
-  },
+  selector: () => ({
+    fields: [{ name: "opacity", kind: "number", min: 0, max: 100 }],
+  }),
 
-  resolveStep(params, selector) {
-    const opacityPct = Number(selector);
-    if (!Number.isFinite(opacityPct) || opacityPct < 0 || opacityPct > 100) {
-      throw new Error(
-        `overlay selector must be a number 0–100, got "${selector}"`,
-      );
-    }
-    const color = parseColor(params.color, "overlay param 'color'");
-    return { color: { ...color, alpha: opacityPct / 100 } };
+  resolve(selector, params) {
+    const { color } = params as { color: Color };
+    return { ...color, alpha: (selector.opacity as number) / 100 };
   },
 };

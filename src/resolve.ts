@@ -1,10 +1,20 @@
 import { parse } from "yaml";
 import {
   assertNameFragment,
-  defaultPublicStep,
-  defaultStepOrder,
-  type AlgorithmImpl,
+  type Algorithm,
+  type ColorParam,
+  type Params,
+  type SelectorShape,
 } from "./contract.js";
+import { parseParams } from "./params.js";
+import {
+  allSelectors,
+  formatRef,
+  orderOf,
+  parseCall,
+  parseSelector,
+  publicStepOf,
+} from "./selector.js";
 import {
   assertHex,
   colorFromHex,
@@ -12,18 +22,23 @@ import {
   parseColor,
   isOpaque,
   type Color,
+  type Gamut,
 } from "./color-math.js";
 import { blend } from "./algorithms/blend.js";
-import { inkRamp } from "./algorithms/ink-ramp.js";
-import { oklchScale } from "./algorithms/oklch-scale.js";
+import { tint } from "./algorithms/tint.js";
+import { scale } from "./algorithms/scale.js";
 import { overlay } from "./algorithms/overlay.js";
 
-const builtinAlgorithms: Record<string, AlgorithmImpl> = {
-  blend,
-  "ink-ramp": inkRamp,
-  "oklch-scale": oklchScale,
-  overlay: overlay,
-};
+const builtinAlgorithms: Algorithm[] = [blend, tint, scale, overlay];
+
+function registryOf(extra: Algorithm[]): Map<string, Algorithm> {
+  return new Map(
+    [...builtinAlgorithms, ...extra].map((algorithm) => [
+      algorithm.name,
+      algorithm,
+    ]),
+  );
+}
 
 // Top-level keys the tool owns; every other top-level key is a section.
 const TOP_LEVEL_RESERVED = [
@@ -37,15 +52,22 @@ const TOP_LEVEL_RESERVED = [
 // grow without ever colliding with an algorithm's parameter names.
 const SYSTEM_RESERVED = ["algorithm", "params", "alias", "overrides"];
 
+const RENAMED_ALGORITHMS: Record<string, string> = {
+  "ink-ramp": "tint",
+  "oklch-scale": "scale",
+};
+
+const TRANSPARENT_USAGE = `transparent() takes a constant and an opacity, as transparent(shade 70). For a system's uncomposited form, ask the algorithm — tint spells it "sky(3 tint)".`;
+
 /** A public-name override: one name for all targets, or per-target ("css", "figma"). */
 export type AliasValue = string | Record<string, string>;
 
 /** The algorithm registry, for callers that need to re-run one directly. */
 export function algorithmFor(
   name: string,
-  extra?: Record<string, AlgorithmImpl>,
-): AlgorithmImpl | undefined {
-  return { ...builtinAlgorithms, ...extra }[name];
+  extra: Algorithm[] = [],
+): Algorithm | undefined {
+  return registryOf(extra).get(name);
 }
 
 export function aliasedName(
@@ -89,25 +111,15 @@ function parseChangelog(raw: unknown, errors: string[]): ChangelogEntry[] {
   return entries;
 }
 
-function compareSteps(
-  algo: AlgorithmImpl,
-  params: Record<string, unknown>,
-  a: ResolvedStep,
-  b: ResolvedStep,
-): number {
-  const ka = algo.stepOrder?.(params, a.selector) ?? defaultStepOrder(a.selector);
-  const kb = algo.stepOrder?.(params, b.selector) ?? defaultStepOrder(b.selector);
-  if (
-    typeof ka === "number" &&
-    typeof kb === "number" &&
-    Number.isFinite(ka) &&
-    Number.isFinite(kb)
-  ) {
-    if (ka !== kb) return ka - kb;
-  } else if (String(ka) !== String(kb)) {
-    return String(ka) < String(kb) ? -1 : 1;
+type OrderedStep = { step: ResolvedStep; order: number[] };
+
+function compareSteps(a: OrderedStep, b: OrderedStep): number {
+  for (let i = 0; i < a.order.length; i++) {
+    if (a.order[i] !== b.order[i]) return a.order[i] - b.order[i];
   }
-  return a.selector < b.selector ? -1 : a.selector > b.selector ? 1 : 0;
+  // Two spellings of one coordinate ("3" and "3.0") still need a fixed order.
+  const [x, y] = [a.step.selector, b.step.selector];
+  return x < y ? -1 : x > y ? 1 : 0;
 }
 
 export type Lineage = Map<
@@ -124,7 +136,7 @@ export function buildLineage(resolved: ResolvedDefinition): Lineage {
       const key =
         target.kind === "constant"
           ? target.name
-          : `${target.system}/${target.selector}`;
+          : formatRef(target.system, target.selector);
       const uses = lineage.get(key) ?? [];
       uses.push({
         domain: role.domain,
@@ -148,6 +160,13 @@ export type ResolvedStep = {
   generated?: Color;
 };
 
+/**
+ * A color among a system's params. `from` is where it was written: the
+ * system's own `params`, or the `defaults` block every system of that
+ * algorithm shares — which is where an edit to it has to land.
+ */
+export type ResolvedColorParam = ColorParam & { from: "system" | "defaults" };
+
 export type ResolvedSystem = {
   /** Internal dotted path — the stable identity refs point at. */
   system: string;
@@ -156,6 +175,9 @@ export type ResolvedSystem = {
   algorithm: string;
   algorithmDescription: string;
   params: Record<string, unknown>;
+  colorParams: ResolvedColorParam[];
+  /** What a ref into this system is made of. */
+  selector: SelectorShape;
   steps: ResolvedStep[];
 };
 
@@ -223,15 +245,29 @@ export type ResolvedRole = {
   /** One entry per mode, in `modes` order. */
   perMode: ResolvedRef[];
   /**
-   * Index-parallel to `perMode`: true where the definition wrote `~` and the
-   * value was taken from mode 0 rather than declared. Formats that can leave a
-   * mode out check this; formats that cannot ignore it.
+   * Index-parallel to `perMode`: true where the role said nothing for the mode
+   * and the ref came from the mode it extends. Formats that can leave a mode
+   * out check this; formats that cannot ignore it.
    */
   inherited: boolean[];
 };
 
+export type ModeScheme = "light" | "dark";
+
+const MODE_SCHEMES: ModeScheme[] = ["light", "dark"];
+
+export type ResolvedMode = {
+  name: string;
+  /** The mode this one falls back to. Absent on a root, which names every color. */
+  extends?: string;
+  /** Its own, or the one it extends'. Absent means the definition never said. */
+  scheme?: ModeScheme;
+};
+
 export type ResolvedDefinition = {
   modes: string[];
+  /** Index-parallel to `modes`. */
+  modeDetails: ResolvedMode[];
   changelog: ChangelogEntry[];
   systems: ResolvedSystem[];
   /** The systems block's own alias (its Figma collection name). */
@@ -262,14 +298,85 @@ export function publicRoleName(
     .join(separator);
 }
 
+const MODE_KEYS = ["extends", "scheme"];
+
+/**
+ * `modes` as a list is every mode a root; as a map, each mode may name the
+ * one it extends and its color scheme. Absent returns none.
+ */
+function parseModes(raw: unknown, errors: string[]): ResolvedMode[] {
+  if (raw == null) return [];
+  if (typeof raw !== "object" || Object.keys(raw).length === 0) {
+    errors.push("`modes`, when present, must be a non-empty list or map");
+    return [];
+  }
+  const entries: [string, unknown][] = Array.isArray(raw)
+    ? raw.map((name) => [String(name), null])
+    : Object.entries(raw);
+
+  const parsed: ResolvedMode[] = [];
+  for (const [name, body] of entries) {
+    // A map hands number-like keys back first and sorted, whatever order they
+    // were written in, and mode order decides which ref lands in which mode.
+    if (/^\d+$/.test(name)) {
+      errors.push(`mode "${name}": a mode name cannot be a number`);
+      continue;
+    }
+    if (parsed.some((mode) => mode.name === name)) {
+      errors.push(`mode "${name}" is declared more than once`);
+      continue;
+    }
+    if (body != null && (typeof body !== "object" || Array.isArray(body))) {
+      errors.push(
+        `mode "${name}": expected nothing or { ${MODE_KEYS.join("?, ")}? }`,
+      );
+      continue;
+    }
+    const block = (body ?? {}) as Record<string, unknown>;
+    for (const key of Object.keys(block)) {
+      if (!MODE_KEYS.includes(key)) {
+        errors.push(
+          `mode "${name}": unknown key "${key}" (known: ${MODE_KEYS.join(", ")})`,
+        );
+      }
+    }
+
+    let parent: ResolvedMode | undefined;
+    if (block.extends != null) {
+      parent = parsed.find((mode) => mode.name === String(block.extends));
+      if (!parent) {
+        errors.push(
+          `mode "${name}": extends "${block.extends}", which is not a mode declared above it`,
+        );
+      }
+    }
+    if (
+      block.scheme != null &&
+      !MODE_SCHEMES.includes(block.scheme as ModeScheme)
+    ) {
+      errors.push(
+        `mode "${name}": scheme must be one of ${MODE_SCHEMES.join(", ")}, got ${JSON.stringify(block.scheme)}`,
+      );
+    }
+    parsed.push({
+      name,
+      extends: parent?.name,
+      scheme: (block.scheme as ModeScheme | undefined) ?? parent?.scheme,
+    });
+  }
+  return parsed;
+}
+
 export function resolveDefinition(
   yamlText: string,
-  extraAlgorithms: Record<string, AlgorithmImpl> = {},
+  extraAlgorithms: Algorithm[] = [],
+  /** The project's gamut: the widest colors the definition is meant to use. */
+  gamut: Gamut = "display-p3",
 ): ResolvedDefinition {
   const doc = parse(yamlText) as Record<string, unknown>;
   const errors: string[] = [];
   const warnings: string[] = [];
-  const algorithms = { ...builtinAlgorithms, ...extraAlgorithms };
+  const algorithms = registryOf(extraAlgorithms);
 
   const grammar = doc.dtg;
   if (grammar == null) {
@@ -287,23 +394,29 @@ export function resolveDefinition(
 
   const changelog = parseChangelog(doc.changelog, errors);
   // `modes` is optional. A definition with none is not a degenerate case of a
-  // themed one — it is a colour dictionary, where every value has a name and
+  // themed one — it is a color dictionary, where every value has a name and
   // nothing varies. The single mode is implicit so the rest of the pipeline
   // (which is written against an axis) needs no special case.
-  if (doc.modes != null && (!Array.isArray(doc.modes) || doc.modes.length === 0)) {
-    errors.push("`modes`, when present, must be a non-empty list");
-  }
-  const modes = Array.isArray(doc.modes) && doc.modes.length > 0
-    ? doc.modes.map(String)
-    : ["default"];
-  const modeless = !Array.isArray(doc.modes) || doc.modes.length === 0;
+  const declaredModes = parseModes(doc.modes, errors);
+  const modeless = declaredModes.length === 0;
+  const modeDetails = modeless ? [{ name: "default" }] : declaredModes;
+  const modes = modeDetails.map((mode) => mode.name);
+  const parentIndex = modeDetails.map((mode) =>
+    mode.extends === undefined ? undefined : modes.indexOf(mode.extends),
+  );
+  const lastRootIndex = parentIndex.lastIndexOf(undefined);
 
   const defaults = (doc.defaults ?? {}) as Record<
     string,
     Record<string, unknown>
   >;
   for (const algoName of Object.keys(defaults)) {
-    if (!algorithms[algoName]) {
+    const renamedTo = RENAMED_ALGORITHMS[algoName];
+    if (renamedTo) {
+      errors.push(
+        `defaults: \`${algoName}\` was renamed to \`${renamedTo}\``,
+      );
+    } else if (!algorithms.has(algoName)) {
       warnings.push(`defaults declared for unknown algorithm "${algoName}"`);
     }
   }
@@ -329,12 +442,18 @@ export function resolveDefinition(
   }
 
   type SystemEntry = {
-    algo: AlgorithmImpl;
-    algoName: string;
-    params: Record<string, unknown>;
+    algo: Algorithm;
+    /** As written, `defaults` merged under the system's own. */
+    writtenParams: Record<string, unknown>;
+    params: Params;
+    colorParams: ColorParam[];
+    /** Top-level param keys the system wrote itself; the rest came from `defaults`. */
+    ownParams: Set<string>;
+    selectorShape: SelectorShape;
     overrides: Record<string, string>;
     alias?: AliasValue;
-    declared: string[] | null;
+    /** Every selector, when the algorithm emits all of them; null when it emits on demand. */
+    emitsAll: string[] | null;
     segments: PathSegment[];
   };
   const systems = new Map<string, SystemEntry>();
@@ -377,13 +496,26 @@ export function resolveDefinition(
         continue;
       }
       const algoName = String(block.algorithm);
+      if (path === "transparent") {
+        errors.push(
+          `system "transparent": that name is taken by transparent(), the constant-at-an-opacity ref`,
+        );
+        continue;
+      }
+      const renamedTo = RENAMED_ALGORITHMS[algoName];
+      if (renamedTo) {
+        errors.push(
+          `system "${path}": \`${algoName}\` was renamed to \`${renamedTo}\``,
+        );
+        continue;
+      }
       if (algoName === "compose") {
         errors.push(
           `system "${path}": \`compose\` was renamed to \`blend\` — its params are now \`base\`, \`toward\` and \`space\``,
         );
         continue;
       }
-      const algo = algorithms[algoName];
+      const algo = algorithms.get(algoName);
       if (!algo) {
         errors.push(`system "${path}": unknown algorithm "${algoName}"`);
         continue;
@@ -405,24 +537,31 @@ export function resolveDefinition(
         errors.push(`system "${path}": \`params\` must be a map`);
         continue;
       }
-      const params = {
+      const writtenParams = {
         ...defaults[algoName],
         ...((paramsBlock ?? {}) as Record<string, unknown>),
       };
-      let declared: string[] | null = null;
+      let parsed: ReturnType<typeof parseParams>;
+      let selectorShape: SelectorShape;
+      let emitsAll: string[] | null;
       try {
-        declared = algo.declaredSelectors(params);
+        parsed = parseParams(algo, writtenParams);
+        selectorShape = algo.selector(parsed.values);
+        emitsAll = algo.emit === "all" ? allSelectors(selectorShape) : null;
       } catch (e) {
         errors.push(`system "${path}": ${(e as Error).message}`);
         continue;
       }
       systems.set(path, {
         algo,
-        algoName,
-        params,
+        writtenParams,
+        params: parsed.values,
+        colorParams: parsed.colors,
+        ownParams: new Set(Object.keys(paramsBlock ?? {})),
+        selectorShape,
         overrides: (block.overrides ?? {}) as Record<string, string>,
         alias,
-        declared,
+        emitsAll,
         segments: named,
       });
     }
@@ -430,29 +569,31 @@ export function resolveDefinition(
   walkSystems(systemsBlock, []);
 
   const stepCache = new Map<string, ResolvedStep | undefined>();
+  const stepOrders = new Map<ResolvedStep, number[]>();
 
   function resolveStep(
     systemName: string,
     selector: string,
     refContext: string,
   ): ResolvedStep | undefined {
-    const key = `${systemName}/${selector}`;
+    const key = formatRef(systemName, selector);
     if (stepCache.has(key)) return stepCache.get(key);
     const sys = systems.get(systemName);
     let step: ResolvedStep | undefined;
     if (!sys) {
       errors.push(`${refContext}: unknown system "${systemName}"`);
-    } else if (sys.declared && !sys.declared.includes(selector)) {
-      errors.push(
-        `${refContext}: "${systemName}" declares no stop "${selector}"`,
-      );
     } else {
       try {
-        const value = sys.algo.resolveStep(sys.params, selector);
+        const parsed = parseSelector(
+          sys.algo.name,
+          sys.selectorShape,
+          selector,
+        );
+        const generated = sys.algo.resolve(parsed.values, sys.params);
         const override = sys.overrides[selector];
         let overrideColor: Color | undefined;
         if (override != null) {
-          if (!isOpaque(value.color)) {
+          if (!isOpaque(generated)) {
             throw new Error(
               `override "${key}": overrides pin flattened steps only; "${selector}" is translucent`,
             );
@@ -461,15 +602,12 @@ export function resolveDefinition(
         }
         step = {
           selector,
-          publicStep: assertNameFragment(
-            sys.algo.publicStep?.(sys.params, selector) ??
-              defaultPublicStep(selector),
-            key,
-          ),
-          color: overrideColor ?? value.color,
+          publicStep: assertNameFragment(publicStepOf(parsed), key),
+          color: overrideColor ?? generated,
           overridden: overrideColor != null,
-          generated: overrideColor != null ? value.color : undefined,
+          generated: overrideColor != null ? generated : undefined,
         };
+        stepOrders.set(step, orderOf(sys.selectorShape, parsed));
       } catch (e) {
         errors.push(`${refContext}: ${(e as Error).message}`);
       }
@@ -512,7 +650,7 @@ export function resolveDefinition(
     });
 
     // Roles nest as deep as the definition nests them. A node is a role when
-    // it is a colour, a ref list, or a block naming `refs` — the same
+    // it is a color, a ref list, or a block naming `refs` — the same
     // reserved-key test the systems tree uses to tell a system from a group.
     const walkRoles = (
       node: Record<string, unknown>,
@@ -556,7 +694,7 @@ export function resolveDefinition(
         } else {
           errors.push(
             modeless
-              ? `${context}: a role is a colour, a ref list, { refs, alias?, omit? }, or a group of roles`
+              ? `${context}: a role is a color, a ref list, { refs, alias?, omit? }, or a group of roles`
               : `${context}: a role is a ref list, { refs, alias?, omit? }, or a group of roles`,
           );
           continue;
@@ -606,9 +744,13 @@ export function resolveDefinition(
       roleCache.set(path, undefined);
       return undefined;
     }
-    if (modes.length > 0 && raw.refs.length !== modes.length) {
+    if (raw.refs.length > modes.length || raw.refs.length <= lastRootIndex) {
+      const expected =
+        lastRootIndex + 1 === modes.length
+          ? `${modes.length} refs (one per mode)`
+          : `${lastRootIndex + 1} to ${modes.length} refs (one per mode; a mode that extends another may be left off the end)`;
       errors.push(
-        `${path}: expected ${modes.length} refs (one per mode), got ${raw.refs.length}${
+        `${path}: expected ${expected}, got ${raw.refs.length}${
           raw.refs.some(
             (r) => r != null && /^transparent\(/.test(r) && !r.endsWith(")"),
           )
@@ -620,39 +762,38 @@ export function resolveDefinition(
       return undefined;
     }
 
-    if (raw.refs[0] == null) {
-      errors.push(
-        `${path}: mode "${modes[0] ?? 0}" is \`~\` — the first mode is what the others fall back to, so it has to name a colour`,
-      );
-      roleCache.set(path, undefined);
-      return undefined;
-    }
-
-    // `~` means this mode says nothing. perMode still carries a value for it,
-    // because a consumer that cannot express absence — Figma has no unset
-    // mode, it fills one with white — needs a colour to write. `inherited`
-    // records which of them were never declared, so the formats that *can*
-    // leave a mode out do.
+    // A mode that says nothing takes the ref of the mode it extends, resolved
+    // again in its own mode — so a role pointing at `surface.card` follows
+    // whatever this mode made of `surface.card`. perMode carries a value for
+    // every mode regardless, because a consumer that cannot express absence —
+    // Figma has no unset mode, it fills one with white — needs a color to
+    // write. `inherited` records which were never declared, so the formats
+    // that *can* leave a mode out do.
     const perMode: ResolvedRef[] = [];
     const inherited: boolean[] = [];
-    for (let i = 0; i < raw.refs.length; i++) {
-      const ref = raw.refs[i];
+    for (let i = 0; i < modes.length; i++) {
+      let source = i;
+      while (raw.refs[source] == null && parentIndex[source] !== undefined) {
+        source = parentIndex[source]!;
+      }
+      const ref = raw.refs[source];
       if (ref == null) {
-        if (perMode.length > 0) {
-          perMode.push(perMode[0]);
-          inherited.push(true);
+        if (source === i) {
+          errors.push(
+            `${path}: mode "${modes[i]}" is \`~\` but extends nothing — \`~\` stands for a mode that \`extends\` another and takes that mode's ref`,
+          );
         }
         continue;
       }
-      const context = `${path}[${modes[i] ?? i}]`;
+      const context = `${path}[${modes[i]}]`;
       const resolved = resolveRef(ref, i, context, [...stack, path]);
       if (resolved) {
         perMode.push(resolved);
-        inherited.push(false);
+        inherited.push(source !== i);
       }
     }
 
-    const complete = perMode.length === raw.refs.length;
+    const complete = perMode.length === modes.length;
     if (complete && new Set(perMode.map((entry) => isOpaque(entry.color))).size > 1) {
       warnings.push(
         `${path}: modes mix opaque and translucent values — probably a mistake`,
@@ -685,58 +826,62 @@ export function resolveDefinition(
       );
       return undefined;
     }
-    const transparentMatch = ref.match(
-      /^transparent\(\s*([^\s(),]+)(?:\s+([^\s(),]+))?\s*\)$/,
-    );
-    if (transparentMatch) {
-      const inner = transparentMatch[1];
-      const weight = transparentMatch[2];
-      if (weight != null) {
-        // transparent(<constant>, <opacity>): a declared color at an alpha,
-        // never composited. The system/selector form takes its weight from
-        // the selector instead, so the two spellings do not overlap.
-        if (inner.includes("/")) {
-          errors.push(
-            `${context}: "${ref}" mixes forms — a system/selector ref already carries its weight`,
-          );
-          return undefined;
-        }
-        const constant = statics.find((c) => c.path === inner);
-        if (!constant) {
-          errors.push(
-            `${context}: unknown constant "${inner}" (declared: ${statics.map((c) => c.path).join(", ") || "none"})`,
-          );
-          return undefined;
-        }
-        const alpha = Number(weight);
-        if (!Number.isFinite(alpha) || alpha < 0 || alpha > 100) {
-          errors.push(
-            `${context}: transparent() opacity must be a number 0-100, got "${weight}"`,
-          );
-          return undefined;
-        }
-        return {
-          ref,
-          target: { kind: "constant", name: inner, alpha },
-          color: { ...constant.color, alpha: alpha / 100 },
-        };
-      }
+    const call = parseCall(ref);
+    if (call && call.selector.includes(",")) {
       errors.push(
-        `${context}: transparent() takes a constant and an opacity, as transparent(shade 70). For a system's uncomposited form, ask the algorithm — ink-ramp spells it "sky/3/ink".`,
+        `${context}: "${ref}" separates with a comma — write spaces, as ${ref.replace(/\s*,\s*/g, " ")}`,
       );
+      return undefined;
+    }
+    if (call?.name === "transparent") {
+      // transparent(<constant> <opacity>): a declared color at an alpha,
+      // never composited. A system takes its weight from its own selector
+      // instead, so the two do not overlap.
+      const [inner, weight, ...rest] = call.selector.split(" ");
+      if (weight == null || rest.length > 0) {
+        errors.push(`${context}: ${TRANSPARENT_USAGE}`);
+        return undefined;
+      }
+      const constant = statics.find((c) => c.path === inner);
+      if (!constant) {
+        errors.push(
+          `${context}: unknown constant "${inner}" (declared: ${statics.map((c) => c.path).join(", ") || "none"})`,
+        );
+        return undefined;
+      }
+      const alpha = Number(weight);
+      if (!Number.isFinite(alpha) || alpha < 0 || alpha > 100) {
+        errors.push(
+          `${context}: transparent() opacity must be a number 0-100, got "${weight}"`,
+        );
+        return undefined;
+      }
+      return {
+        ref,
+        target: { kind: "constant", name: inner, alpha },
+        color: { ...constant.color, alpha: alpha / 100 },
+      };
+    }
+    if (call) {
+      const step = resolveStep(call.name, call.selector, context);
+      if (!step) return undefined;
+      return {
+        ref,
+        target: { kind: "step", system: call.name, selector: call.selector },
+        color: step.color,
+      };
+    }
+    if (ref.startsWith("transparent(") && ref.endsWith(")")) {
+      errors.push(`${context}: ${TRANSPARENT_USAGE}`);
       return undefined;
     }
     if (ref.includes("/")) {
       const slash = ref.indexOf("/");
-      const system = ref.slice(0, slash);
-      const selector = ref.slice(slash + 1);
-      const step = resolveStep(system, selector, context);
-      if (!step) return undefined;
-      return {
-        ref,
-        target: { kind: "step", system, selector },
-        color: step.color,
-      };
+      const selector = ref.slice(slash + 1).replace(/[@/]/g, " ");
+      errors.push(
+        `${context}: "${ref}" is the old spelling — write ${formatRef(ref.slice(0, slash), selector)}`,
+      );
+      return undefined;
     }
     if (ref.includes(".") && roleIndex.has(ref)) {
       const targetRole = resolveRole(ref, stack);
@@ -761,20 +906,20 @@ export function resolveDefinition(
         color: constant.color,
       };
     }
-    if (/^transparent\(/.test(ref) && !ref.endsWith(")")) {
+    if (ref.includes("(") && !ref.endsWith(")")) {
       errors.push(
-        `${context}: "${ref}" was cut short — a comma inside a \`[ ]\` list separates items. Write the refs as a block list ("- transparent(x, 70)") or quote this one.`,
+        `${context}: "${ref}" was cut short — a comma inside a \`[ ]\` list separates items. Separate with spaces, as transparent(paper 70).`,
       );
       return undefined;
     }
-    if (/^[0-9.]+\)$/.test(ref)) {
+    if (/^[^\s()]+\)$/.test(ref)) {
       errors.push(
-        `${context}: "${ref}" is the tail of a transparent(...) ref split by a comma inside a \`[ ]\` list — use a block list or quote the ref.`,
+        `${context}: "${ref}" is the tail of a ref split by a comma inside a \`[ ]\` list — separate with spaces, as transparent(paper 70).`,
       );
       return undefined;
     }
     errors.push(
-      `${context}: unrecognized ref "${ref}" — expected system/selector, domain.role, a declared constant, or transparent(...)`,
+      `${context}: unrecognized ref "${ref}" — expected system(selector), domain.role, a declared constant, or transparent(...)`,
     );
     return undefined;
   }
@@ -810,35 +955,31 @@ export function resolveDefinition(
   const resolvedSystems: ResolvedSystem[] = [];
   for (const [name, sys] of systems) {
     let steps: ResolvedStep[];
-    if (sys.declared) {
-      steps = sys.declared
+    if (sys.emitsAll) {
+      steps = sys.emitsAll
         .map((selector) => resolveStep(name, selector, `system "${name}"`))
         .filter((s): s is ResolvedStep => s != null);
     } else {
       steps = [...stepCache.entries()]
-        .filter(([key, step]) => step != null && key.startsWith(`${name}/`))
+        .filter(([key, step]) => step != null && key.startsWith(`${name}(`))
         .map(([, step]) => step as ResolvedStep)
-        .sort((a, b) => compareSteps(sys.algo, sys.params, a, b));
+        .map((step) => ({ step, order: stepOrders.get(step) ?? [] }))
+        .sort(compareSteps)
+        .map((ordered) => ordered.step);
     }
     // An input outside the gamut the arithmetic runs in is clipped on the way
     // in, and the definition still reads as if it were wide. This asks the
     // algorithm what gamut it works in rather than inspecting the steps: a
     // system whose demanded steps are all pale tints still lost the anchor.
-    if (sys.algo.inputColors && sys.algo.workingGamut) {
-      try {
-        const gamut = sys.algo.workingGamut(sys.params);
-        const clipped = gamut
-          ? sys.algo
-              .inputColors(sys.params)
-              .filter((c) => needsMapping(c, gamut))
-          : [];
-        if (clipped.length > 0) {
-          warnings.push(
-            `system "${name}" is given ${clipped.length} colour${clipped.length === 1 ? "" : "s"} outside ${gamut}, but its transform runs in ${gamut} — the extra gamut is discarded on the way in. Every space has a display-p3 counterpart that keeps the same interpolation; switch to it rather than changing the interpolation itself.`,
-          );
-        }
-      } catch {
-        // Bad params are already reported as errors; don't double-report.
+    const workingGamut = sys.algo.workingGamut?.(sys.params) ?? null;
+    if (workingGamut) {
+      const clipped = sys.colorParams.filter((param) =>
+        needsMapping(param.color, workingGamut),
+      );
+      if (clipped.length > 0) {
+        warnings.push(
+          `system "${name}" is given ${clipped.length} color${clipped.length === 1 ? "" : "s"} outside ${workingGamut}, but its transform runs in ${workingGamut} — the extra gamut is discarded on the way in. Every space has a display-p3 counterpart that keeps the same interpolation; switch to it rather than changing the interpolation itself.`,
+        );
       }
     }
 
@@ -846,19 +987,44 @@ export function resolveDefinition(
     for (const selector of Object.keys(sys.overrides)) {
       if (!emitted.has(selector)) {
         warnings.push(
-          `override "${name}/${selector}" pins a step nothing demands — it emits nothing`,
+          `override "${formatRef(name, selector)}" pins a step nothing demands — it emits nothing`,
         );
       }
     }
+    const colorParams: ResolvedColorParam[] = sys.colorParams.map((param) => ({
+      ...param,
+      from: sys.ownParams.has(param.path.split(".")[0]) ? "system" : "defaults",
+    }));
     resolvedSystems.push({
       system: name,
       segments: sys.segments,
       alias: sys.alias,
-      algorithm: sys.algoName,
+      algorithm: sys.algo.name,
       algorithmDescription: sys.algo.description,
-      params: sys.params,
+      params: sys.writtenParams,
+      colorParams,
+      selector: sys.selectorShape,
       steps,
     });
+  }
+
+  // The project's gamut is a ceiling on what is authored, not a clamp: a
+  // color above it resolves and emits untouched, and this only says so.
+  for (const constant of statics) {
+    if (needsMapping(constant.color, gamut)) {
+      warnings.push(
+        `constant "${constant.path}" is outside ${gamut}, the project's gamut`,
+      );
+    }
+  }
+  for (const system of resolvedSystems) {
+    for (const param of system.colorParams) {
+      if (needsMapping(param.color, gamut)) {
+        warnings.push(
+          `system "${system.system}" param \`${param.path}\` is outside ${gamut}, the project's gamut`,
+        );
+      }
+    }
   }
 
   if (errors.length > 0) {
@@ -867,6 +1033,7 @@ export function resolveDefinition(
 
   return {
     modes,
+    modeDetails,
     changelog,
     systems: resolvedSystems,
     systemsAlias,

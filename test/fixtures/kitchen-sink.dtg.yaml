@@ -10,7 +10,7 @@ changelog:
   - 2026-08-21: wide-gamut anchors, so the @supports layer is covered
 
 defaults:
-  oklch-scale:
+  scale:
     toward: ["#fafdff", "#001a28"]
     hueShift: 15
     stops: { "50": 0.05, "500": 1, "950": 0.05 }
@@ -22,13 +22,13 @@ systems:
     muted: "#828282"
 
   sky:
-    algorithm: ink-ramp
+    algorithm: tint
     alias: light
-    params: { base: "#fafdff", ink: "#001a28" }
+    params: { base: "#fafdff", tint: "#001a28" }
 
   night:
-    algorithm: ink-ramp
-    params: { base: "#151c1f", ink: "#fafdff" }
+    algorithm: tint
+    params: { base: "#151c1f", tint: "#fafdff" }
 
   warm:
     algorithm: blend
@@ -51,7 +51,7 @@ systems:
       toward: { red: "#b30a0a" }
 
   theme:
-    algorithm: oklch-scale
+    algorithm: scale
     params: { base: "#03a2e8" }
 
   shadow:
@@ -62,8 +62,8 @@ systems:
   lush: "oklch(0.72 0.28 145)"
 
   wide:
-    algorithm: ink-ramp
-    params: { base: "#ffffff", ink: "color(display-p3 1 0 0)" }
+    algorithm: tint
+    params: { base: "#ffffff", tint: "color(display-p3 1 0 0)" }
 
   widemix:
     algorithm: blend
@@ -75,19 +75,19 @@ systems:
   grouped:
     alias: { css: renamed, figma: Renamed }
     inner:
-      algorithm: ink-ramp
-      params: { base: "#ffffff", ink: "#ff0000" }
+      algorithm: tint
+      params: { base: "#ffffff", tint: "#ff0000" }
 
 roles:
   surface:
-    canvas: [sky/3, night/4]
-    tint: [warm/red@6, warm/blue@6]
-    full: [warm/red@100, warm/blue@100]
-    perceptual: [perceptual/red@6, lightmix/red@6]
-    scale: [theme/50, theme/950]
-    nested: [grouped.inner/10, grouped.inner/20]
+    canvas: [sky(3), night(4)]
+    tint: [warm(red 6), warm(blue 6)]
+    full: [warm(red 100), warm(blue 100)]
+    perceptual: [perceptual(red 6), lightmix(red 6)]
+    scale: [theme(50), theme(950)]
+    nested: [grouped.inner(10), grouped.inner(20)]
     echo: [surface.canvas, surface.canvas]
-    wide: [wide/60, widemix/deep@80]
+    wide: [wide(60), widemix(deep 80)]
     lush: [lush, vivid]
 
   label:
@@ -100,8 +100,8 @@ roles:
       refs: [paper, ink.body]
 
   state:
-    veil: [sky/3/ink, night/4/ink]
-    deferred: [warm/red@6/alpha, warm/blue@6/alpha]
-    scrim: [shadow/40, shadow/60]
+    veil: [sky(3 tint), night(4 tint)]
+    deferred: [warm(red 6 alpha), warm(blue 6 alpha)]
+    scrim: [shadow(40), shadow(60)]
     faded: [transparent(paper 70), transparent(ink.body 40)]
     widefade: [transparent(vivid 30), transparent(paper 30)]
