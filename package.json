@@ -1,6 +1,6 @@
 {
   "name": "@fifthrevision/dtg",
-  "version": "0.3.0-dev",
+  "version": "0.3.0",
   "description": "Design token generator: design decisions as a YAML definition, compiled deterministically into CSS, Figma payloads, and a browsable dev server.",
   "repository": {
     "type": "git",
