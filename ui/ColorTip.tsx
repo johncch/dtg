@@ -111,18 +111,12 @@ export function ColorFacts({ color, reference }: { color: Color; reference?: Rea
           <span style={{ background: paintCss(color) }} />
         </div>
         <div className="tip-facts">
-          <code>{srgb.hex}</code>
-          <code>{srgb.rgb}</code>
-          <code>{srgb.hsl}</code>
-          <code>
-            oklch({trim(L, 3)} {trim(C, 3)} {trim(hue, 1)}
-            {alpha})
-          </code>
+          <Copyable value={srgb.hex} />
+          <Copyable value={srgb.rgb} />
+          <Copyable value={srgb.hsl} />
+          <Copyable value={`oklch(${trim(L, 3)} ${trim(C, 3)} ${trim(hue, 1)}${alpha})`} />
           {reach.where !== "srgb" && (
-            <code>
-              {reach.p3}
-              {reach.where === "beyond" && <span className="muted"> nearest P3</span>}
-            </code>
+            <Copyable value={reach.p3} note={reach.where === "beyond" ? "nearest P3" : undefined} />
           )}
           <span className="tip-status">
             {REACH_LABEL[reach.where]}
@@ -132,5 +126,25 @@ export function ColorFacts({ color, reference }: { color: Color; reference?: Rea
         </div>
       </div>
     </div>
+  );
+}
+
+/** One value, with a button that copies it; the button says so for a moment after. */
+function Copyable({ value, note }: { value: string; note?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1200);
+    });
+  };
+  return (
+    <span className="copyable">
+      <code>{value}</code>
+      {note && <span className="muted"> {note}</span>}
+      <button type="button" className="copy" aria-label={`Copy ${value}`} onClick={copy}>
+        {copied ? "copied" : "copy"}
+      </button>
+    </span>
   );
 }

@@ -508,6 +508,7 @@ export function emitDtcg(
     const group: Record<string, unknown> = {};
     for (const step of steps) {
       const ext: Record<string, unknown> = {
+        id: stepIdentity(lineage, system, step),
         name: `${publicSystemName(system, "figma", "/")}/${step.publicStep}`,
         ref: formatRef(system.system, step.selector),
         algorithm: system.algorithm,
@@ -516,7 +517,7 @@ export function emitDtcg(
       group[step.publicStep] = {
         $type: "color",
         $value: dtcgColor(step.color, colorSpace),
-        $description: stepIdentity(lineage, system, step),
+        ...(system.description ? { $description: system.description } : {}),
         $extensions: { [DTCG_NS]: ext },
       };
     }
@@ -525,12 +526,13 @@ export function emitDtcg(
   if (emittedStatics(resolved).length > 0) {
     const group = (systems.static ??= {}) as Record<string, unknown>;
     for (const s of emittedStatics(resolved)) {
+      const description = groupDescriptionOf(resolved.groupDescriptions.palette, s.path);
       placeAt(group, s.path, {
         $type: "color",
         $value: dtcgColor(s.color, colorSpace),
-        $description: `static.${s.path}`,
+        ...(description ? { $description: description } : {}),
         $extensions: {
-          [DTCG_NS]: { name: `static/${publicPath(s.segments, "figma", "/")}` },
+          [DTCG_NS]: { id: `static.${s.path}`, name: `static/${publicPath(s.segments, "figma", "/")}` },
         },
       });
     }
@@ -545,9 +547,10 @@ export function emitDtcg(
     placeAt(section, rolePath, {
       $type: "color",
       $value: dtcgRef(resolved, role.perMode[0], colorSpace),
-      $description: rolePath,
+      ...(role.description ? { $description: role.description } : {}),
       $extensions: {
         [DTCG_NS]: {
+          id: rolePath,
           name: publicRoleName(role, "figma", "/"),
           modes: Object.fromEntries(
             resolved.modes.map((m, i) => [m, dtcgRef(resolved, role.perMode[i], colorSpace)]),
@@ -616,6 +619,17 @@ function dtcgColor(color: Color, colorSpace: Gamut): DtcgColor {
   };
 }
 
+/** A palette color has no description of its own; it carries its group's. */
+function groupDescriptionOf(descriptions: Record<string, string>, path: string): string | undefined {
+  const cut = path.lastIndexOf(".");
+  return cut === -1 ? undefined : descriptions[path.slice(0, cut)];
+}
+
+/**
+ * A primitive's stable identity — what it is for, which survives a rename —
+ * so a courier syncing a design tool can tell a rename from a create. It
+ * lives in the extension, not `$description`, which is the author's.
+ */
 function stepIdentity(
   lineage: Lineage,
   system: ResolvedSystem,

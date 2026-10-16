@@ -295,8 +295,12 @@ core: # any non-reserved top-level key is a section you name;
   `color(display-p3 r g b)`, each with an optional `/ alpha`. A color keeps
   the space it was written in, so a wide-gamut anchor is not clipped to sRGB
   on the way in — the transform runs in the widest space its inputs use.
-- A **role** is a list of refs, one per mode, or `{ refs, alias?, omit? }`
-  when its public name diverges. This is the complete role grammar.
+- A **role** is a list of refs, one per mode, or `{ refs, alias?, omit?,
+  description? }` when it needs more. This is the complete role grammar.
+- **`description`** is your own note, as text, on a system, a role, or a
+  group in `palette`, `systems` or a section. `dtg dev` shows it beside what
+  it describes, and DTCG carries it as `$description`. It is a reserved key
+  in those places, so nothing can be named `description`.
 - **`modes`** is a list of names, or a map when a mode needs more:
   `dark-hc: { extends: dark, scheme: dark }`. A mode that extends another
   says only what differs. A role's list must reach the last mode that
@@ -385,10 +389,11 @@ generation methods or shadow a built-in by name.
   nothing else understands, so a browser outside a Tailwind build discards
   the primitives entirely; pick it only for a Tailwind v4 project.
 - **DTCG**: standard design tokens, emitted only when a path is given.
-  `$description` carries *identity*, not documentation — a role's internal
-  path, or for a demand-driven step the roles that demand it, both of which
-  survive the renames and renumberings that change public names.
-  `$extensions` carries the recipe, which is the volatile part. Any
+  `$description` is your `description`, where you wrote one. Identity
+  rides in `$extensions` as `id` — a role's internal path, or for a
+  demand-driven step the roles that use it, both of which survive the
+  renames and renumberings that change public names — beside the recipe,
+  which is the volatile part. Any
   `changelog` rides at the root. Aimed at an agent replaying the system into
   a design tool.
 Both emitters are pure functions of the definition: same definition, same

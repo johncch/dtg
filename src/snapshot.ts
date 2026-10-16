@@ -44,6 +44,8 @@ export type Snapshot = {
   systems: SnapshotSystem[];
   constants: SnapshotConstant[];
   roles: SnapshotRole[];
+  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role domains. */
+  groupNotes: { systems: Record<string, string>; palette: Record<string, string>; roles: Record<string, string> };
 };
 
 export type SnapshotDefinition = {
@@ -83,6 +85,8 @@ export type SnapshotSystem = {
   algorithm: string;
   description: string;
   params: Record<string, unknown>;
+  /** The system's hand-written description, or null; `description` is the algorithm's. */
+  note: string | null;
   /** The top-level params the system wrote itself; the rest came from `defaults`. */
   ownParams: string[];
   /** The bounds the algorithm declares for its number params, by name, for a slider to run between. */
@@ -109,6 +113,8 @@ export type SnapshotRole = {
   section: string;
   domain: string;
   role: string;
+  /** The role's hand-written description, or null. */
+  note: string | null;
   /**
    * One entry per mode, in `modes` order. `inherited` = the role wrote
    * nothing for this mode and the ref is the one of the mode it extends.
@@ -164,6 +170,7 @@ export function buildSnapshot({
       algorithm: system.algorithm,
       description: system.algorithmDescription,
       params: system.params,
+      note: system.description ?? null,
       ownParams: system.ownParams,
       numberRanges: numberRangesOf(system.algorithm),
       colorParams: system.colorParams,
@@ -188,10 +195,12 @@ export function buildSnapshot({
           .map((param) => ({ system: system.system, param: param.path })),
       ),
     })),
+    groupNotes: resolved.groupDescriptions,
     roles: resolved.roles.map((role) => ({
       section: role.section,
       domain: role.domain,
       role: role.role,
+      note: role.description ?? null,
       perMode: role.perMode.map((entry, index) => ({
         ref: entry.ref,
         target: entry.target,

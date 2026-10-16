@@ -17,6 +17,7 @@ export function DomainPage({ snapshot, domain }: { snapshot: Snapshot; domain: s
   return (
     <>
       <h1>{domain}</h1>
+      {snapshot.groupNotes.roles[domain] && <p className="note">{snapshot.groupNotes.roles[domain]}</p>}
       <p className="sub">{roles.length} roles</p>
       <table>
         <thead>
@@ -92,6 +93,7 @@ function RoleRow({
     <tr id={id} className={targeted ? "target" : undefined}>
       <td>
         <code>{role.role}</code>
+        {role.note && <div className="role-note">{role.note}</div>}
       </td>
       {role.perMode.map((entry, index) => {
         const parent = snapshot.modeParents[index];

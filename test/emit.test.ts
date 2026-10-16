@@ -53,12 +53,14 @@ describe("css", () => {
 });
 
 describe("dtcg", () => {
-  test("descriptions carry identity, not the recipe", () => {
+  test("identity rides in the extension, not the recipe", () => {
     const d = emitDtcg(resolved) as any;
     // a role's identity is its internal path, untouched by alias/omit
-    assert.equal(d.roles.surface.canvas.$description, "surface.canvas");
+    assert.equal(d.roles.surface.canvas.$extensions[NS].id, "surface.canvas");
     // a demand-driven step's is who demands it, so renumbering is safe
-    assert.equal(d.systems.sky["3"].$description, "surface.canvas[light]");
+    assert.equal(d.systems.sky["3"].$extensions[NS].id, "surface.canvas[light]");
+    // $description is the author's, and absent when they wrote none
+    assert.equal(d.roles.surface.canvas.$description, undefined);
     // the volatile recipe lives in extensions instead
     assert.equal(d.systems.sky["3"].$extensions[NS].ref, "sky(3)");
     assert.equal(d.systems.sky["3"].$extensions[NS].name, "light/3");
@@ -547,5 +549,32 @@ roles:
 
   test("takes only true or false", () => {
     assert.throws(() => resolveDefinition(SRC.replace("emit: false", "emit: no-thanks")), /`emit` on a group is true or false/);
+  });
+});
+
+describe("a hand-written description", () => {
+  const d = emitDtcg(
+    resolveDefinition(`dtg: 1
+modes: [light]
+palette:
+  hues:
+    description: The anchors, judged together.
+    sky: "#03a2e8"
+systems:
+  wash:
+    description: A tint for surfaces.
+    algorithm: tint
+    params: { base: "#ffffff", tint: hues.sky }
+roles:
+  surface:
+    canvas: { refs: [wash(6)], description: The page itself. }
+    accent: [hues.sky]
+`),
+  ) as any;
+
+  test("is a role's, a system's steps', and a palette group's colors' $description", () => {
+    assert.equal(d.roles.surface.canvas.$description, "The page itself.");
+    assert.equal(d.systems.wash["6"].$description, "A tint for surfaces.");
+    assert.equal(d.systems.static.hues.sky.$description, "The anchors, judged together.");
   });
 });

@@ -86,7 +86,7 @@ function Nav({ snapshot }: { snapshot: Snapshot }) {
           </>
         )}
         <h2>Systems</h2>
-        <SystemLinks nodes={systemTree(snapshot.systems)} />
+        <SystemLinks nodes={systemTree(snapshot.systems)} notes={snapshot.groupNotes.systems} />
         <h2>Roles</h2>
         {domains.length > 0 && <Link to={{ page: "roles" }}>all</Link>}
         <DomainLinks nodes={domainTree(domains)} />
@@ -96,7 +96,7 @@ function Nav({ snapshot }: { snapshot: Snapshot }) {
 }
 
 /** A systems group in the sidebar holds its systems and groups by their own names; a system is a link to its page. */
-type SystemNode = { name: string; system: SnapshotSystem | null; children: SystemNode[] };
+type SystemNode = { name: string; path: string; system: SnapshotSystem | null; children: SystemNode[] };
 
 function systemTree(systems: SnapshotSystem[]): SystemNode[] {
   const roots: SystemNode[] = [];
@@ -105,7 +105,7 @@ function systemTree(systems: SnapshotSystem[]): SystemNode[] {
     const names = system.system.split(".");
     names.forEach((name, index) => {
       let node = level.find((candidate) => candidate.name === name);
-      if (!node) level.push((node = { name, system: null, children: [] }));
+      if (!node) level.push((node = { name, path: names.slice(0, index + 1).join("."), system: null, children: [] }));
       if (index === names.length - 1) node.system = system;
       level = node.children;
     });
@@ -113,7 +113,7 @@ function systemTree(systems: SnapshotSystem[]): SystemNode[] {
   return roots;
 }
 
-function SystemLinks({ nodes }: { nodes: SystemNode[] }) {
+function SystemLinks({ nodes, notes }: { nodes: SystemNode[]; notes: Record<string, string> }) {
   return nodes.map((node) =>
     node.system ? (
       <Link key={node.name} to={{ page: "system", name: node.system.system }}>
@@ -121,9 +121,11 @@ function SystemLinks({ nodes }: { nodes: SystemNode[] }) {
       </Link>
     ) : (
       <div key={node.name} className="nav-group">
-        <div className="nav-group-name">{node.name}</div>
+        <div className="nav-group-name" title={notes[node.path]}>
+          {node.name}
+        </div>
         <div className="nav-group-items">
-          <SystemLinks nodes={node.children} />
+          <SystemLinks nodes={node.children} notes={notes} />
         </div>
       </div>
     ),
@@ -204,6 +206,7 @@ function Page({ route, snapshot }: { route: Route; snapshot: Snapshot }) {
       <PalettePage
         key={palette.group}
         palette={palette}
+        note={snapshot.groupNotes.palette[palette.group] ?? null}
         written={[...snapshot.constants.map((constant) => constant.path), ...snapshot.systems.map((system) => system.system)]}
         changes={snapshot.changes}
       />

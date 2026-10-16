@@ -36,7 +36,9 @@ systems:
 
   # A wash: tints that share a ground, one per color.
   warm-wash:
+    description: Two tints over paper.
     red:
+      description: The warm one.
       algorithm: tint
       params: { base: paper, tint: "#b30a0a" }
     blue:

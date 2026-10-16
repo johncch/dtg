@@ -89,10 +89,13 @@ function useLocks(changes: Change[]) {
 
 export function PalettePage({
   palette,
+  note,
   written,
   changes,
 }: {
   palette: Palette;
+  /** The group's hand-written description, or null. */
+  note: string | null;
   /** Every path the systems block holds, constants and systems alike. */
   written: string[];
   changes: Change[];
@@ -155,6 +158,7 @@ export function PalettePage({
           randomize
         </button>
       </div>
+      {note && <p className="note">{note}</p>}
       <p className="desc">
         A group of constants, looked at together. Space rolls every unlocked color; a color the file has starts locked,
         one added since the last save starts unlocked and takes the name of each color it rolls to. Saving freezes a

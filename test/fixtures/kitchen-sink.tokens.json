@@ -30,9 +30,9 @@
       "canvas": {
         "$type": "color",
         "$value": "{systems.sky.3}",
-        "$description": "surface.canvas",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.canvas",
             "name": "surface/canvas",
             "modes": {
               "light": "{systems.sky.3}",
@@ -48,9 +48,9 @@
       "tint": {
         "$type": "color",
         "$value": "{systems.warm-wash.red.6}",
-        "$description": "surface.tint",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.tint",
             "name": "surface/tint",
             "modes": {
               "light": "{systems.warm-wash.red.6}",
@@ -66,9 +66,9 @@
       "full": {
         "$type": "color",
         "$value": "{systems.warm-wash.red.100}",
-        "$description": "surface.full",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.full",
             "name": "surface/full",
             "modes": {
               "light": "{systems.warm-wash.red.100}",
@@ -84,9 +84,9 @@
       "scale": {
         "$type": "color",
         "$value": "{systems.theme.50}",
-        "$description": "surface.scale",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.scale",
             "name": "surface/scale",
             "modes": {
               "light": "{systems.theme.50}",
@@ -102,9 +102,9 @@
       "nested": {
         "$type": "color",
         "$value": "{systems.grouped.inner.10}",
-        "$description": "surface.nested",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.nested",
             "name": "surface/nested",
             "modes": {
               "light": "{systems.grouped.inner.10}",
@@ -120,9 +120,9 @@
       "echo": {
         "$type": "color",
         "$value": "{roles.surface.canvas}",
-        "$description": "surface.echo",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.echo",
             "name": "surface/echo",
             "modes": {
               "light": "{roles.surface.canvas}",
@@ -138,9 +138,9 @@
       "wide": {
         "$type": "color",
         "$value": "{systems.wide.60}",
-        "$description": "surface.wide",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.wide",
             "name": "surface/wide",
             "modes": {
               "light": "{systems.wide.60}",
@@ -156,9 +156,9 @@
       "lush": {
         "$type": "color",
         "$value": "{systems.static.lush}",
-        "$description": "surface.lush",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.lush",
             "name": "surface/lush",
             "modes": {
               "light": "{systems.static.lush}",
@@ -176,9 +176,9 @@
       "primary": {
         "$type": "color",
         "$value": "{systems.static.ink.body}",
-        "$description": "label.primary",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "label.primary",
             "name": "label",
             "modes": {
               "light": "{systems.static.ink.body}",
@@ -194,9 +194,9 @@
       "muted": {
         "$type": "color",
         "$value": "{systems.static.ink.muted}",
-        "$description": "label.muted",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "label.muted",
             "name": "label/muted",
             "modes": {
               "light": "{systems.static.ink.muted}",
@@ -212,9 +212,9 @@
       "aliased": {
         "$type": "color",
         "$value": "{systems.static.paper}",
-        "$description": "label.aliased",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "label.aliased",
             "name": "label/aliased",
             "modes": {
               "light": "{systems.static.paper}",
@@ -241,9 +241,9 @@
           "alpha": 0.03,
           "hex": "#001a28"
         },
-        "$description": "state.veil",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "state.veil",
             "name": "state/veil",
             "modes": {
               "light": {
@@ -286,9 +286,9 @@
           "alpha": 0.06,
           "hex": "#b30a0a"
         },
-        "$description": "state.deferred",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "state.deferred",
             "name": "state/deferred",
             "modes": {
               "light": {
@@ -331,9 +331,9 @@
           "alpha": 0.4,
           "hex": "#000000"
         },
-        "$description": "state.scrim",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "state.scrim",
             "name": "state/scrim",
             "modes": {
               "light": {
@@ -376,9 +376,9 @@
           "alpha": 0.7,
           "hex": "#ffffff"
         },
-        "$description": "state.faded",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "state.faded",
             "name": "state/faded",
             "modes": {
               "light": {
@@ -421,9 +421,9 @@
           "alpha": 0.3,
           "hex": "#ff3428"
         },
-        "$description": "state.widefade",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "state.widefade",
             "name": "state/widefade",
             "modes": {
               "light": {
@@ -474,9 +474,9 @@
           ],
           "hex": "#f2f6f9"
         },
-        "$description": "surface.canvas[light]",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.canvas[light]",
             "name": "light/3",
             "ref": "sky(3)",
             "algorithm": "tint"
@@ -496,9 +496,9 @@
           ],
           "hex": "#1e2528"
         },
-        "$description": "surface.canvas[dark]",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.canvas[dark]",
             "name": "night/4",
             "ref": "night(4)",
             "algorithm": "tint"
@@ -519,9 +519,10 @@
             ],
             "hex": "#faf0f0"
           },
-          "$description": "surface.tint[light]",
+          "$description": "The warm one.",
           "$extensions": {
             "com.fifthrevision.dtg": {
+              "id": "surface.tint[light]",
               "name": "warm-wash/red/6",
               "ref": "warm-wash.red(6)",
               "algorithm": "tint"
@@ -539,9 +540,10 @@
             ],
             "hex": "#b30a0a"
           },
-          "$description": "surface.full[light]",
+          "$description": "The warm one.",
           "$extensions": {
             "com.fifthrevision.dtg": {
+              "id": "surface.full[light]",
               "name": "warm-wash/red/100",
               "ref": "warm-wash.red(100)",
               "algorithm": "tint"
@@ -561,9 +563,9 @@
             ],
             "hex": "#f6f8fb"
           },
-          "$description": "surface.tint[dark]",
           "$extensions": {
             "com.fifthrevision.dtg": {
+              "id": "surface.tint[dark]",
               "name": "warm-wash/blue/6",
               "ref": "warm-wash.blue(6)",
               "algorithm": "tint"
@@ -581,9 +583,9 @@
             ],
             "hex": "#6192bb"
           },
-          "$description": "surface.full[dark]",
           "$extensions": {
             "com.fifthrevision.dtg": {
+              "id": "surface.full[dark]",
               "name": "warm-wash/blue/100",
               "ref": "warm-wash.blue(100)",
               "algorithm": "tint"
@@ -604,9 +606,9 @@
           ],
           "hex": "#f1f9fe"
         },
-        "$description": "surface.scale[light]",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.scale[light]",
             "name": "theme/50",
             "ref": "theme(50)",
             "algorithm": "scale"
@@ -624,9 +626,9 @@
           ],
           "hex": "#03a2e8"
         },
-        "$description": "theme(500)",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "theme(500)",
             "name": "theme/500",
             "ref": "theme(500)",
             "algorithm": "scale"
@@ -644,9 +646,9 @@
           ],
           "hex": "#011f30"
         },
-        "$description": "surface.scale[dark]",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.scale[dark]",
             "name": "theme/950",
             "ref": "theme(950)",
             "algorithm": "scale"
@@ -666,9 +668,9 @@
           ],
           "hex": "#ff7070"
         },
-        "$description": "surface.wide[light]",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.wide[light]",
             "name": "wide/60",
             "ref": "wide(60)",
             "algorithm": "tint"
@@ -688,9 +690,9 @@
           ],
           "hex": "#0788ff"
         },
-        "$description": "surface.wide[dark]",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "surface.wide[dark]",
             "name": "widemix/80",
             "ref": "widemix(80)",
             "algorithm": "tint"
@@ -711,9 +713,9 @@
             ],
             "hex": "#ffe6e6"
           },
-          "$description": "surface.nested[light]",
           "$extensions": {
             "com.fifthrevision.dtg": {
+              "id": "surface.nested[light]",
               "name": "Renamed/inner/10",
               "ref": "grouped.inner(10)",
               "algorithm": "tint"
@@ -731,9 +733,9 @@
             ],
             "hex": "#ffcccc"
           },
-          "$description": "surface.nested[dark]",
           "$extensions": {
             "com.fifthrevision.dtg": {
+              "id": "surface.nested[dark]",
               "name": "Renamed/inner/20",
               "ref": "grouped.inner(20)",
               "algorithm": "tint"
@@ -754,9 +756,9 @@
           ],
           "hex": "#ffffff"
         },
-        "$description": "static.paper",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "static.paper",
             "name": "static/paper"
           }
         }
@@ -773,9 +775,9 @@
             ],
             "hex": "#313133"
           },
-          "$description": "static.ink.body",
           "$extensions": {
             "com.fifthrevision.dtg": {
+              "id": "static.ink.body",
               "name": "static/ink/body"
             }
           }
@@ -791,9 +793,9 @@
             ],
             "hex": "#828282"
           },
-          "$description": "static.ink.muted",
           "$extensions": {
             "com.fifthrevision.dtg": {
+              "id": "static.ink.muted",
               "name": "static/ink/muted"
             }
           }
@@ -810,9 +812,9 @@
           ],
           "hex": "#ff3428"
         },
-        "$description": "static.vivid",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "static.vivid",
             "name": "static/vivid"
           }
         }
@@ -828,9 +830,9 @@
           ],
           "hex": "#00c737"
         },
-        "$description": "static.lush",
         "$extensions": {
           "com.fifthrevision.dtg": {
+            "id": "static.lush",
             "name": "static/lush"
           }
         }

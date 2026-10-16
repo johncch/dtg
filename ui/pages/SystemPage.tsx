@@ -19,6 +19,7 @@ export function SystemPage({ system }: { system: SnapshotSystem }) {
           emits <code>{system.cssName}</code> · {system.algorithm}
         </span>
       </h1>
+      {system.note && <p className="note">{system.note}</p>}
       <p className="desc">{system.description}</p>
       <Params system={system} />
       <Probe key={system.system} system={system} />

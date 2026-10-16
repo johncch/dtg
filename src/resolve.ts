@@ -48,7 +48,7 @@ const TOP_LEVEL_RESERVED = [
 ];
 // A system node's keys. Params live in their own block, so this list can
 // grow without ever colliding with an algorithm's parameter names.
-const SYSTEM_RESERVED = ["algorithm", "params", "alias", "overrides", "emit"];
+const SYSTEM_RESERVED = ["algorithm", "params", "alias", "overrides", "emit", "description"];
 
 const RENAMED_ALGORITHMS: Record<string, string> = {
   "ink-ramp": "tint",
@@ -179,6 +179,8 @@ export type ResolvedSystem = {
   /** What a ref into this system is made of. */
   selector: SelectorShape;
   steps: ResolvedStep[];
+  /** Written by hand in the definition; the algorithm's own is `algorithmDescription`. */
+  description?: string;
 };
 
 /**
@@ -217,6 +219,7 @@ export function publicPath(
 export type ResolvedSection = {
   name: string;
   alias?: AliasValue;
+  description?: string;
 };
 
 export type RefTarget =
@@ -244,6 +247,8 @@ export type ResolvedRole = {
   /** The last segment. Derived. */
   role: string;
   omit: boolean;
+  /** Written by hand in the definition, for whoever reads it next. */
+  description?: string;
   /** One entry per mode, in `modes` order. */
   perMode: ResolvedRef[];
   /**
@@ -277,6 +282,8 @@ export type ResolvedDefinition = {
   statics: ResolvedStatic[];
   sections: ResolvedSection[];
   roles: ResolvedRole[];
+  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role domains. */
+  groupDescriptions: { systems: Record<string, string>; palette: Record<string, string>; roles: Record<string, string> };
   warnings: string[];
   /** Index-parallel to the `probes` asked for. */
   probed: Probe[];
@@ -464,8 +471,19 @@ export function resolveDefinition(
     /** The selectors the system publishes whether or not a ref asks for them. */
     emit: string[];
     segments: PathSegment[];
+    description?: string;
   };
   const systems = new Map<string, SystemEntry>();
+  const groupDescriptions: ResolvedDefinition["groupDescriptions"] = { systems: {}, palette: {}, roles: {} };
+  // A description is prose for people; anything but a string is a mistake worth naming.
+  const descriptionOf = (raw: unknown, context: string): string | undefined => {
+    if (raw === undefined) return undefined;
+    if (typeof raw !== "string") {
+      errors.push(`${context}: \`description\` is text`);
+      return undefined;
+    }
+    return raw;
+  };
   const statics: ResolvedStatic[] = [];
   const systemsBlock = (doc.systems ?? {}) as Record<string, unknown>;
   const systemsAlias = parseAlias(systemsBlock.alias, "systems block");
@@ -479,7 +497,7 @@ export function resolveDefinition(
   const silent = new Set<string>();
   function walkPalette(node: Record<string, unknown>, prefix: PathSegment[], emits: boolean) {
     for (const [key, raw] of Object.entries(node)) {
-      if ((key === "alias" || key === "emit") && prefix.length > 0) continue;
+      if ((key === "alias" || key === "emit" || key === "description") && prefix.length > 0) continue;
       const segments = [...prefix, { name: key }];
       const path = segments.map((seg) => seg.name).join(".");
       if (typeof raw === "string") {
@@ -504,6 +522,8 @@ export function resolveDefinition(
         errors.push(`palette "${path}": \`emit\` on a group is true or false`);
         continue;
       }
+      const paletteDescription = descriptionOf(block.description, `palette "${path}"`);
+      if (paletteDescription) groupDescriptions.palette[path] = paletteDescription;
       walkPalette(
         block,
         [...prefix, { name: key, alias: parseAlias(block.alias, `palette "${path}"`) }],
@@ -522,7 +542,7 @@ export function resolveDefinition(
   // Groups nest, so a path is the identity.
   function walkSystems(node: Record<string, unknown>, prefix: PathSegment[]) {
     for (const [key, raw] of Object.entries(node)) {
-      if (key === "alias") continue;
+      if (key === "alias" || key === "description") continue;
       const segments = [...prefix, { name: key }];
       const path = segments.map((seg) => seg.name).join(".");
       if (typeof raw === "string") {
@@ -543,6 +563,8 @@ export function resolveDefinition(
       const alias = parseAlias(block.alias, `"${path}"`);
       const named = [...prefix, { name: key, alias }];
       if (block.algorithm === undefined) {
+        const groupDescription = descriptionOf(block.description, `"${path}"`);
+        if (groupDescription) groupDescriptions.systems[path] = groupDescription;
         walkSystems(block, named);
         continue;
       }
@@ -623,6 +645,7 @@ export function resolveDefinition(
         alias,
         emit,
         segments: named,
+        description: descriptionOf(block.description, `system "${path}"`),
       });
     }
   }
@@ -687,6 +710,7 @@ export function resolveDefinition(
     section: string;
     segments: PathSegment[];
     refs: (string | null)[];
+    description?: string;
   };
   const sections: ResolvedSection[] = [];
   const roleIndex = new Map<string, RawRole>();
@@ -713,6 +737,7 @@ export function resolveDefinition(
     sections.push({
       name: sectionName,
       alias: parseAlias(sectionBlock.alias, `section "${sectionName}"`),
+      description: descriptionOf(sectionBlock.description, `section "${sectionName}"`),
     });
 
     // Roles nest as deep as the definition nests them. A node is a role when
@@ -723,12 +748,13 @@ export function resolveDefinition(
       trail: PathSegment[],
     ): void => {
       for (const [name, raw] of Object.entries(node)) {
-        if (name === "alias" || name === "omit") continue;
+        if (name === "alias" || name === "omit" || name === "description") continue;
         const segments = [...trail, { name }];
         const path = segments.map((seg) => seg.name).join(".");
         const context = `${sectionName}.${path}`;
 
         let refs: (string | null)[] | undefined;
+        let roleDescription: string | undefined;
         if (typeof raw === "string") {
           // A bare scalar is the whole role. Only meaningful without an axis
           // to spread across, so it is refused when one exists.
@@ -749,9 +775,12 @@ export function resolveDefinition(
             omit: block.omit === true,
           };
           if (!("refs" in block)) {
+            const domainDescription = descriptionOf(block.description, context);
+            if (domainDescription) groupDescriptions.roles[path] = domainDescription;
             walkRoles(block, segments);
             continue;
           }
+          roleDescription = descriptionOf(block.description, context);
           if (!Array.isArray(block.refs)) {
             errors.push(`${context}: expected a \`refs\` list`);
             continue;
@@ -760,8 +789,8 @@ export function resolveDefinition(
         } else {
           errors.push(
             modeless
-              ? `${context}: a role is a color, a ref list, { refs, alias?, omit? }, or a group of roles`
-              : `${context}: a role is a ref list, { refs, alias?, omit? }, or a group of roles`,
+              ? `${context}: a role is a color, a ref list, { refs, alias?, omit?, description? }, or a group of roles`
+              : `${context}: a role is a ref list, { refs, alias?, omit?, description? }, or a group of roles`,
           );
           continue;
         }
@@ -777,7 +806,7 @@ export function resolveDefinition(
           );
           continue;
         }
-        roleIndex.set(path, { section: sectionName, segments, refs });
+        roleIndex.set(path, { section: sectionName, segments, refs, description: roleDescription });
         roleOrder.push(path);
       }
     };
@@ -873,6 +902,7 @@ export function resolveDefinition(
       domain: raw.segments.slice(0, -1).map((seg) => seg.name).join("."),
       role: raw.segments[raw.segments.length - 1].name,
       omit: raw.segments[raw.segments.length - 1].omit === true,
+      description: raw.description,
       perMode,
       inherited,
     };
@@ -1062,6 +1092,7 @@ export function resolveDefinition(
       colorParams,
       selector: sys.selectorShape,
       steps,
+      description: sys.description,
     });
   }
 
@@ -1108,6 +1139,7 @@ export function resolveDefinition(
     statics,
     sections,
     roles,
+    groupDescriptions,
     warnings,
     probed,
   };

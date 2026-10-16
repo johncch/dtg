@@ -69,6 +69,11 @@ Canonical. The README carries the user-facing version of the same rules.
   reserved list can grow without colliding with a parameter name.
 - `defaults`: shared params per algorithm, merged under each system's own
   params. One copy of each number.
+- `description`: the author's own note, as text, on a system, a role, or a
+  group in `palette`, `systems` or a section. Reserved in those places, the
+  same as `alias`. It changes no color and nothing reads it but people: the
+  app shows it, and DTCG carries it as `$description`. A palette color is a
+  bare string with nowhere to put one, so its group's description stands in.
 - A color param, in a system's `params` or in `defaults`, is a color or the
   path of a constant (`base: hues.sky`), so a system's anchor can come from
   a palette. Only constants: they are literals, so the chain ends after one
@@ -77,7 +82,7 @@ Canonical. The README carries the user-facing version of the same rules.
 - Sections: every top-level key other than
   `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` is a section. Arbitrary
   name, becomes a collection, holds `domain → role → [ref per mode]`. A
-  role may also be `{ refs, alias?, omit? }`. `alias` (on a group, a
+  role may also be `{ refs, alias?, omit?, description? }`. `alias` (on a group, a
   system, the systems block, a section, a domain, or a role; string or
   per-target map) replaces a public name; `omit: true` drops a segment.
   Refs always use internal names. That is the *entire* role grammar. No
@@ -357,9 +362,10 @@ Anything outside those three is a real defect. Promoting this check into a
       naming is inline via `alias` and `omit`. `format: plain` (the default)
       emits primitives into `:root` instead, for any project not on
       Tailwind. Emit also writes DTCG when asked: the same collections,
-      modes, values and aliases, plus `$description` as a stable identity —
-      a role's internal path, a demand-driven step's lineage — so a courier
-      can tell a rename from a create. An agent may ferry the payload; it
+      modes, values and aliases, plus a stable identity in `$extensions` as
+      `id` — a role's internal path, a demand-driven step's lineage — so a
+      courier can tell a rename from a create. `$description` is the
+      author's `description`; until 0.3.0 it held the identity. An agent may ferry the payload; it
       never invents values.
 - [x] Palette: a `palette:` block of the colors picked by hand, read
       before `systems`. Each group is a palette page in `dtg dev`, listed

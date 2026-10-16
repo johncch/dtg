@@ -570,3 +570,44 @@ systems:
     assert.deepEqual(Object.keys(resolved.systems[0].params), ["base", "toward", "hueShift", "midpoint"]);
   });
 });
+
+describe("description", () => {
+  const SRC = `dtg: 1
+modes: [light]
+palette:
+  hues:
+    description: Picked by hand.
+    sky: "#03a2e8"
+systems:
+  washes:
+    description: Tints over paper.
+    sky:
+      description: The sky wash.
+      algorithm: tint
+      params: { base: "#ffffff", tint: hues.sky }
+roles:
+  surface:
+    description: Where things sit.
+    canvas: { refs: [washes.sky(6)], description: The page. }
+`;
+  const resolved = resolveDefinition(SRC);
+
+  test("is kept on systems, roles, and groups of each kind", () => {
+    assert.equal(resolved.systems[0].description, "The sky wash.");
+    assert.equal(resolved.roles[0].description, "The page.");
+    assert.deepEqual(resolved.groupDescriptions, {
+      systems: { washes: "Tints over paper." },
+      palette: { hues: "Picked by hand." },
+      roles: { surface: "Where things sit." },
+    });
+  });
+
+  test("is a reserved key, never read as a color, a system or a role", () => {
+    assert.deepEqual(resolved.statics.map((constant) => constant.path), ["hues.sky"]);
+    assert.deepEqual(resolved.roles.map((role) => role.role), ["canvas"]);
+  });
+
+  test("is text", () => {
+    assert.throws(() => resolveDefinition(SRC.replace("description: The page.", "description: 3")), /`description` is text/);
+  });
+});
