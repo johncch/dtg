@@ -4,6 +4,7 @@ import { DEFAULT_BACKGROUNDS, type Background } from "./dev-settings.js";
 import type { Edit } from "./edit.js";
 import type { Change } from "./working-copy.js";
 import {
+  algorithmFor,
   publicPath,
   publicSystemName,
   type Lineage,
@@ -82,6 +83,10 @@ export type SnapshotSystem = {
   algorithm: string;
   description: string;
   params: Record<string, unknown>;
+  /** The top-level params the system wrote itself; the rest came from `defaults`. */
+  ownParams: string[];
+  /** The bounds the algorithm declares for its number params, by name, for a slider to run between. */
+  numberRanges: Record<string, { min: number; max: number }>;
   /** Which of `params` are colors, so the page knows what can be edited. */
   colorParams: ResolvedColorParam[];
   /** What a ref into this system is made of, so the page can draw a control for each part. */
@@ -159,6 +164,8 @@ export function buildSnapshot({
       algorithm: system.algorithm,
       description: system.algorithmDescription,
       params: system.params,
+      ownParams: system.ownParams,
+      numberRanges: numberRangesOf(system.algorithm),
       colorParams: system.colorParams,
       selector: system.selector,
       steps: system.steps.map((step) => ({
@@ -193,4 +200,13 @@ export function buildSnapshot({
       })),
     })),
   };
+}
+
+function numberRangesOf(algorithm: string): Record<string, { min: number; max: number }> {
+  const params = algorithmFor(algorithm)?.params ?? {};
+  return Object.fromEntries(
+    Object.entries(params).flatMap(([name, kind]) =>
+      kind.kind === "number" && kind.min != null && kind.max != null ? [[name, { min: kind.min, max: kind.max }]] : [],
+    ),
+  );
 }

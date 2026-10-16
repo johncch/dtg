@@ -204,3 +204,11 @@ roles:
     assert.ok(edited.includes("label: { primary: shade }"));
   });
 });
+
+describe("a number param", () => {
+  test("is written bare, so it stays a number", () => {
+    const edited = applyEdits(SRC, [{ action: "set", target: { kind: "default", algorithm: "scale", path: "hueShift" }, value: "20" }]);
+    assert.ok(edited.includes("    hueShift: 20\n"));
+    assert.equal(resolveDefinition(edited).systems.find((s) => s.system === "theme")!.params.hueShift, 20);
+  });
+});

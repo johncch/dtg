@@ -30,8 +30,8 @@ export const scale: Algorithm = {
   params: {
     base: { kind: "color" },
     toward: { kind: "list", of: { kind: "color" }, length: 2 },
-    hueShift: { kind: "number", default: 0 },
-    midpoint: { kind: "number", default: 0.5 },
+    hueShift: { kind: "number", default: 0, min: 0, max: 100 },
+    midpoint: { kind: "number", default: 0.5, min: 0, max: 1 },
   },
 
   selector(params) {

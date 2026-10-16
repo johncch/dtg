@@ -173,6 +173,8 @@ export type ResolvedSystem = {
   algorithm: string;
   algorithmDescription: string;
   params: Record<string, unknown>;
+  /** The top-level params the system wrote itself; the rest of `params` came from `defaults`. */
+  ownParams: string[];
   colorParams: ResolvedColorParam[];
   /** What a ref into this system is made of. */
   selector: SelectorShape;
@@ -1050,7 +1052,13 @@ export function resolveDefinition(
       alias: sys.alias,
       algorithm: sys.algo.name,
       algorithmDescription: sys.algo.description,
-      params: sys.writtenParams,
+      // In the order the algorithm declares them, not the order `defaults` and the system's own block merged in.
+      params: Object.fromEntries(
+        Object.keys(sys.algo.params)
+          .filter((key) => key in sys.writtenParams)
+          .map((key) => [key, sys.writtenParams[key]]),
+      ),
+      ownParams: [...sys.ownParams],
       colorParams,
       selector: sys.selectorShape,
       steps,

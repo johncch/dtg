@@ -556,3 +556,17 @@ describe("blend is gone", () => {
     );
   });
 });
+
+describe("params", () => {
+  test("are listed in the order the algorithm declares them, shared defaults or not", () => {
+    const resolved = resolveDefinition(`dtg: 1
+defaults:
+  scale: { midpoint: 0.4, hueShift: 15, toward: ["#ffffff", "#000000"] }
+systems:
+  theme:
+    algorithm: scale
+    params: { base: "#03a2e8" }
+`);
+    assert.deepEqual(Object.keys(resolved.systems[0].params), ["base", "toward", "hueShift", "midpoint"]);
+  });
+});

@@ -3,7 +3,8 @@ import type { Color } from "./color-math.js";
 /** What a param is. dtg validates against it and parses it before any hook runs. */
 export type ParamKind =
   | { kind: "color" }
-  | { kind: "number"; default?: number }
+  /** `min` and `max` bound the value; dtg rejects one outside them, and the app offers a slider between them. */
+  | { kind: "number"; default?: number; min?: number; max?: number }
   | { kind: "choice"; options: string[]; default?: string }
   | { kind: "list"; of: ParamKind; length?: number }
   | { kind: "map"; of: ParamKind };

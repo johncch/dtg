@@ -2,6 +2,7 @@ import type { EditTarget } from "../../src/edit.js";
 import { formatRef } from "../../src/selector.js";
 import type { SnapshotStep, SnapshotSystem } from "../../src/snapshot.js";
 import { ColorChip } from "../ColorChip.js";
+import { NumberParam } from "../NumberParam.js";
 import { Probe } from "../Probe.js";
 import { useScrollToHash } from "../router.js";
 import { stepAnchor, stepDeltaE, Strip } from "../Strip.js";
@@ -109,8 +110,16 @@ function ParamValue({ value, path, system }: { value: unknown; path: string; sys
         : { kind: "param", system: system.system, path };
     return (
       <ColorChip color={colorParam.color} label={String(value)} edit={target} named={colorParam.constant}>
-        {colorParam.from === "defaults" && <span className="muted">shared default</span>}
+        {colorParam.from === "defaults" && <span className="muted">shared</span>}
       </ColorChip>
+    );
+  }
+  if (typeof value === "number") {
+    const target: EditTarget = system.ownParams.includes(path.split(".")[0])
+      ? { kind: "param", system: system.system, path }
+      : { kind: "default", algorithm: system.algorithm, path };
+    return (
+      <NumberParam name={path} value={value} target={target} range={system.numberRanges[path] ?? null} shared={target.kind === "default"} />
     );
   }
   if (Array.isArray(value)) {

@@ -142,3 +142,12 @@ describe("scale", () => {
     );
   });
 });
+
+describe("a bounded number param", () => {
+  test("is refused outside its declared range", () => {
+    const scale = algorithmFor("scale")!;
+    const theme = { base: "#03a2e8", toward: ["#fafdff", "#001a28"] };
+    assert.throws(() => parseParams(scale, { ...theme, hueShift: 120 }), /param 'hueShift': expected 0–100, got 120/);
+    assert.doesNotThrow(() => parseParams(scale, { ...theme, hueShift: 100 }));
+  });
+});

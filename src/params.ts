@@ -52,6 +52,9 @@ export function parseParams(
             `${context}: expected a number, got ${JSON.stringify(value)}`,
           );
         }
+        if ((kind.min != null && value < kind.min) || (kind.max != null && value > kind.max)) {
+          throw new Error(`${context}: expected ${kind.min ?? "-∞"}–${kind.max ?? "∞"}, got ${value}`);
+        }
         return value;
       case "choice":
         if (typeof value !== "string" || !kind.options.includes(value)) {

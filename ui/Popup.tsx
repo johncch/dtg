@@ -121,7 +121,7 @@ export function Popup({
             aria-describedby={undefined}
             onOpenAutoFocus={(event) => {
               event.preventDefault();
-              const field = focus === "field" ? panel.current?.querySelector<HTMLInputElement>('input[type="text"]') : null;
+              const field = focus === "field" ? panel.current?.querySelector<HTMLInputElement>('input[type="text"], input[type="number"]') : null;
               if (field) field.select();
               else panel.current?.focus();
             }}
