@@ -13,14 +13,18 @@ defaults:
   scale:
     toward: ["#fafdff", "#001a28"]
     hueShift: 15
-    stops: { "50": 0.05, "500": 1, "950": 0.05 }
+    midpoint: 0.4
 
-systems:
+palette:
   paper: "#ffffff"
   ink:
     body: "#313133"
     muted: "#828282"
 
+  vivid: "color(display-p3 1 0 0)"
+  lush: "oklch(0.72 0.28 145)"
+
+systems:
   sky:
     algorithm: tint
     alias: light
@@ -30,47 +34,31 @@ systems:
     algorithm: tint
     params: { base: "#151c1f", tint: "#fafdff" }
 
-  warm:
-    algorithm: blend
-    params:
-      base: "#ffffff"
-      toward: { red: "#b30a0a", blue: "#6192bb" }
-
-  perceptual:
-    algorithm: blend
-    params:
-      space: oklab
-      base: "#ffffff"
-      toward: { red: "#b30a0a" }
-
-  lightmix:
-    algorithm: blend
-    params:
-      space: srgb-linear
-      base: "#ffffff"
-      toward: { red: "#b30a0a" }
+  # A wash: tints that share a ground, one per color.
+  warm-wash:
+    red:
+      algorithm: tint
+      params: { base: paper, tint: "#b30a0a" }
+    blue:
+      algorithm: tint
+      params: { base: paper, tint: "#6192bb" }
 
   theme:
     algorithm: scale
     params: { base: "#03a2e8" }
+    emit: [50, 500, 950]
 
   shadow:
     algorithm: overlay
     params: { color: "#000000" }
-
-  vivid: "color(display-p3 1 0 0)"
-  lush: "oklch(0.72 0.28 145)"
 
   wide:
     algorithm: tint
     params: { base: "#ffffff", tint: "color(display-p3 1 0 0)" }
 
   widemix:
-    algorithm: blend
-    params:
-      space: display-p3
-      base: "#ffffff"
-      toward: { deep: "color(display-p3 0 0.4 1)" }
+    algorithm: tint
+    params: { base: "#ffffff", tint: "color(display-p3 0 0.4 1)" }
 
   grouped:
     alias: { css: renamed, figma: Renamed }
@@ -81,13 +69,12 @@ systems:
 roles:
   surface:
     canvas: [sky(3), night(4)]
-    tint: [warm(red 6), warm(blue 6)]
-    full: [warm(red 100), warm(blue 100)]
-    perceptual: [perceptual(red 6), lightmix(red 6)]
+    tint: [warm-wash.red(6), warm-wash.blue(6)]
+    full: [warm-wash.red(100), warm-wash.blue(100)]
     scale: [theme(50), theme(950)]
     nested: [grouped.inner(10), grouped.inner(20)]
     echo: [surface.canvas, surface.canvas]
-    wide: [wide(60), widemix(deep 80)]
+    wide: [wide(60), widemix(80)]
     lush: [lush, vivid]
 
   label:
@@ -101,7 +88,7 @@ roles:
 
   state:
     veil: [sky(3 tint), night(4 tint)]
-    deferred: [warm(red 6 alpha), warm(blue 6 alpha)]
+    deferred: [warm-wash.red(6 tint), warm-wash.blue(6 tint)]
     scrim: [shadow(40), shadow(60)]
     faded: [transparent(paper 70), transparent(ink.body 40)]
     widefade: [transparent(vivid 30), transparent(paper 30)]

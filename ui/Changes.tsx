@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Edit, EditTarget } from "../src/edit.js";
 import type { Snapshot } from "../src/snapshot.js";
+import type { Change } from "../src/working-copy.js";
 
 function nameOf(target: EditTarget, modes: string[]): string {
   switch (target.kind) {
@@ -29,7 +30,20 @@ function isTextField(target: EventTarget | null): boolean {
  */
 export function Changes({ working }: { working: Snapshot }) {
   const { changes, undo, redo, modes } = working;
-  const describe = (edit: Edit) => `${nameOf(edit.target, modes)} → ${edit.value}`;
+  const describeEdit = (edit: Edit) => {
+    const name = nameOf(edit.target, modes);
+    if (edit.action === "rename") return `rename ${name} to ${edit.name}`;
+    if (edit.action === "remove") return `remove ${name}`;
+    if (edit.action === "add") return `add ${name} ${edit.value}`;
+    return `${name} → ${edit.value}`;
+  };
+  const describe = (step: Edit[]) => step.map(describeEdit).join(", ");
+  const summary = (change: Change) => {
+    const name = nameOf(change.target, modes);
+    if (change.action === "rename") return `${name}: renamed to ${change.to.path}`;
+    if (change.action === "remove") return `${name}: removed (was ${change.from})`;
+    return `${name}: ${change.from ?? "added"} → ${change.to}`;
+  };
   const [failure, setFailure] = useState<Failure>(null);
 
   const run = (step: Step) => {
@@ -64,7 +78,7 @@ export function Changes({ working }: { working: Snapshot }) {
   return (
     <div className="changes">
       <div className="changes-row">
-        <span title={changes.map((change) => `${nameOf(change.target, modes)}: ${change.from} → ${change.to}`).join("\n")}>
+        <span title={changes.map(summary).join("\n")}>
           {changes.length === 0 ? "No changes" : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`}
         </span>
         <button

@@ -11,17 +11,19 @@ defaults:
   scale:
     toward: ["#ffffff", "#000000"] # shared ends
     hueShift: 0
-    stops: { "500": 1, "600": 0.8 }
-systems:
+palette:
   paper: "#ffffff"
   ink:
     body: "#313133" # text
+
+systems:
   sky:
     algorithm: tint
     params: { base: "#fafdff", tint: "#001a28" }
   theme:
     algorithm: scale
     params: { base: "#03a2e8" }
+    emit: [500]
 roles:
   surface:
     canvas: [sky(3)]
@@ -32,10 +34,10 @@ roles:
 describe("applyEdits", () => {
   test("writes a constant, a nested constant, a param, and a shared default", () => {
     const edited = applyEdits(SRC, [
-      { target: { kind: "constant", path: "paper" }, value: "#fffaf0" },
-      { target: { kind: "constant", path: "ink.body" }, value: "#202022" },
-      { target: { kind: "param", system: "sky", path: "tint" }, value: "#102a38" },
-      { target: { kind: "default", algorithm: "scale", path: "toward.1" }, value: "#0a0a0a" },
+      { action: "set", target: { kind: "constant", path: "paper" }, value: "#fffaf0" },
+      { action: "set", target: { kind: "constant", path: "ink.body" }, value: "#202022" },
+      { action: "set", target: { kind: "param", system: "sky", path: "tint" }, value: "#102a38" },
+      { action: "set", target: { kind: "default", algorithm: "scale", path: "toward.1" }, value: "#0a0a0a" },
     ]);
     const resolved = resolveDefinition(edited);
     const constant = (path: string) => formatColor(resolved.statics.find((c) => c.path === path)!.color, "srgb");
@@ -47,7 +49,7 @@ describe("applyEdits", () => {
 
   test("changes only the line it was asked to", () => {
     const edited = applyEdits(SRC, [
-      { target: { kind: "constant", path: "ink.body" }, value: "#202022" },
+      { action: "set", target: { kind: "constant", path: "ink.body" }, value: "#202022" },
     ]);
     const before = SRC.split("\n");
     const after = edited.split("\n");
@@ -58,27 +60,27 @@ describe("applyEdits", () => {
 
   test("keeps the quoting the value was written in, and quotes what YAML would misread", () => {
     const quoting = `dtg: 1
-systems:
+palette:
   single: '#111111'
   double: "#222222"
   plain: oklch(0.5 0.1 30)
 `;
     const edited = applyEdits(quoting, [
-      { target: { kind: "constant", path: "single" }, value: "#aaaaaa" },
-      { target: { kind: "constant", path: "double" }, value: "oklch(0.7 0.26 150)" },
-      { target: { kind: "constant", path: "plain" }, value: "oklch(0.6 0.2 40)" },
+      { action: "set", target: { kind: "constant", path: "single" }, value: "#aaaaaa" },
+      { action: "set", target: { kind: "constant", path: "double" }, value: "oklch(0.7 0.26 150)" },
+      { action: "set", target: { kind: "constant", path: "plain" }, value: "oklch(0.6 0.2 40)" },
     ]);
     assert.equal(
       edited,
       `dtg: 1
-systems:
+palette:
   single: '#aaaaaa'
   double: "oklch(0.7 0.26 150)"
   plain: oklch(0.6 0.2 40)
 `,
     );
     const hexOverPlain = applyEdits(quoting, [
-      { target: { kind: "constant", path: "plain" }, value: "#333333" },
+      { action: "set", target: { kind: "constant", path: "plain" }, value: "#333333" },
     ]);
     assert.ok(hexOverPlain.includes('  plain: "#333333"\n'));
     assert.equal(resolveDefinition(hexOverPlain).statics.length, 3);
@@ -88,7 +90,7 @@ systems:
     const step = (text: string) =>
       formatColor(resolveDefinition(text).systems.find((s) => s.system === "theme")!.steps[0].color, "srgb");
     const edited = applyEdits(SRC, [
-      { target: { kind: "param", system: "theme", path: "base" }, value: "#e5484d" },
+      { action: "set", target: { kind: "param", system: "theme", path: "base" }, value: "#e5484d" },
     ]);
     assert.equal(step(edited), "#e5484d");
     assert.notEqual(step(SRC), step(edited));
@@ -96,7 +98,7 @@ systems:
 
   test("a target the definition does not have is an error, not a new key", () => {
     assert.throws(
-      () => applyEdits(SRC, [{ target: { kind: "param", system: "sky", path: "glow" }, value: "#fff" }]),
+      () => applyEdits(SRC, [{ action: "set", target: { kind: "param", system: "sky", path: "glow" }, value: "#fff" }]),
       /nothing written for sky glow to edit/,
     );
   });
@@ -122,8 +124,10 @@ modes:
   light:
   dark:
   black: { extends: dark }
-systems:
+palette:
   paper: "#ffffff"
+
+systems:
   sky:
     algorithm: tint
     params: { base: "#fafdff", tint: "#001a28" }
@@ -140,8 +144,8 @@ roles:
 
   test("is rewritten in a list, and in a block's refs", () => {
     const edited = applyEdits(ROLES, [
-      { target: ref("surface.canvas", 1), value: "sky(12 tint)" },
-      { target: ref("label.primary", 0), value: "sky(0)" },
+      { action: "set", target: ref("surface.canvas", 1), value: "sky(12 tint)" },
+      { action: "set", target: ref("label.primary", 0), value: "sky(0)" },
     ]);
     assert.ok(edited.includes("    canvas: [sky(3), sky(12 tint), ~] # the page\n"));
     assert.ok(edited.includes("      refs: [sky(0), sky(60)]\n"));
@@ -157,8 +161,8 @@ roles:
 
   test("a ref is written over a ~, and added to a list that stops short", () => {
     const edited = applyEdits(ROLES, [
-      { target: ref("surface.canvas", 2), value: "sky(20)" },
-      { target: ref("surface.card", 2), value: "sky(3)" },
+      { action: "set", target: ref("surface.canvas", 2), value: "sky(20)" },
+      { action: "set", target: ref("surface.card", 2), value: "sky(3)" },
     ]);
     assert.ok(edited.includes("    canvas: [sky(3), sky(8), sky(20)] # the page\n"));
     assert.ok(edited.includes("    card: [sky(1), sky(1), sky(3)]\n"));
@@ -167,7 +171,7 @@ roles:
 
   test("the modes between a short list's end and the new ref are held with ~", () => {
     const fourModes = ROLES.replace("  black: { extends: dark }\n", "  black: { extends: dark }\n  dim: { extends: dark }\n");
-    const edited = applyEdits(fourModes, [{ target: ref("surface.card", 3), value: "sky(3)" }]);
+    const edited = applyEdits(fourModes, [{ action: "set", target: ref("surface.card", 3), value: "sky(3)" }]);
     assert.ok(edited.includes("    card: [sky(1), sky(1), ~, sky(3)]\n"));
     assert.equal(readValue(edited, ref("surface.card", 2)), "~");
   });
@@ -177,26 +181,26 @@ roles:
       "    card: [sky(1), sky(1)]\n",
       "    card:\n      - sky(1)\n      - sky(1) # same\n",
     );
-    const edited = applyEdits(block, [{ target: ref("surface.card", 2), value: "sky(3)" }]);
+    const edited = applyEdits(block, [{ action: "set", target: ref("surface.card", 2), value: "sky(3)" }]);
     assert.ok(edited.includes("      - sky(1) # same\n      - sky(3)\n  label:"));
   });
 
   test("~ puts a mode back to saying nothing", () => {
-    const overridden = applyEdits(ROLES, [{ target: ref("surface.card", 2), value: "sky(3)" }]);
-    const edited = applyEdits(overridden, [{ target: ref("surface.card", 2), value: "~" }]);
+    const overridden = applyEdits(ROLES, [{ action: "set", target: ref("surface.card", 2), value: "sky(3)" }]);
+    const edited = applyEdits(overridden, [{ action: "set", target: ref("surface.card", 2), value: "~" }]);
     assert.ok(edited.includes("    card: [sky(1), sky(1), ~]\n"));
     assert.equal(resolveDefinition(edited).roles[1].inherited[2], true);
-    assert.equal(applyEdits(ROLES, [{ target: ref("surface.card", 2), value: "~" }]), ROLES);
+    assert.equal(applyEdits(ROLES, [{ action: "set", target: ref("surface.card", 2), value: "~" }]), ROLES);
   });
 
   test("a ref YAML would split is quoted", () => {
-    const edited = applyEdits(ROLES, [{ target: ref("surface.card", 0), value: "sky(1, tint)" }]);
+    const edited = applyEdits(ROLES, [{ action: "set", target: ref("surface.card", 0), value: "sky(1, tint)" }]);
     assert.ok(edited.includes('card: ["sky(1, tint)", sky(1)]'));
   });
 
   test("a definition without modes holds the ref as the role itself", () => {
-    const flat = `dtg: 1\nsystems:\n  paper: "#ffffff"\n  shade: "#000000"\nroles:\n  label: { primary: paper }\n`;
-    const edited = applyEdits(flat, [{ target: ref("label.primary", 0), value: "shade" }]);
+    const flat = `dtg: 1\npalette:\n  paper: "#ffffff"\n  shade: "#000000"\nroles:\n  label: { primary: paper }\n`;
+    const edited = applyEdits(flat, [{ action: "set", target: ref("label.primary", 0), value: "shade" }]);
     assert.ok(edited.includes("label: { primary: shade }"));
   });
 });

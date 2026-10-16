@@ -31,7 +31,8 @@ import {
   openFile,
   redo,
   undo,
-  withEdit,
+  withEdits,
+  withoutEdits,
   workingText,
   type WorkingCopy,
 } from "./working-copy.js";
@@ -127,7 +128,7 @@ export function startDevServer(
       stale,
       gamut,
       changes: changesOf(current.copy),
-      undo: current.copy.edits.at(-1) ?? null,
+      undo: current.copy.steps.at(-1) ?? null,
       redo: current.copy.undone.at(-1) ?? null,
       definition: { path: resolve(definitionPath), text: workingText(current.copy).text },
       configPath: resolve(CONFIG_PATH),
@@ -274,11 +275,14 @@ export function startDevServer(
 
     if (url.pathname === "/api/edits" && req.method === "POST") {
       readJson(req).then((body) => {
-        const { edit } = body as { edit: Edit };
-        const next = settle(withEdit(state.copy, edit), gamut, state);
-        // An edit that cannot be applied, or leaves a definition that does
-        // not resolve, is refused rather than kept as a change nobody can see.
-        if (next.error || !next.copy.edits.includes(edit)) {
+        const { edits } = body as { edits: Edit[] };
+        const next = settle(withEdits(state.copy, edits), gamut, state);
+        // A step any of whose edits cannot be applied, or that leaves a
+        // definition that does not resolve, is refused whole rather than kept
+        // as a change nobody can see.
+        const kept = next.copy.steps.at(-1) ?? [];
+        const intact = kept.length === edits.length && edits.every((edit) => kept.includes(edit));
+        if (next.error || !intact) {
           sendJson(422, { error: next.error ?? "that value is not in the definition" });
           return;
         }
@@ -349,7 +353,7 @@ export function startDevServer(
  */
 function settle(copy: WorkingCopy, gamut: Gamut, previous?: State): State {
   const { text, dropped } = workingText(copy);
-  const kept = { ...copy, edits: copy.edits.filter((e) => !dropped.includes(e)) };
+  const kept = withoutEdits(copy, dropped);
   const notices = dropped.map(
     (e) =>
       `an unsaved change to ${describeTarget(e.target)} was dropped — the file no longer has that value`,

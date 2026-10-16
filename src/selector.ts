@@ -109,19 +109,3 @@ export function orderOf(shape: SelectorShape, selector: ParsedSelector): number[
   order.push(form == null ? 0 : (shape.forms ?? []).indexOf(String(form)) + 1);
   return order;
 }
-
-/** Every selector a shape allows, as it would be written. */
-export function allSelectors(shape: SelectorShape): string[] {
-  let selectors = [""];
-  shape.fields.forEach((field, index) => {
-    if (field.kind !== "choice") {
-      throw new Error(
-        `\`emit: "all"\` needs every selector field to be a choice; "${field.name}" is a ${field.kind}`,
-      );
-    }
-    selectors = selectors.flatMap((prefix) =>
-      field.options.map((option) => prefix + (index > 0 ? " " : "") + option),
-    );
-  });
-  return selectors;
-}

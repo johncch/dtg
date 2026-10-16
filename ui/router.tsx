@@ -8,6 +8,7 @@ export type Route =
   | { page: "domain"; name: string }
   | { page: "roles" }
   | { page: "constants" }
+  | { page: "palette"; name: string }
   | { page: "unknown"; path: string };
 
 function parse(pathname: string): Route {
@@ -21,6 +22,7 @@ function parse(pathname: string): Route {
   if (kind === "settings" && !name) return { page: "settings" };
   if (kind === "definition" && !name) return { page: "definition" };
   if (kind === "constants" && !name) return { page: "constants" };
+  if (kind === "palette" && name) return { page: "palette", name };
   return { page: "unknown", path };
 }
 
@@ -30,6 +32,7 @@ export function hrefFor(route: Exclude<Route, { page: "unknown" }>): string {
       return "/";
     case "system":
     case "domain":
+    case "palette":
       return `/${route.page}/${encodeURIComponent(route.name)}`;
     default:
       return `/${route.page}`;

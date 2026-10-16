@@ -90,20 +90,13 @@ describe("translucent", () => {
   });
 
   test("every algorithm that emits a translucent value agrees", () => {
-    // These three used to format it independently and disagreed about
-    // whether alpha arrived as a percent or a fraction.
+    // These used to format it independently and disagreed about whether
+    // alpha arrived as a percent or a fraction.
     const ink = algorithmFor("tint")!;
-    const blend = algorithmFor("blend")!;
     const overlay = algorithmFor("overlay")!;
     const expected = "rgba(0, 26, 40, 0.03)";
     assert.equal(
       formatColor(step(ink, { base: "#fafdff", tint: "#001a28" }, "3 tint").color, "srgb"),
-      expected,
-    );
-    assert.equal(
-      formatColor(step(blend, { base: "#fafdff", toward: { ink: "#001a28" } },
-        "ink 3 alpha",
-      ).color, "srgb"),
       expected,
     );
     assert.equal(

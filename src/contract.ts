@@ -1,4 +1,4 @@
-import type { Color, Gamut } from "./color-math.js";
+import type { Color } from "./color-math.js";
 
 /** What a param is. dtg validates against it and parses it before any hook runs. */
 export type ParamKind =
@@ -41,27 +41,8 @@ export type Algorithm = {
   /** One short paragraph explaining how this algorithm generates colors; rendered in the browsing UI. */
   description: string;
   params: Record<string, ParamKind>;
-  /**
-   * Which of a system's steps are written out. `demanded` = only the steps
-   * refs ask for. `all` = every option of its selector's fields whether or
-   * not a ref asks — a public palette; every field must then be a choice.
-   * Absent = demanded.
-   */
-  emit?: "all" | "demanded";
-  /**
-   * `ramp` reads as a continuum, so neighbor deltas mean something.
-   * `palette` is a set of unrelated entries, where they do not. Absent = ramp.
-   */
-  preview?: { shape: "ramp" | "palette" };
   /** Throws with a human message on params the kinds alone cannot rule out. */
   selector(params: Params): SelectorShape;
-  /**
-   * The gamut this system's arithmetic runs in, or null when it has no fixed
-   * one — because it widens to fit its inputs, or works in an unbounded space.
-   * An input outside this gamut is clipped on the way in, whatever the steps
-   * that happen to be demanded look like. Absent = null.
-   */
-  workingGamut?(params: Params): Gamut | null;
   /** Throws with a human message on a selector this system cannot produce. */
   resolve(selector: Selector, params: Params): Color;
 };

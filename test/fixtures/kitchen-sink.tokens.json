@@ -47,54 +47,36 @@
       },
       "tint": {
         "$type": "color",
-        "$value": "{systems.warm.red-6}",
+        "$value": "{systems.warm-wash.red.6}",
         "$description": "surface.tint",
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "surface/tint",
             "modes": {
-              "light": "{systems.warm.red-6}",
-              "dark": "{systems.warm.blue-6}"
+              "light": "{systems.warm-wash.red.6}",
+              "dark": "{systems.warm-wash.blue.6}"
             },
             "refs": {
-              "light": "warm(red 6)",
-              "dark": "warm(blue 6)"
+              "light": "warm-wash.red(6)",
+              "dark": "warm-wash.blue(6)"
             }
           }
         }
       },
       "full": {
         "$type": "color",
-        "$value": "{systems.warm.red-100}",
+        "$value": "{systems.warm-wash.red.100}",
         "$description": "surface.full",
         "$extensions": {
           "com.fifthrevision.dtg": {
             "name": "surface/full",
             "modes": {
-              "light": "{systems.warm.red-100}",
-              "dark": "{systems.warm.blue-100}"
+              "light": "{systems.warm-wash.red.100}",
+              "dark": "{systems.warm-wash.blue.100}"
             },
             "refs": {
-              "light": "warm(red 100)",
-              "dark": "warm(blue 100)"
-            }
-          }
-        }
-      },
-      "perceptual": {
-        "$type": "color",
-        "$value": "{systems.perceptual.red-6}",
-        "$description": "surface.perceptual",
-        "$extensions": {
-          "com.fifthrevision.dtg": {
-            "name": "surface/perceptual",
-            "modes": {
-              "light": "{systems.perceptual.red-6}",
-              "dark": "{systems.lightmix.red-6}"
-            },
-            "refs": {
-              "light": "perceptual(red 6)",
-              "dark": "lightmix(red 6)"
+              "light": "warm-wash.red(100)",
+              "dark": "warm-wash.blue(100)"
             }
           }
         }
@@ -162,11 +144,11 @@
             "name": "surface/wide",
             "modes": {
               "light": "{systems.wide.60}",
-              "dark": "{systems.widemix.deep-80}"
+              "dark": "{systems.widemix.80}"
             },
             "refs": {
               "light": "wide(60)",
-              "dark": "widemix(deep 80)"
+              "dark": "widemix(80)"
             }
           }
         }
@@ -331,8 +313,8 @@
               }
             },
             "refs": {
-              "light": "warm(red 6 alpha)",
-              "dark": "warm(blue 6 alpha)"
+              "light": "warm-wash.red(6 tint)",
+              "dark": "warm-wash.blue(6 tint)"
             }
           }
         }
@@ -524,128 +506,88 @@
         }
       }
     },
-    "warm": {
-      "red-6": {
-        "$type": "color",
-        "$value": {
-          "colorSpace": "srgb",
-          "components": [
-            0.982118,
-            0.942353,
-            0.942353
-          ],
-          "hex": "#faf0f0"
+    "warm-wash": {
+      "red": {
+        "6": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.982118,
+              0.942353,
+              0.942353
+            ],
+            "hex": "#faf0f0"
+          },
+          "$description": "surface.tint[light]",
+          "$extensions": {
+            "com.fifthrevision.dtg": {
+              "name": "warm-wash/red/6",
+              "ref": "warm-wash.red(6)",
+              "algorithm": "tint"
+            }
+          }
         },
-        "$description": "surface.tint[light]",
-        "$extensions": {
-          "com.fifthrevision.dtg": {
-            "name": "warm/red-6",
-            "ref": "warm(red 6)",
-            "algorithm": "blend"
+        "100": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.701961,
+              0.039216,
+              0.039216
+            ],
+            "hex": "#b30a0a"
+          },
+          "$description": "surface.full[light]",
+          "$extensions": {
+            "com.fifthrevision.dtg": {
+              "name": "warm-wash/red/100",
+              "ref": "warm-wash.red(100)",
+              "algorithm": "tint"
+            }
           }
         }
       },
-      "red-100": {
-        "$type": "color",
-        "$value": {
-          "colorSpace": "srgb",
-          "components": [
-            0.701961,
-            0.039216,
-            0.039216
-          ],
-          "hex": "#b30a0a"
-        },
-        "$description": "surface.full[light]",
-        "$extensions": {
-          "com.fifthrevision.dtg": {
-            "name": "warm/red-100",
-            "ref": "warm(red 100)",
-            "algorithm": "blend"
+      "blue": {
+        "6": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.962824,
+              0.974353,
+              0.984
+            ],
+            "hex": "#f6f8fb"
+          },
+          "$description": "surface.tint[dark]",
+          "$extensions": {
+            "com.fifthrevision.dtg": {
+              "name": "warm-wash/blue/6",
+              "ref": "warm-wash.blue(6)",
+              "algorithm": "tint"
+            }
           }
-        }
-      },
-      "blue-6": {
-        "$type": "color",
-        "$value": {
-          "colorSpace": "srgb",
-          "components": [
-            0.962824,
-            0.974353,
-            0.984
-          ],
-          "hex": "#f6f8fb"
         },
-        "$description": "surface.tint[dark]",
-        "$extensions": {
-          "com.fifthrevision.dtg": {
-            "name": "warm/blue-6",
-            "ref": "warm(blue 6)",
-            "algorithm": "blend"
-          }
-        }
-      },
-      "blue-100": {
-        "$type": "color",
-        "$value": {
-          "colorSpace": "srgb",
-          "components": [
-            0.380392,
-            0.572549,
-            0.733333
-          ],
-          "hex": "#6192bb"
-        },
-        "$description": "surface.full[dark]",
-        "$extensions": {
-          "com.fifthrevision.dtg": {
-            "name": "warm/blue-100",
-            "ref": "warm(blue 100)",
-            "algorithm": "blend"
-          }
-        }
-      }
-    },
-    "perceptual": {
-      "red-6": {
-        "$type": "color",
-        "$value": {
-          "colorSpace": "srgb",
-          "components": [
-            0.990681,
-            0.949262,
-            0.942455
-          ],
-          "hex": "#fdf2f0"
-        },
-        "$description": "surface.perceptual[light]",
-        "$extensions": {
-          "com.fifthrevision.dtg": {
-            "name": "perceptual/red-6",
-            "ref": "perceptual(red 6)",
-            "algorithm": "blend"
-          }
-        }
-      }
-    },
-    "lightmix": {
-      "red-6": {
-        "$type": "color",
-        "$value": {
-          "colorSpace": "srgb",
-          "components": [
-            0.985373,
-            0.973231,
-            0.973231
-          ],
-          "hex": "#fbf8f8"
-        },
-        "$description": "surface.perceptual[dark]",
-        "$extensions": {
-          "com.fifthrevision.dtg": {
-            "name": "lightmix/red-6",
-            "ref": "lightmix(red 6)",
-            "algorithm": "blend"
+        "100": {
+          "$type": "color",
+          "$value": {
+            "colorSpace": "srgb",
+            "components": [
+              0.380392,
+              0.572549,
+              0.733333
+            ],
+            "hex": "#6192bb"
+          },
+          "$description": "surface.full[dark]",
+          "$extensions": {
+            "com.fifthrevision.dtg": {
+              "name": "warm-wash/blue/100",
+              "ref": "warm-wash.blue(100)",
+              "algorithm": "tint"
+            }
           }
         }
       }
@@ -656,9 +598,9 @@
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            0.943316,
-            0.97499,
-            0.997161
+            0.945066,
+            0.975794,
+            0.997305
           ],
           "hex": "#f1f9fe"
         },
@@ -696,11 +638,11 @@
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            0.004877,
-            0.123316,
-            0.190559
+            0.004844,
+            0.122239,
+            0.189052
           ],
-          "hex": "#011f31"
+          "hex": "#011f30"
         },
         "$description": "surface.scale[dark]",
         "$extensions": {
@@ -735,7 +677,7 @@
       }
     },
     "widemix": {
-      "deep-80": {
+      "80": {
         "$type": "color",
         "$value": {
           "colorSpace": "srgb",
@@ -749,9 +691,9 @@
         "$description": "surface.wide[dark]",
         "$extensions": {
           "com.fifthrevision.dtg": {
-            "name": "widemix/deep-80",
-            "ref": "widemix(deep 80)",
-            "algorithm": "blend"
+            "name": "widemix/80",
+            "ref": "widemix(80)",
+            "algorithm": "tint"
           }
         }
       }

@@ -1,4 +1,4 @@
-import { isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type YAMLSeq } from "yaml";
+import { isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
 import { INHERIT } from "./selector.js";
 
 /** One value written in a definition: an authored color, or the ref a role holds for a mode. */
@@ -10,13 +10,29 @@ export type EditTarget =
   /** `role` is the role's dotted path within its section; `mode` its place in `modes`. */
   | { kind: "ref"; section: string; role: string; mode: number };
 
-/** For a ref, `INHERIT` is a value too: the mode says nothing and follows the one it extends. */
-export type Edit = { target: EditTarget; value: string };
+export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
+
+/**
+ * Setting writes a value; for a ref, `INHERIT` is a value too: the mode says
+ * nothing and follows the one it extends. Setting needs a value to write over;
+ * a constant the file does not have is added instead. A constant can also be
+ * renamed within its group, or removed.
+ */
+export type Edit =
+  | { action: "set"; target: EditTarget; value: string }
+  | { action: "add"; target: ConstantTarget; value: string }
+  | { action: "rename"; target: ConstantTarget; name: string }
+  | { action: "remove"; target: ConstantTarget };
+
+/** Where a constant is after it is renamed. */
+export function renamedTarget(target: ConstantTarget, name: string): ConstantTarget {
+  return { kind: "constant", path: [...target.path.split(".").slice(0, -1), name].join(".") };
+}
 
 function keysOf(target: EditTarget, doc: Document): (string | number)[] {
   switch (target.kind) {
     case "constant":
-      return ["systems", ...target.path.split(".")];
+      return ["palette", ...target.path.split(".")];
     case "param":
       return ["systems", ...target.system.split("."), "params", ...target.path.split(".")];
     case "default":
@@ -64,6 +80,18 @@ function sourceFor(value: string, replaced: Scalar): string {
 export function applyEdits(yamlText: string, edits: Edit[]): string {
   let text = yamlText;
   for (const edit of edits) {
+    if (edit.action === "rename") {
+      text = withConstantRenamed(text, edit.target, edit.name);
+      continue;
+    }
+    if (edit.action === "remove") {
+      text = withConstantRemoved(text, edit.target);
+      continue;
+    }
+    if (edit.action === "add") {
+      text = withConstantAdded(text, edit.target, edit.value);
+      continue;
+    }
     const node = nodeAt(text, edit.target);
     if (node) {
       const [start, end] = node.range;
@@ -148,4 +176,141 @@ function withRefsAdded(text: string, last: LastRef, sources: string[]): string {
   const lineEnd = nextLine === -1 ? text.length : nextLine;
   const added = sources.map((source) => `\n${dash}${source}`).join("");
   return text.slice(0, lineEnd) + added + text.slice(lineEnd);
+}
+
+/**
+ * A new constant at the end of its group, or of `palette` for one in no
+ * group. In a block map it goes on its own line, past everything the last
+ * entry holds, at the indent the group's entries are written at.
+ */
+function withConstantAdded(text: string, target: ConstantTarget, value: string): string {
+  const keys = ["palette", ...target.path.split(".")];
+  const name = keys.at(-1)!;
+  const set = parseDocument(text).getIn(keys.slice(0, -1), true);
+  if (!isMap(set) || !set.range) {
+    throw new Error(`nothing written for ${describeTarget(target)} to be added to`);
+  }
+  if (set.items.some((item) => isScalar(item.key) && item.key.value === keys.at(-1))) {
+    throw new Error(`${describeTarget(target)} is already written, and is not a color`);
+  }
+  const entry = `${keySource(name)}: ${JSON.stringify(value)}`;
+  if (set.flow) {
+    const brace = text.lastIndexOf("}", set.range[1]);
+    const end = set.range[0] + text.slice(set.range[0], brace).trimEnd().length;
+    if (set.items.length === 0) return `${text.slice(0, end)} ${entry} ${text.slice(brace)}`;
+    return `${text.slice(0, end)}, ${entry}${text.slice(end)}`;
+  }
+  const firstKey = set.items[0].key as Node;
+  const keyStart = firstKey.range![0];
+  const indent = text.slice(text.lastIndexOf("\n", keyStart) + 1, keyStart);
+  const nextLine = text.indexOf("\n", lastWrittenEnd(set));
+  const lineEnd = nextLine === -1 ? text.length : nextLine;
+  return `${text.slice(0, lineEnd)}\n${indent}${entry}${text.slice(lineEnd)}`;
+}
+
+/** Where the last value written inside a node ends. A block collection's own range runs on to the next key, so it is no use. */
+function lastWrittenEnd(node: Node): number {
+  if (isMap(node) && node.items.length > 0) {
+    const last = node.items.at(-1)!;
+    return lastWrittenEnd((last.value ?? last.key) as Node);
+  }
+  if (isSeq(node) && node.items.length > 0) return lastWrittenEnd(node.items.at(-1) as Node);
+  return node.range![1];
+}
+
+function keySource(name: string): string {
+  return /^[A-Za-z][\w-]*$/.test(name) ? name : JSON.stringify(name);
+}
+
+type ConstantEntry = { doc: Document; keys: string[]; set: YAMLMap; pair: Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node> };
+
+/** The constant a target names, with the group it is in. Throws when the file has no such constant. */
+function constantAt(text: string, target: ConstantTarget): ConstantEntry {
+  const doc = parseDocument(text);
+  const keys = ["palette", ...target.path.split(".")];
+  const set = doc.getIn(keys.slice(0, -1), true);
+  const pair = isMap(set) ? set.items.find((item) => isScalar(item.key) && item.key.value === keys.at(-1)) : undefined;
+  if (!isMap(set) || !pair || !isScalar(pair.value) || !isScalar(pair.key) || !pair.key.range) {
+    throw new Error(`nothing written for ${describeTarget(target)} to edit`);
+  }
+  return { doc, keys, set, pair: pair as ConstantEntry["pair"] };
+}
+
+function withConstantRenamed(text: string, target: ConstantTarget, name: string): string {
+  const { set, pair } = constantAt(text, target);
+  if (set.items.some((item) => isScalar(item.key) && item.key.value === name)) {
+    throw new Error(`${describeTarget(renamedTarget(target, name))} is already written`);
+  }
+  const from = target.path;
+  const to = renamedTarget(target, name).path;
+  const spans: { start: number; end: number; source: string }[] = [
+    { start: pair.key.range[0], end: pair.key.range[1], source: keySource(name) },
+  ];
+  for (const { node, renamed } of pointersAt(parseDocument(text).contents, [], from, to)) {
+    spans.push({ start: node.range![0], end: node.range![1], source: sourceFor(renamed, node) });
+  }
+  return spans
+    .sort((a, b) => b.start - a.start)
+    .reduce((written, { start, end, source }) => written.slice(0, start) + source + written.slice(end), text);
+}
+
+/**
+ * Every value that points at the constant `from`, with what it says once the
+ * constant is `to`: a role's ref, `transparent(from …)`, or a color param.
+ * Only where refs and params are written — an `alias` or a changelog note
+ * that happens to read the same is left alone.
+ */
+function pointersAt(node: unknown, keys: string[], from: string, to: string): { node: Scalar; renamed: string }[] {
+  if (isMap(node)) {
+    return node.items.flatMap((pair) => {
+      const key = isScalar(pair.key) ? String(pair.key.value) : "";
+      return pointersAt(pair.value, [...keys, key], from, to);
+    });
+  }
+  if (isSeq(node)) return node.items.flatMap((item) => pointersAt(item, keys, from, to));
+  if (!isScalar(node) || typeof node.value !== "string" || !node.range) return [];
+  const [top] = keys;
+  if (keys.includes("alias") || ["dtg", "modes", "palette", "changelog"].includes(top)) return [];
+  if (top === "systems" && !keys.includes("params")) return [];
+  if (node.value === from) return [{ node, renamed: to }];
+  const faded = /^transparent\(\s*(\S+)(\s[^)]*)?\)$/.exec(node.value);
+  if (faded?.[1] === from) return [{ node, renamed: `transparent(${to}${faded[2] ?? ""})` }];
+  return [];
+}
+
+/**
+ * The constant and its line go. A group left with nothing is written as `{}`,
+ * so it stays a group to add to rather than becoming an empty value.
+ */
+function withConstantRemoved(text: string, target: ConstantTarget): string {
+  const { doc, keys, set, pair } = constantAt(text, target);
+  const index = set.items.indexOf(pair);
+  const valueEnd = (pair.value as Node).range![1];
+  if (set.items.length === 1) {
+    const holderKeys = keys.slice(0, -2);
+    const holder = holderKeys.length === 0 ? doc.contents : doc.getIn(holderKeys, true);
+    const holding = isMap(holder) ? holder.items.find((item) => item.value === set) : undefined;
+    const holdingKey = holding?.key as Node | undefined;
+    if (!holdingKey?.range) throw new Error(`nothing written for ${describeTarget(target)} to edit`);
+    const end = set.flow ? text.indexOf("}", valueEnd) + 1 : lineEndAfter(text, valueEnd);
+    return `${text.slice(0, holdingKey.range[1])}: {}${text.slice(end)}`;
+  }
+  if (set.flow) {
+    if (index === 0) {
+      const next = set.items[1].key as Node;
+      return text.slice(0, pair.key.range[0]) + text.slice(next.range![0]);
+    }
+    const previousEnd = lastWrittenEnd(set.items[index - 1].value as Node);
+    return text.slice(0, previousEnd) + text.slice(valueEnd);
+  }
+  const lineStart = text.lastIndexOf("\n", pair.key.range[0]) + 1;
+  const lineEnd = lineEndAfter(text, valueEnd);
+  return lineEnd === text.length
+    ? text.slice(0, Math.max(lineStart - 1, 0))
+    : text.slice(0, lineStart) + text.slice(lineEnd + 1);
+}
+
+function lineEndAfter(text: string, at: number): number {
+  const nextLine = text.indexOf("\n", at);
+  return nextLine === -1 ? text.length : nextLine;
 }

@@ -9,5 +9,8 @@ export const UnsavedChangesProvider = UnsavedChanges.Provider;
 /** What the definition file has at a target, when that differs from the working copy; null when they agree. */
 export function useValueInFile(target: EditTarget): string | null {
   const key = JSON.stringify(target);
-  return useContext(UnsavedChanges).find((change) => JSON.stringify(change.target) === key)?.from ?? null;
+  const change = useContext(UnsavedChanges).find(
+    (candidate) => candidate.action === "set" && JSON.stringify(candidate.target) === key,
+  );
+  return change?.action === "set" ? change.from : null;
 }

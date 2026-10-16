@@ -54,7 +54,7 @@ system together. A color picker can change one value; a parameter can
 change fifty while preserving the relationship between them.
 
 The rule that holds the model together is simple: **a raw color is legal
-only inside `systems`**. Semantic roles are made of references and derivations,
+only inside `palette` and `systems`**. Semantic roles are made of references and derivations,
 so every color traces back to an anchor. A literal is a value that has
 forgotten its reason.
 
@@ -92,8 +92,9 @@ from and how they remain coherent as the system changes.
    evaluated as code.
 3. **Explicit references.** A role's output is readable from its own line
    plus the systems block. The definition shows its reasoning.
-4. **Demand-driven primitives.** A step exists because a ref demands it.
-   Declared palettes emit in full when the palette itself is the product.
+4. **Demand-driven primitives.** A step exists because a ref demands it, or
+   because its system lists it under `emit` when the steps themselves are
+   the product.
 5. **Declared overrides.** Hand-tuned colors live in the definition, where
    they can be understood and eventually promoted into the system.
 6. **Growth from real needs.** Repeated derivations are signals that a new
@@ -209,11 +210,13 @@ dtg: 1 # grammar version
 
 modes: [light, dark]
 
-systems:
+palette:
   white: "#ffffff" # a constant: a role can point straight at it
   ink:               # a group: constants nest, addressed by path
     body: "#313133"
     muted: "#828282"
+
+systems:
   sky: # a system: an object with `algorithm`
     algorithm: tint
     params: { base: "#fafdff", tint: "#001a28" }
@@ -223,6 +226,7 @@ systems:
   theme:
     algorithm: scale
     params: { base: "#03a2e8" }
+    emit: [50, 500, 950] # published whether or not a role asks
   shadow:
     algorithm: overlay
     params: { color: "#000000" }
@@ -231,7 +235,7 @@ defaults: # shared params, per algorithm
   scale:
     toward: ["#fafdff", "#001a28"]
     hueShift: 15
-    stops: { "50": 0.05, "500": 1, "950": 0.05 }
+    midpoint: 0.4
 
 core: # any non-reserved top-level key is a section you name;
   surface: #   each section becomes a design-tool collection
@@ -252,23 +256,33 @@ core: # any non-reserved top-level key is a section you name;
 
 - `dtg: 1` declares the grammar version. The resolver warns when it is
   missing and refuses versions it does not understand.
-- **`systems`** is a tree of three node kinds, told apart with no extra
-  syntax. A **string** is a constant. An object with **`algorithm`** is a
-  system. Any other object is a **group**, and groups nest.
+- **`palette`** holds the colors you picked. A **string** is a constant and
+  any other object is a **group**; groups nest. Every constant emits, unless
+  its group says `emit: false` — then its colors are inputs for systems'
+  params, emitted only if a role points at one. In
+  `dtg dev`, each group is a palette: its page shows the colors side by side
+  and lets you add, rename, lock and randomize them to judge them together.
+- **`systems`** holds the recipes. An object with **`algorithm`** is a
+  system; any other object is a group. A system can't share a path with a
+  constant.
 - A system node's keys belong to the tool: `algorithm` names the algorithm,
   `params` holds its inputs, `alias` overrides the public name, `overrides`
-  pins a step's flattened value. Params live in their own block so this list
+  pins a step's flattened value, and `emit` lists steps to publish whether
+  or not a role asks for them — otherwise a system writes out only what
+  roles point at. Params live in their own block so this list
   can grow without ever colliding with a parameter name, and built-ins
   reject unknown params so typos fail loudly.
 - **`defaults`** holds shared params per algorithm, merged under each
   system's own params. One copy of each number.
+- A **color param** is a color or a constant's path: `base: hues.sky`
+  anchors a system on a palette color, and changing the constant moves it.
 - A **ref** is one of:
   - `paper`, or `ink.body` — a constant, by path
   - `sky(3)` — a step. Dots walk the systems tree; the parentheses hand
     off, and everything inside them belongs to the algorithm, separated by
     spaces (`sky(3)` is 3% ink,
     `sky(3 tint)` is that ink uncomposited, `theme(600)` is a stop name,
-    `warm(red 6)` is 6% of the way toward a blend color)
+    `warm-wash.red(6)` is a tint in a group, 6% red over its base)
   - `domain.role` — another decision in the same mode
   - `transparent(paper 70)` — a constant at an opacity. Constants only:
     they have no recipe, so this is a plain function of a color and an
@@ -295,7 +309,7 @@ core: # any non-reserved top-level key is a section you name;
   system into a design tool — "renamed `shadow.2` to `shadow.3`, rename in
   Figma rather than recreate" — and the resolver never interprets it.
 - **Sections are yours.** Top-level keys other than
-  `dtg`/`modes`/`defaults`/`systems`/`changelog` are sections: arbitrary
+  `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` are sections: arbitrary
   names, each emitted as a design-tool collection. CSS names never include the section. Role
   paths (`domain.role`) must be unique across sections so refs stay
   unambiguous.
@@ -321,24 +335,24 @@ Each built-in algorithm has one complete behavior.
   is the tint's alpha percent, so the token name is the recipe — `sky(15)` is
   15% tint. Adding `tint` — `sky(15 tint)` — gives the tint alone at the same
   alpha, without the base, for a value that must sit over an unknown surface.
-- **`scale`** (`base`, `toward`, `hueShift`, `stops`): a chromatic
-  scale blended from the base in OKLCH. Stops below 500 blend toward
-  `toward[0]`, above toward `toward[1]`; a stop's value is the fraction of
-  base remaining. `hueShift` 0 locks every stop to the base hue, 100
-  follows the natural interpolated path. Declared stops emit in full, as a
-  public palette.
-- **`blend`** (`base`, `toward`, `space`): one base color and several named
-  colors to blend toward. The selector carries both coordinates —
-  `warm(red 6)` is six percent of the way from the base toward red,
-  `warm(red 100)` is red itself — so one palette serves tints and full
-  strength. This is CSS's own `color-mix(in <space>, red 6%, base)`, and
-  `space` takes CSS's interpolation-space names: `srgb` (the default, and
-  what browsers and design tools do), `srgb-linear`, `oklab`,
-  `display-p3`. The same two colors land somewhere different in each, so
-  the space is a decision, not a detail. Adding `alpha` emits the toward color
-  carrying the weight as opacity for the browser to blend at render time —
-  refused unless the system blends in `srgb`, since that is what the
-  browser will do.
+- **`scale`** (`base`, `toward`, `hueShift`, `midpoint`): a chromatic
+  scale through the base in OKLCH. The selector is any stop from 0 to 1000:
+  0 is `toward[0]`, 500 the base, 1000 `toward[1]`. `midpoint` is how much
+  of the base shows at 250 and 750 — 0.5 is an even line, lower keeps the
+  ends paler and deeper for longer. `hueShift` 0 locks every stop to the
+  base hue, 100 follows the natural interpolated path. List the stops to
+  publish under `emit`.
+- **Several tints over one ground** are a group of tints, one per color,
+  each naming its colors from the palette:
+
+  ```yaml
+  warm-wash:
+    red:  { algorithm: tint, params: { base: paper, tint: warm.red } }
+    blue: { algorithm: tint, params: { base: paper, tint: warm.blue } }
+  ```
+
+  `warm-wash.red(6)` is 6% red over paper. This replaced the `blend`
+  algorithm, which did the same with the color's name inside the selector.
 - **`overlay`** (`color`): color at selector % opacity, never flattened.
   Shadows and scrims.
 

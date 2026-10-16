@@ -18,6 +18,7 @@ import {
   type ResolvedDefinition,
   type ResolvedRef,
   type ResolvedRole,
+  type ResolvedStatic,
   type ResolvedStep,
   type ResolvedSystem,
 } from "./resolve.js";
@@ -192,6 +193,11 @@ function cssValueFor(
   return { css: formatColor(entry.color, "srgb"), inlined: true };
 }
 
+
+export function emittedStatics(resolved: ResolvedDefinition): ResolvedStatic[] {
+  return resolved.statics.filter((constant) => constant.emitted);
+}
+
 export function emitCss(
   resolved: ResolvedDefinition,
   format: CssFormat = "plain",
@@ -212,9 +218,9 @@ export function emitCss(
       lines.push(`  --color-${name}-${step.publicStep}: ${formatColor(step.color, "srgb")};`);
     }
   }
-  if (resolved.statics.length > 0) {
+  if (emittedStatics(resolved).length > 0) {
     lines.push("  /* statics */");
-    for (const s of resolved.statics) {
+    for (const s of emittedStatics(resolved)) {
       lines.push(`  --color-${publicPath(s.segments, "css", "-")}: ${formatColor(s.color, "srgb")};`);
     }
   }
@@ -338,7 +344,7 @@ function wideGamutLayer(
       );
     }
   }
-  for (const s of resolved.statics) {
+  for (const s of emittedStatics(resolved)) {
     if (!needsMapping(s.color, "srgb")) continue;
     primitives.push(
       `    --color-${publicPath(s.segments, "css", "-")}: ${formatColor(s.color, "display-p3")};`,
@@ -444,7 +450,7 @@ export function dtcgClipped(
       }
     }
   }
-  for (const s of resolved.statics) {
+  for (const s of emittedStatics(resolved)) {
     if (needsMapping(s.color, colorSpace)) clipped.push(s.path);
   }
   return clipped;
@@ -516,9 +522,9 @@ export function emitDtcg(
     }
     placeAt(systems, system.system, group);
   }
-  if (resolved.statics.length > 0) {
+  if (emittedStatics(resolved).length > 0) {
     const group = (systems.static ??= {}) as Record<string, unknown>;
-    for (const s of resolved.statics) {
+    for (const s of emittedStatics(resolved)) {
       placeAt(group, s.path, {
         $type: "color",
         $value: dtcgColor(s.color, colorSpace),

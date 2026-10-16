@@ -11,6 +11,14 @@ type Names = { status: "unasked" } | { status: "loading" } | { status: "ready"; 
 
 let names: Names = { status: "unasked" };
 const listeners = new Set<() => void>();
+let loading: Promise<Named[]> | null = null;
+
+function loadNames(): Promise<Named[]> {
+  loading ??= import("color-name-list/bestof").then(({ colornames }) =>
+    colornames.map(({ name, hex }) => ({ name, lab: hexToOklab(hex) })),
+  );
+  return loading;
+}
 
 function set(next: Names) {
   names = next;
@@ -21,9 +29,8 @@ function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   if (names.status === "unasked") {
     set({ status: "loading" });
-    import("color-name-list/bestof").then(
-      ({ colornames }) =>
-        set({ status: "ready", named: colornames.map(({ name, hex }) => ({ name, lab: hexToOklab(hex) })) }),
+    loadNames().then(
+      (named) => set({ status: "ready", named }),
       () => set({ status: "failed" }),
     );
   }
@@ -37,11 +44,22 @@ function subscribe(listener: () => void): () => void {
  */
 export function useColorName(color: Color): string | null {
   const current = useSyncExternalStore(subscribe, () => names);
-  if (current.status !== "ready") return null;
+  return current.status === "ready" ? nearestName(current.named, color) : null;
+}
+
+/** The same name, for a caller outside rendering. Null when the list cannot be loaded. */
+export function colorNameOf(color: Color): Promise<string | null> {
+  return loadNames().then(
+    (named) => nearestName(named, color),
+    () => null,
+  );
+}
+
+function nearestName(named: Named[], color: Color): string {
   const [L, a, b] = toOklab(color);
-  let nearest = current.named[0];
+  let nearest = named[0];
   let least = Infinity;
-  for (const candidate of current.named) {
+  for (const candidate of named) {
     const distance = (candidate.lab[0] - L) ** 2 + (candidate.lab[1] - a) ** 2 + (candidate.lab[2] - b) ** 2;
     if (distance < least) {
       least = distance;

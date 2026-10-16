@@ -82,7 +82,7 @@ export function Popup({
   const grip = useRef<Point | null>(null);
   const handle = {
     onPointerDown: (event: PointerEvent<HTMLElement>) => {
-      if (!placement.open || (event.target as Element).closest("button, input")) return;
+      if (!placement.open || (event.target as Element).closest("button, input, select")) return;
       event.currentTarget.setPointerCapture(event.pointerId);
       grip.current = { x: event.clientX - placement.at.x, y: event.clientY - placement.at.y };
     },

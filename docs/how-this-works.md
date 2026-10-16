@@ -48,18 +48,34 @@ Canonical. The README carries the user-facing version of the same rules.
   inherited role whose target moved is written. DTCG fills every mode and
   records `inherits: { dark-hc: dark }`. What applies `.dark` to an element
   is the app's business, not the definition's.
-- `systems` is a tree of three node kinds, discriminated without extra
-  syntax: a **string** is a constant, an object with **`algorithm`** is a
-  system, any other object is a **group**. Groups nest, so a constant's
-  identity is its dotted path.
+- `palette` holds the colors picked by hand: a **string** is a constant,
+  any other object a **group**, and groups nest, so a constant's identity is
+  its dotted path. Every constant emits, unless its group says
+  `emit: false`: then its colors are inputs, emitted only when a role points
+  at one, since a reference always emits what it names. A group of
+  constants is a palette in `dtg dev`. It is read before `systems`, so a param can name any
+  constant wherever it is written. A string left in `systems` is refused
+  with a pointer here.
+- `systems` holds the recipes: an object with **`algorithm`** is a system,
+  any other object a **group**. A constant path and a system path cannot be
+  the same, so a ref never has to guess. The file reads in the order it
+  resolves: picks, then recipes, then decisions.
 - A system node's keys are the tool's: `algorithm` (a string naming it),
   `params` (the algorithm's inputs, in their own block), `alias`,
-  `overrides`. Params are contained rather than passed through, so the
+  `overrides`, `emit`. `emit` lists selectors the system publishes whether
+  or not a ref asks — `emit: [50, 100, 500]` — each checked against the
+  algorithm's selector and named by the usual rule. What a system writes
+  out is that list plus what refs demand; an algorithm never decides it. Params are contained rather than passed through, so the
   reserved list can grow without colliding with a parameter name.
 - `defaults`: shared params per algorithm, merged under each system's own
   params. One copy of each number.
+- A color param, in a system's `params` or in `defaults`, is a color or the
+  path of a constant (`base: hues.sky`), so a system's anchor can come from
+  a palette. Only constants: they are literals, so the chain ends after one
+  hop and no cycle is possible. Letting a param name a system step would
+  need systems resolved in dependency order and a cycle error first.
 - Sections: every top-level key other than
-  `dtg`/`modes`/`defaults`/`systems`/`changelog` is a section. Arbitrary
+  `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` is a section. Arbitrary
   name, becomes a collection, holds `domain → role → [ref per mode]`. A
   role may also be `{ refs, alias?, omit? }`. `alias` (on a group, a
   system, the systems block, a section, a domain, or a role; string or
@@ -72,7 +88,7 @@ Canonical. The README carries the user-facing version of the same rules.
     everything inside them belongs to the algorithm, its parts separated by
     spaces (`sky(3.5)` is 3.5% ink,
     `sky(3 tint)` that ink uncomposited, `theme(600)` a stop name,
-    `warm(red 6)` a compose anchor at 6%)
+    `warm-wash.red(6)` a tint in a group)
   - `domain.role` — another decision in the same mode
   - `transparent(paper 70)` — a constant at an opacity, constants only.
     It is written like a system and read by the same parser, so no system
@@ -82,13 +98,16 @@ Canonical. The README carries the user-facing version of the same rules.
   item in a `[ ]` list and force quotes around every ref. A constant
   path and a role path are the same shape, so the two namespaces must not
   collide; the resolver errors if they do.
-- **Raw hex is legal only inside `systems`.** The semantic tier points and
+- **Raw hex is legal only inside `palette` and `systems`.** The semantic tier points and
   derives; every color traces back to an anchor. This is the core invariant:
   a literal is a value that has forgotten its reason.
 
 Removed spellings are still detected and error with a pointer, rather than
 being silently ignored: a top-level `emit:` block (replaced by inline
-`alias`/`omit`), `emits:` on a system (renamed to `alias`), the algorithm
+`alias`/`omit`), `emits:` on a system (renamed to `alias`; the error also
+points at `emit`), a color written in `systems` (moved to `palette`), scale's
+`stops` (replaced by its 0–1000 selector, `midpoint` and `emit`), `blend` and
+`compose` (replaced by a group of tints), the algorithm
 names `ink-ramp` and `oklch-scale` (now `tint` and `scale`), and the slash
 spelling of a ref (`sky/3/ink`, now `sky(3 tint)`), where the error spells out
 the replacement. Keep that pattern for any future grammar change.
@@ -101,11 +120,15 @@ Three built-ins, each *total*, with no optional-parameter modes.
   the selector is the tint's alpha percent. The token name doubles as the
   recipe, so `light-15` is 15% ink. Steps are opaque surface colors, and the
   ramp also backs `transparent()`.
-- **`scale`** (`base`, `toward: [light, dark]`, `hueShift`, `stops`):
-  blends from the 500 base in OKLCH. Stop names are numeric; below 500 blends
-  toward `toward[0]`, above toward `toward[1]`, and a stop's value is the
-  fraction of base remaining (1 being the base itself). `hueShift` 0 locks
-  every stop to the base hue, 100 follows the natural interpolated hue path.
+- **`scale`** (`base`, `toward: [light, dark]`, `hueShift`, `midpoint`): a
+  continuous curve through the base in OKLCH. The selector is any stop
+  0–1000: 0 is `toward[0]`, 500 the base, 1000 `toward[1]`. The share of base
+  at a stop is its distance from the near end raised to a power, mirrored
+  about 500; `midpoint` (default 0.5, a straight line) is the share at 250
+  and 750, and sets the power. `hueShift` 0 locks every stop to the base
+  hue, 100 follows the natural interpolated hue path. Scale was a lookup
+  table of named stops; a single curve fit mosaic's hand-picked table to
+  within ΔE 1.2 and made every stop between addressable.
 - **`overlay`** (`color`): color at selector % opacity, never flattened.
   Shadows and scrims. This is why `shadow` is not a baseless tint: what
   kind of value a system produces is the **algorithm's nature**, declared
@@ -124,14 +147,22 @@ error messages that follow from it. This was reopened on purpose on
 2026-10-12: algorithms used to parse their own selector text, which left
 dtg able to read a ref but not to explain, draw or write one.
 
-This is why the built-ins look redundant and are not. `tint` with one
-ink, `blend` with one color to blend toward, and `overlay` all produce
-byte-identical values — `rgba(0, 26, 40, 0.03)` for the same input, verified
-in the tests. They differ in what a *reader* sees:
+This is why the built-ins look redundant and are not. `tint` in its `tint`
+form and `overlay` produce byte-identical values — `rgba(0, 26, 40, 0.03)`
+for the same input, verified in the tests. They differ in what a *reader*
+sees:
 
     tint      sky(3)          emits --color-light-3
-    blend     sky(ink 3)      emits --color-light-ink-3
     overlay   shadow(3)       never flattens, and says so declaratively
+
+There was a third, `blend`: one base and several named colors, with the
+name inside the selector (`warm(red 6)`). It was tint with several tints,
+and its selector changed shape with its params. It was removed on
+2026-10-16: several tints over one ground are now a group of tints
+(`warm-wash.red(6)`), so the color is found by walking the tree, every tint
+has the same selector, and the picked colors live in the palette. Its
+`space` param went with it; nothing used anything but srgb, which is what
+tint's compositing is.
 
 `--color-light-15` only reads as "15% ink" because tint declares a
 selector of one number. Folding these into one configurable algorithm would
@@ -164,12 +195,8 @@ yourself writing color arithmetic or a color string inside
 - `selector(params)` returns the selector's shape: its `fields` in written
   order (a number in a range, or a choice among options the params supply)
   and the `forms` it offers.
-- `emit` is optional: `"all"` writes out every option of a system's
-  selector regardless of demand (a public palette); `"demanded"`, the
-  default, writes only the steps refs ask for. It is neither a param nor
-  part of the selector: it changes no color, and dtg reads it to decide
-  what exists. What can be *addressed* is a separate matter and is the
-  selector's — a list of stops, or any number in a range.
+- There is no emit hook. What can be *addressed* is the selector's; what
+  is written out is the definition's — a system's `emit` list plus demand.
 - `resolve(selector, params)` returns a color. The selector arrives parsed,
   one value per field plus `form`. It throws with a human-readable message
   on a selector the system cannot produce.
@@ -218,11 +245,11 @@ doing so is in `project-algorithms.md`.
    follows pure ink math, and the resolver warns when the two overlap. Hand-tunes are
    explicit, visible, and survive regeneration. Exceptions either get
    promoted into the system later or stay flagged, never silent.
-6. **Demand-driven primitives.** A tint step exists because a ref
-   demands it; there is no maintained step list. Declared palettes
-   (scale stops) are the exception, emitting in full as public
-   utilities. `transparent()` demands only the unflattened form, not the
-   opaque step.
+6. **Constants emit, systems publish what they list, roles reference.** A
+   palette color always emits. A system step exists because a ref demands
+   it or the system's `emit` lists it — never because of which algorithm it
+   is. A role emits as a reference to what it points at. `transparent()`
+   demands only the unflattened form, not the opaque step.
 7. **Repetition is a promotion signal.** A derivation appearing twice is a
    named system trying to be born. New functions and algorithms arrive when a
    caller exists, never for symmetry. No generic `alpha()` until something
@@ -261,7 +288,12 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   watching. The server holds no markup: it serves one HTML shell, the built
   browser bundle, and `/api/snapshot`.
 - `edit.ts` — writing one value into the definition's text: an authored
-  color, or the ref a role holds for a mode. The
+  color, or the ref a role holds for a mode. An edit is a `set`, which needs
+  a value to write over, or for a constant also an `add`, `rename` or
+  `remove`. A rename carries the constant's pointers with it: each ref,
+  `transparent()` and color param naming it is rewritten in the same splice,
+  while an `alias` or changelog note that reads the same is not. Keeping `add` apart from `set` is what lets an unsaved edit to a
+  constant the file has since lost be dropped, rather than bring it back. The
   new value is spliced over the old one's exact span, so an edit is the
   one-line diff a person would have typed; re-serialising the YAML restyles
   the whole file. A ref edit can also carry `~`, putting a mode back to
@@ -275,7 +307,10 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `working-copy.ts` — the file's text plus the edits not yet written to it.
   An edit names a color, not a line, so unsaved edits survive the file
   changing underneath them. The dev server holds one working copy, draws the
-  app from it, and writes the file only when asked to save.
+  app from it, and writes the file only when asked to save. Edits come in
+  steps, which is what one undo takes back: randomizing a palette set is
+  one step of many edits. What counts as a change follows a constant
+  through renames, so renaming one back is no change at all.
 - `snapshot.ts` — the definition as plain JSON for the browser. Anything that
   needs an algorithm or an alias is worked out here; colors travel as exact
   values and the browser formats them.
@@ -326,6 +361,25 @@ Anything outside those three is a real defect. Promoting this check into a
       a role's internal path, a demand-driven step's lineage — so a courier
       can tell a rename from a create. An agent may ferry the payload; it
       never invents values.
+- [x] Palette: a `palette:` block of the colors picked by hand, read
+      before `systems`. Each group is a palette page in `dtg dev`, listed
+      under Palette with an "all" table of every color. A page adds,
+      renames, removes, locks and randomizes its colors (space rolls every
+      unlocked one); a color the file does not have yet is renamed after its
+      nearest color name on each roll, and once saved its name stays. Every
+      palette color emits, since apps use them directly, unless its group
+      says `emit: false`; an unsaved roll never reaches the outputs anyway.
+- [x] Params and `defaults` naming a palette color (`base: hues.sky`).
+      Renaming a palette color rewrites every ref, `transparent()` and param
+      that names it.
+- [x] Picker: a bar with the mode and close. On a param or shared default
+      the mode is Picker or Palette; palette mode lists the palette colors
+      and choosing one writes a reference, and the editor opens in the mode
+      the value is written in. The picker's "steps" toggle turns its field
+      into a grid of lightness by share-of-maximum-chroma cells, with the
+      sRGB edge drawn along the seams.
+- [ ] Rolls that keep the locked colors' lightness and chroma and vary only
+      hue.
 - [ ] Multi-file definitions (`shadows.dtg.yaml`, `type.dtg.yaml` as
       siblings, one resolver over all). Discovery exists; merging does not.
 - [ ] Designer tweaking in the browser: controls POST param changes, the

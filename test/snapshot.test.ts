@@ -6,21 +6,23 @@ import { buildSnapshot } from "../dist/snapshot.js";
 const SRC = `
 dtg: 1
 modes: [light, dark]
-systems:
+palette:
   paper: "#ffffff"
+
+systems:
   sky:
     algorithm: tint
     alias: light
     params: { base: "#fafdff", tint: "#001a28" }
     overrides: { "8": "#e0e6ea" }
   mix:
-    algorithm: blend
-    params: { base: "#ffffff", toward: { red: "#ff0000" } }
+    algorithm: tint
+    params: { base: "#ffffff", tint: "#ff0000" }
 roles:
   surface:
     canvas: [sky(3), sky(8)]
     flat: [paper, paper]
-    tint: [mix(red 6), surface.canvas]
+    tint: [mix(6), surface.canvas]
 `;
 const resolved = resolveDefinition(SRC);
 const lineage = buildLineage(resolved);
@@ -59,12 +61,6 @@ describe("snapshot", () => {
     assert.notDeepEqual(sky.steps[1].generated, sky.steps[1].color);
   });
 
-  test("preview is present only where the algorithm defines one", () => {
-    const by = Object.fromEntries(snapshot.systems.map((s) => [s.system, s]));
-    assert.equal(by.sky.preview, null);
-    assert.equal(by.mix.preview?.shape, "palette");
-  });
-
   test("a system lists which params are colors and where each was written", () => {
     const scaledSource = `
 dtg: 1
@@ -73,7 +69,6 @@ defaults:
   scale:
     toward: ["#ffffff", "#000000"]
     hueShift: 0
-    stops: { "500": 1 }
 systems:
   theme:
     algorithm: scale
@@ -100,7 +95,7 @@ systems:
       snapshot.systems.map((s) => [s.system, s.colorParams.map((param) => param.path)]),
       [
         ["sky", ["base", "tint"]],
-        ["mix", ["base", "toward.red"]],
+        ["mix", ["base", "tint"]],
       ],
     );
   });
@@ -132,5 +127,28 @@ systems:
     assert.equal(failed.error, "boom");
     assert.equal(failed.stale, true);
     assert.equal(failed.gamut, "srgb");
+  });
+});
+
+describe("a palette color's uses", () => {
+  test("include the system params that name it", () => {
+    const source = `dtg: 1
+palette:
+  hues: { emit: false, red: "#b30a0a" }
+systems:
+  wash:
+    algorithm: tint
+    params: { base: "#ffffff", tint: hues.red }
+`;
+    const red = buildSnapshot({
+      resolved: resolveDefinition(source),
+      lineage: new Map(),
+      error: null,
+      stale: false,
+      gamut: "display-p3",
+      changes: [],
+      definition: { path: "colors.dtg.yaml", text: source },
+    }).constants.find((constant) => constant.path === "hues.red")!;
+    assert.deepEqual(red.paramOf, [{ system: "wash", param: "tint" }]);
   });
 });

@@ -1,6 +1,7 @@
+import { Fragment } from "react";
 import type { SnapshotConstant } from "../../src/snapshot.js";
 import { ColorChip } from "../ColorChip.js";
-import { useScrollToHash } from "../router.js";
+import { Link, useScrollToHash } from "../router.js";
 import { UsedBy } from "../UsedBy.js";
 
 export function constantAnchor(path: string): string {
@@ -11,10 +12,11 @@ export function ConstantsPage({ constants }: { constants: SnapshotConstant[] }) 
   const hash = useScrollToHash();
   return (
     <>
-      <h1>Constants</h1>
+      <h1>Palette</h1>
       <p className="desc">
-        Flat colors with no recipe behind them. A role points at one by path; <code>transparent(name 70)</code> takes
-        one at an alpha. Unlike a system step, a constant emits whether or not anything demands it.
+        Every color picked by hand, with no recipe behind it. A role points at one by path;{" "}
+        <code>transparent(name 70)</code> takes one at an alpha. Unlike a system step, each one emits whether or not
+        anything demands it.
       </p>
       <table>
         <thead>
@@ -34,16 +36,26 @@ export function ConstantsPage({ constants }: { constants: SnapshotConstant[] }) 
                   <code>{constant.path}</code>
                 </td>
                 <td>
-                  <code>--color-{constant.cssName}</code>
+                  {constant.emitted ? (
+                    <code>--color-{constant.cssName}</code>
+                  ) : (
+                    <span className="muted">nothing — its group is an input</span>
+                  )}
                 </td>
                 <td>
                   <ColorChip color={constant.color} edit={{ kind: "constant", path: constant.path }} />
                 </td>
                 <td>
-                  {constant.usedBy.length > 0 ? (
-                    <UsedBy uses={constant.usedBy} />
+                  {constant.usedBy.length > 0 || constant.paramOf.length > 0 ? (
+                    <>
+                      <UsedBy uses={constant.usedBy} />
+                      {constant.usedBy.length > 0 && constant.paramOf.length > 0 && ", "}
+                      <ParamOf params={constant.paramOf} />
+                    </>
                   ) : (
-                    <span className="muted">nothing — it emits, but no role points at it</span>
+                    <span className="muted">
+                      {constant.emitted ? "nothing — it emits, but no role points at it" : "nothing"}
+                    </span>
                   )}
                 </td>
               </tr>
@@ -53,4 +65,17 @@ export function ConstantsPage({ constants }: { constants: SnapshotConstant[] }) 
       </table>
     </>
   );
+}
+
+/** The systems whose params name a color, linked to each system's page. */
+function ParamOf({ params }: { params: SnapshotConstant["paramOf"] }) {
+  return params.map(({ system, param }, index) => (
+    <Fragment key={`${system} ${param}`}>
+      {index > 0 && ", "}
+      <Link to={{ page: "system", name: system }}>
+        <code>{system}</code>
+      </Link>
+      <span className="muted"> {param}</span>
+    </Fragment>
+  ));
 }

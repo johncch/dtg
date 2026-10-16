@@ -1,6 +1,6 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { version } from "../package.json";
-import type { Snapshot } from "../src/snapshot.js";
+import type { Snapshot, SnapshotSystem } from "../src/snapshot.js";
 import { Backgrounds } from "./Backgrounds.js";
 import { Changes } from "./Changes.js";
 import { ProjectGamutProvider } from "./gamut.js";
@@ -10,9 +10,11 @@ import { DefinitionPage, fileName } from "./pages/DefinitionPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { DomainPage, RolesPage } from "./pages/DomainPage.js";
 import { OverviewPage } from "./pages/OverviewPage.js";
+import { PalettePage, palettesOf } from "./pages/PalettePage.js";
 import { SystemPage } from "./pages/SystemPage.js";
 import { Link, useRoute, type Route } from "./router.js";
 import { useSnapshot } from "./snapshot.js";
+import { PaletteColorsProvider } from "./palette-colors.js";
 import { UnsavedChangesProvider } from "./working.js";
 
 export function App() {
@@ -41,17 +43,19 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
     <Tooltip.Provider delayDuration={250} skipDelayDuration={400}>
       <ProjectGamutProvider value={snapshot.gamut}>
         <UnsavedChangesProvider value={working.changes}>
-          <aside>
-            <Nav snapshot={snapshot} />
-            <Backgrounds backgrounds={snapshot.backgrounds} />
-            <Changes working={working} />
-          </aside>
-          <main>
-            <div className="page">
-              <Banner snapshot={snapshot} />
-              <Page route={route} snapshot={snapshot} />
-            </div>
-          </main>
+          <PaletteColorsProvider value={working.constants}>
+            <aside>
+              <Nav snapshot={snapshot} />
+              <Backgrounds backgrounds={snapshot.backgrounds} />
+              <Changes working={working} />
+            </aside>
+            <main>
+              <div className="page">
+                <Banner snapshot={snapshot} />
+                <Page route={route} snapshot={snapshot} />
+              </div>
+            </main>
+          </PaletteColorsProvider>
         </UnsavedChangesProvider>
       </ProjectGamutProvider>
     </Tooltip.Provider>
@@ -70,23 +74,95 @@ function Nav({ snapshot }: { snapshot: Snapshot }) {
       <nav>
         <Link to={{ page: "definition" }}>{fileName(snapshot.definition.path)}</Link>
         <Link to={{ page: "settings" }}>settings</Link>
+        {snapshot.constants.length > 0 && (
+          <>
+            <h2>Palette</h2>
+            <Link to={{ page: "constants" }}>all</Link>
+            {palettesOf(snapshot.constants).map(({ group }) => (
+              <Link key={group} to={{ page: "palette", name: group }}>
+                {group}
+              </Link>
+            ))}
+          </>
+        )}
         <h2>Systems</h2>
-        {snapshot.systems.map((system) => (
-          <Link key={system.system} to={{ page: "system", name: system.system }}>
-            {system.system} <span className="algorithm">{system.algorithm}</span>
-          </Link>
-        ))}
-        {snapshot.constants.length > 0 && <Link to={{ page: "constants" }}>constants</Link>}
+        <SystemLinks nodes={systemTree(snapshot.systems)} />
         <h2>Roles</h2>
         {domains.length > 0 && <Link to={{ page: "roles" }}>all</Link>}
-        {domains.map((domain) => (
-          <Link key={domain} to={{ page: "domain", name: domain }}>
-            {domain}
-          </Link>
-        ))}
+        <DomainLinks nodes={domainTree(domains)} />
       </nav>
     </>
   );
+}
+
+/** A systems group in the sidebar holds its systems and groups by their own names; a system is a link to its page. */
+type SystemNode = { name: string; system: SnapshotSystem | null; children: SystemNode[] };
+
+function systemTree(systems: SnapshotSystem[]): SystemNode[] {
+  const roots: SystemNode[] = [];
+  for (const system of systems) {
+    let level = roots;
+    const names = system.system.split(".");
+    names.forEach((name, index) => {
+      let node = level.find((candidate) => candidate.name === name);
+      if (!node) level.push((node = { name, system: null, children: [] }));
+      if (index === names.length - 1) node.system = system;
+      level = node.children;
+    });
+  }
+  return roots;
+}
+
+function SystemLinks({ nodes }: { nodes: SystemNode[] }) {
+  return nodes.map((node) =>
+    node.system ? (
+      <Link key={node.name} to={{ page: "system", name: node.system.system }}>
+        {node.name} <span className="algorithm">{node.system.algorithm}</span>
+      </Link>
+    ) : (
+      <div key={node.name} className="nav-group">
+        <div className="nav-group-name">{node.name}</div>
+        <div className="nav-group-items">
+          <SystemLinks nodes={node.children} />
+        </div>
+      </div>
+    ),
+  );
+}
+
+/** Domains nest by their dotted names; a name that is a domain links to its page, one that only holds others is a label. */
+type DomainNode = { name: string; domain: string | null; children: DomainNode[] };
+
+function domainTree(domains: string[]): DomainNode[] {
+  const roots: DomainNode[] = [];
+  for (const domain of domains) {
+    let level = roots;
+    const names = domain.split(".");
+    names.forEach((name, index) => {
+      let node = level.find((candidate) => candidate.name === name);
+      if (!node) level.push((node = { name, domain: null, children: [] }));
+      if (index === names.length - 1) node.domain = domain;
+      level = node.children;
+    });
+  }
+  return roots;
+}
+
+function DomainLinks({ nodes }: { nodes: DomainNode[] }) {
+  return nodes.map((node) => (
+    <div key={node.name}>
+      {node.domain ? (
+        <Link to={{ page: "domain", name: node.domain }}>{node.name}</Link>
+      ) : (
+        <div className="nav-group-name">{node.name}</div>
+      )}
+      {node.children.length > 0 && (
+        <div className="nav-group-items">
+          <DomainLinks nodes={node.children} />
+        </div>
+      )}
+    </div>
+  ));
 }
 
 function Banner({ snapshot }: { snapshot: Snapshot }) {
@@ -120,6 +196,19 @@ function Page({ route, snapshot }: { route: Route; snapshot: Snapshot }) {
       <ConstantsPage constants={snapshot.constants} />
     ) : (
       <NotFound what="constants — this definition declares none" />
+    );
+  }
+  if (route.page === "palette") {
+    const palette = palettesOf(snapshot.constants).find((candidate) => candidate.group === route.name);
+    return palette ? (
+      <PalettePage
+        key={palette.group}
+        palette={palette}
+        written={[...snapshot.constants.map((constant) => constant.path), ...snapshot.systems.map((system) => system.system)]}
+        changes={snapshot.changes}
+      />
+    ) : (
+      <NotFound what={`palette "${route.name}" — no group of constants has that path`} />
     );
   }
   if (route.page === "domain") {

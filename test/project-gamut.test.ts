@@ -6,10 +6,12 @@ import { formatColor } from "../dist/color-math.js";
 const SRC = `
 dtg: 1
 modes: [light]
-systems:
+palette:
   paper: "#ffffff"
   vivid: color(display-p3 1 0 0)
   unreal: oklch(0.7 0.4 150)
+
+systems:
   plain:
     algorithm: tint
     params: { base: "#fafdff", tint: "#001a28" }

@@ -10,11 +10,13 @@ import {
 const BASE = `
 dtg: 1
 modes: [light, dark]
-systems:
+palette:
   paper: "#ffffff"
   reds:
     rose: "#ff0000"
     dawn: "#fa0000"
+
+systems:
   generated:
     alias: test
     sky:
@@ -214,7 +216,7 @@ s: { d: { r: [sky(3)] } }
         resolveDefinition(`
 dtg: 1
 modes: [light]
-systems:
+palette:
   d:
     r: "#ffffff"
 s:
@@ -285,85 +287,6 @@ s:
   });
 });
 
-describe("wide anchors that go nowhere", () => {
-  const warn = (src: string) => resolveDefinition(src).warnings.join(" ");
-  const def = (params: string) => `
-dtg: 1
-modes: [default]
-systems:
-  warm:
-    algorithm: blend
-    params: ${params}
-roles:
-  edge: { accent: [warm(red 100)] }
-`;
-
-  test("warns when a wide anchor is flattened by an srgb transform", () => {
-    assert.match(
-      warn(def(`{ base: "#ffffff", toward: { red: "oklch(0.4854 0.2237 28.69)" } }`)),
-      /outside srgb, but its transform runs in srgb/,
-    );
-  });
-
-  test("silent when the transform runs wide enough to keep it", () => {
-    for (const space of ["display-p3", "display-p3-linear", "oklab"]) {
-      assert.doesNotMatch(
-        warn(def(`{ space: ${space}, base: "#ffffff", toward: { red: "oklch(0.4854 0.2237 28.69)" } }`)),
-        /extra gamut is discarded/,
-        space,
-      );
-    }
-  });
-
-  test("srgb-linear warns too — the clip is on the way in, not the path", () => {
-    assert.match(
-      warn(def(`{ space: srgb-linear, base: "#ffffff", toward: { red: "oklch(0.4854 0.2237 28.69)" } }`)),
-      /extra gamut is discarded/,
-    );
-  });
-
-  test("fires on the anchor, not on whichever steps happen to be demanded", () => {
-    // A pale tint is inside sRGB whatever the anchor was; the loss already
-    // happened when the anchor was clipped on the way in.
-    const pale = `
-dtg: 1
-modes: [default]
-systems:
-  warm:
-    algorithm: blend
-    params: { base: "#ffffff", toward: { red: "oklch(0.4854 0.2237 28.69)" } }
-roles:
-  surface: { tint: [warm(red 6)] }
-`;
-    assert.match(warn(pale), /extra gamut is discarded/);
-  });
-
-  test("silent when nothing was wide to begin with", () => {
-    assert.doesNotMatch(
-      warn(def(`{ base: "#ffffff", toward: { red: "#b30a0a" } }`)),
-      /extra gamut is discarded/,
-    );
-  });
-
-  test("tint cannot discard it — it widens to fit its inputs", () => {
-    // Only blend takes an explicit `space`; the other algorithms transform in
-    // the widest gamut their inputs use, so there is nothing to warn about.
-    assert.doesNotMatch(
-      warn(`
-dtg: 1
-modes: [default]
-systems:
-  ramp:
-    algorithm: tint
-    params: { base: "#ffffff", tint: "color(display-p3 1 0 0)" }
-roles:
-  edge: { accent: [ramp(2)] }
-`),
-      /extra gamut is discarded/,
-    );
-  });
-});
-
 describe("a mode that extends another", () => {
   const SRC = `
 dtg: 1
@@ -375,7 +298,7 @@ modes:
     extends: light
   dark-hc:
     extends: dark
-systems:
+palette:
   ink: "#313133"
   paper: "#ffffff"
   loud: "#000000"
@@ -434,7 +357,7 @@ modes:
   dark:
   dim: { extends: dark }
   dimmer: { extends: dim }
-systems: { ink: "#313133", paper: "#ffffff" }
+palette: { ink: "#313133", paper: "#ffffff" }
 roles:
   label:
     primary: [ink]
@@ -448,7 +371,7 @@ roles:
   const modesError = (modes: string, roles = "label: { primary: [ink, ink] }") =>
     () =>
       resolveDefinition(
-        `dtg: 1\nmodes:\n${modes}\nsystems: { ink: "#313133" }\nroles:\n  ${roles}\n`,
+        `dtg: 1\nmodes:\n${modes}\npalette: { ink: "#313133" }\nroles:\n  ${roles}\n`,
       );
 
   test("a root mode has to name a color", () => {
@@ -489,7 +412,7 @@ roles:
   test("a mode name cannot be a number, in either form", () => {
     assert.throws(modesError("  light:\n  2:"), /a mode name cannot be a number/);
     assert.throws(
-      () => resolveDefinition(`dtg: 1\nmodes: [light, 2]\nsystems: { ink: "#313133" }\n`),
+      () => resolveDefinition(`dtg: 1\nmodes: [light, 2]\npalette: { ink: "#313133" }\n`),
       /a mode name cannot be a number/,
     );
   });
@@ -509,7 +432,7 @@ roles:
 describe("a definition with no modes", () => {
   const SRC = `
 dtg: 1
-systems:
+palette:
   ink: "#313133"
   paper: "#ffffff"
 roles:
@@ -537,7 +460,7 @@ roles:
       () => resolveDefinition(`
 dtg: 1
 modes: [light, dark]
-systems:
+palette:
   ink: "#313133"
 roles:
   label: { primary: ink }
@@ -548,8 +471,88 @@ roles:
 
   test("an empty modes list is still an error", () => {
     assert.throws(
-      () => resolveDefinition(`dtg: 1\nmodes: []\nsystems:\n  ink: "#313133"\nroles:\n  label: { primary: ink }`),
+      () => resolveDefinition(`dtg: 1\nmodes: []\npalette:\n  ink: "#313133"\nroles:\n  label: { primary: ink }`),
       /must be a non-empty list/,
+    );
+  });
+});
+
+describe("palette", () => {
+  test("a color left in systems is pointed at the palette", () => {
+    assert.throws(
+      () => resolveDefinition(`dtg: 1\nsystems:\n  paper: "#ffffff"\n`),
+      /"paper": a color with no recipe goes under `palette:` now/,
+    );
+  });
+
+  test("a system in the palette is pointed back at systems", () => {
+    assert.throws(
+      () => resolveDefinition(`dtg: 1\npalette:\n  sky:\n    algorithm: tint\n`),
+      /palette "sky": a palette holds colors and groups — a system goes under `systems`/,
+    );
+  });
+
+  test("a palette color and a system cannot share a path", () => {
+    assert.throws(
+      () =>
+        resolveDefinition(
+          `dtg: 1\npalette:\n  sky: "#ffffff"\nsystems:\n  sky:\n    algorithm: overlay\n    params: { color: "#000000" }\n`,
+        ),
+      /"sky" is both a palette color and a system/,
+    );
+  });
+
+  test("is not a section", () => {
+    assert.deepEqual(resolveDefinition(`dtg: 1\npalette:\n  paper: "#ffffff"\n`).sections, []);
+  });
+});
+
+describe("emit", () => {
+  const withEmit = (emit: string) =>
+    resolveDefinition(`dtg: 1
+modes: [light]
+systems:
+  theme:
+    algorithm: scale
+    params: { base: "#03a2e8", toward: ["#ffffff", "#000000"] }
+${emit}
+s: { d: { r: [theme(250)] } }
+`);
+  const steps = (emit: string) =>
+    withEmit(emit).systems[0].steps.map((step) => step.selector);
+
+  test("a system publishes only what refs demand by default", () => {
+    assert.deepEqual(steps(""), ["250"]);
+  });
+
+  test("and what its emit lists besides, in order", () => {
+    assert.deepEqual(steps("    emit: [900, 50, 500]"), ["50", "250", "500", "900"]);
+  });
+
+  test("an emitted selector the algorithm cannot produce is an error", () => {
+    assert.throws(() => withEmit("    emit: [1200]"), /system "theme" emit: .*stop must be a number 0–1000/);
+  });
+
+  test("emit is a list", () => {
+    assert.throws(() => withEmit("    emit: 50"), /`emit` is a list of the selectors to publish/);
+  });
+
+  test("scale's old stops point at midpoint and emit", () => {
+    assert.throws(
+      () => resolveDefinition(`dtg: 1\ndefaults:\n  scale: { stops: { "500": 1 } }\nsystems:\n  theme:\n    algorithm: scale\n    params: { base: "#03a2e8", toward: ["#ffffff", "#000000"] }\n`),
+      /scale's `stops` are gone .* `midpoint` shapes the curve, and the stops to publish are listed under `emit`/,
+    );
+  });
+});
+
+describe("blend is gone", () => {
+  test("and points at a group of tints", () => {
+    assert.throws(
+      () =>
+        resolveDefinition(
+          `dtg: 1\nsystems:\n  warm:\n    algorithm: blend\n    params: { base: "#ffffff", toward: { red: "#b30a0a" } }\n`,
+        ),
+      /`blend` is gone .* `warm-wash: \{ red: \{ algorithm: tint, params: \{ base, tint \} \} \}`\. Refs move from `warm\(red 6\)` to `warm-wash\.red\(6\)`, and the `alpha` form is `tint`/,
     );
   });
 });

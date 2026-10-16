@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import {
   formatIn,
   maxChroma,
@@ -16,6 +16,20 @@ const FIELD_WIDTH = 360;
 const FIELD_HEIGHT = 240;
 
 const clamp01 = (n: number) => Math.min(1, Math.max(0, n));
+
+/** In steps, the field is a grid of flat cells: chroma share from 0 to 1 across, lightness from 1 to 0 down. */
+const COLUMNS = 15;
+const ROWS = 15;
+const SHARE_STEPS = COLUMNS - 1;
+const LIGHTNESS_STEPS = ROWS - 1;
+/** How much of a cell's color its seam keeps, out of 255: enough to read as the cell's edge, not a gap. */
+const SEAM_ALPHA = 150;
+
+const cellOf = (fraction: number, cells: number) => Math.min(cells - 1, Math.floor(fraction * cells));
+
+/** Whether a pixel is the last one of its cell, short of the field's own edge. */
+const lastInCell = (pixel: number, size: number, cells: number) =>
+  pixel < size - 1 && cellOf(pixel / size, cells) !== cellOf((pixel + 1) / size, cells);
 
 /** How far across the field a color sits: its chroma as a share of the most the gamut shows at that lightness and hue. */
 function chromaShare([L, C, H]: Oklch, gamut: Gamut): number {
@@ -61,14 +75,31 @@ export function Picker({
 }) {
   const [L, C, H] = value;
   const share = chromaShare(value, gamut);
-  const { canvasRef, paintGamut } = useField(H, gamut);
+  const [stepped, setStepped] = useState(false);
+  const { canvasRef, paintGamut } = useField(H, gamut, stepped);
 
   const hueGradient = useMemo(() => vividHueGradient(gamut, paintGamut), [gamut, paintGamut]);
 
+  const pick = (lightness: number, chromaShareOf: number) =>
+    onChange([lightness, chromaShareOf * maxChroma(lightness, H, gamut), H]);
   const field = useDrag((across, down) => {
-    const lightness = 1 - down;
-    onChange([lightness, across * maxChroma(lightness, H, gamut), H]);
+    if (stepped) pick(1 - cellOf(down, ROWS) / LIGHTNESS_STEPS, cellOf(across, COLUMNS) / SHARE_STEPS);
+    else pick(1 - down, across);
   });
+  // A color picked before steps were on sits between cells; the dot shows the nearest one.
+  const column = Math.round(share * SHARE_STEPS);
+  const row = Math.round((1 - clamp01(L)) * LIGHTNESS_STEPS);
+  const dot = stepped
+    ? { left: `${((column + 0.5) / COLUMNS) * 100}%`, top: `${((row + 0.5) / ROWS) * 100}%` }
+    : { left: `${share * 100}%`, top: `${(1 - clamp01(L)) * 100}%` };
+  const stepWithKeys = (event: KeyboardEvent<HTMLDivElement>) => {
+    const move = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[event.key];
+    if (!stepped || !move) return;
+    event.preventDefault();
+    const nextColumn = Math.min(SHARE_STEPS, Math.max(0, column + move[0]));
+    const nextRow = Math.min(LIGHTNESS_STEPS, Math.max(0, row + move[1]));
+    pick(1 - nextRow / LIGHTNESS_STEPS, nextColumn / SHARE_STEPS);
+  };
   const hueBar = useDrag((across) => {
     const hue = Math.min(359.999, across * 360);
     onChange([L, share * maxChroma(clamp01(L), hue, gamut), hue]);
@@ -76,9 +107,9 @@ export function Picker({
 
   return (
     <>
-      <div className="field-wrap" {...field}>
+      <div className="field-wrap" tabIndex={stepped ? 0 : undefined} onKeyDown={stepWithKeys} {...field}>
         <canvas ref={canvasRef} width={FIELD_WIDTH} height={FIELD_HEIGHT} />
-        <span className="dot" style={{ left: `${share * 100}%`, top: `${(1 - clamp01(L)) * 100}%` }} />
+        <span className="dot" style={dot} />
       </div>
       {axes && (
         <div className="axes">
@@ -89,6 +120,10 @@ export function Picker({
       <div className="hue" style={{ background: hueGradient }} {...hueBar}>
         <span className="dot" style={{ left: `${(H / 360) * 100}%` }} />
       </div>
+      <label className="picker-steps">
+        <input type="checkbox" checked={stepped} onChange={(event) => setStepped(event.target.checked)} />
+        steps
+      </label>
       {paintGamut === "srgb" && (
         <p className="cap">
           This browser did not give a Display P3 canvas, so colors past the sRGB line look the same as those on it.
@@ -99,7 +134,7 @@ export function Picker({
   );
 }
 
-function useField(hue: number, gamut: Gamut) {
+function useField(hue: number, gamut: Gamut, stepped: boolean) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [paintGamut, setPaintGamut] = useState<Gamut>("display-p3");
 
@@ -114,11 +149,22 @@ function useField(hue: number, gamut: Gamut) {
     const frame = requestAnimationFrame(() => {
       const image = context.createImageData(FIELD_WIDTH, FIELD_HEIGHT);
       let previousLine: number | null = null;
+      // Which cells sRGB can show, for the boundary drawn along their seams.
+      // Near black the two gamuts' limits are a rounding error apart, so those cells count as sRGB.
+      const cellInSrgb = Array.from({ length: ROWS }, (_, row) => {
+        const lightness = 1 - row / LIGHTNESS_STEPS;
+        const most = maxChroma(lightness, hue, gamut);
+        const srgbMost = maxChroma(lightness, hue, "srgb");
+        return Array.from({ length: COLUMNS }, (_, column) => most <= 0.005 || (column / SHARE_STEPS) * most <= srgbMost + 1e-6);
+      });
       for (let py = 0; py < FIELD_HEIGHT; py++) {
-        const lightness = 1 - py / (FIELD_HEIGHT - 1);
+        const lightness = stepped
+          ? 1 - cellOf(py / FIELD_HEIGHT, ROWS) / LIGHTNESS_STEPS
+          : 1 - py / (FIELD_HEIGHT - 1);
         const most = maxChroma(lightness, hue, gamut);
         for (let px = 0; px < FIELD_WIDTH; px++) {
-          const linear = oklabToLinear(oklchToOklab([lightness, (most * px) / (FIELD_WIDTH - 1), hue]), granted);
+          const shareAt = stepped ? cellOf(px / FIELD_WIDTH, COLUMNS) / SHARE_STEPS : px / (FIELD_WIDTH - 1);
+          const linear = oklabToLinear(oklchToOklab([lightness, most * shareAt, hue]), granted);
           const offset = (py * FIELD_WIDTH + px) * 4;
           for (let channel = 0; channel < 3; channel++) {
             const c = clamp01(linear[channel]);
@@ -127,9 +173,22 @@ function useField(hue: number, gamut: Gamut) {
             );
           }
           image.data[offset + 3] = 255;
+          if (!stepped) continue;
+          // A cell's last row and column are its seam: faded, or the sRGB line where the seam crosses it.
+          const acrossSeam = lastInCell(px, FIELD_WIDTH, COLUMNS);
+          const downSeam = lastInCell(py, FIELD_HEIGHT, ROWS);
+          if (!acrossSeam && !downSeam) continue;
+          const row = cellOf(py / FIELD_HEIGHT, ROWS);
+          const column = cellOf(px / FIELD_WIDTH, COLUMNS);
+          const inSrgb = cellInSrgb[row][column];
+          const onSrgbLine =
+            gamut === "display-p3" &&
+            ((acrossSeam && inSrgb !== cellInSrgb[row][column + 1]) || (downSeam && inSrgb !== cellInSrgb[row + 1][column]));
+          if (onSrgbLine) image.data[offset] = image.data[offset + 1] = image.data[offset + 2] = 255;
+          else image.data[offset + 3] = SEAM_ALPHA;
         }
         // Near black the two gamuts' limits are both a rounding error apart, and the line is noise.
-        if (gamut === "display-p3" && most > 0.005) {
+        if (gamut === "display-p3" && most > 0.005 && !stepped) {
           const line = Math.round((maxChroma(lightness, hue, "srgb") / most) * (FIELD_WIDTH - 1));
           const from = previousLine == null ? line : Math.min(line, previousLine);
           const to = previousLine == null ? line : Math.max(line, previousLine);
@@ -143,7 +202,7 @@ function useField(hue: number, gamut: Gamut) {
       context.putImageData(image, 0, 0);
     });
     return () => cancelAnimationFrame(frame);
-  }, [hue, gamut]);
+  }, [hue, gamut, stepped]);
 
   return { canvasRef, paintGamut };
 }

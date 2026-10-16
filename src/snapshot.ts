@@ -1,10 +1,9 @@
 import { parseColor, type Color, type Gamut } from "./color-math.js";
-import type { Algorithm, SelectorShape } from "./contract.js";
+import type { SelectorShape } from "./contract.js";
 import { DEFAULT_BACKGROUNDS, type Background } from "./dev-settings.js";
 import type { Edit } from "./edit.js";
 import type { Change } from "./working-copy.js";
 import {
-  algorithmFor,
   publicPath,
   publicSystemName,
   type Lineage,
@@ -29,9 +28,9 @@ export type Snapshot = {
   gamut: Gamut;
   /** What saving would write: every color whose working value differs from the file's. */
   changes: Change[];
-  /** The edit undo would take back and the one redo would bring back, or null when there is none. */
-  undo: Edit | null;
-  redo: Edit | null;
+  /** The step undo would take back and the one redo would bring back, or null when there is none. */
+  undo: Edit[] | null;
+  redo: Edit[] | null;
   definition: SnapshotDefinition;
   /** The full path of the `dtg.config.yaml` the settings are kept in, whether or not it exists yet. */
   configPath: string;
@@ -87,15 +86,18 @@ export type SnapshotSystem = {
   colorParams: ResolvedColorParam[];
   /** What a ref into this system is made of, so the page can draw a control for each part. */
   selector: SelectorShape;
-  preview: NonNullable<Algorithm["preview"]> | null;
   steps: SnapshotStep[];
 };
 
 export type SnapshotConstant = {
   path: string;
   cssName: string;
+  /** False for an input: its group is `emit: false` and no role points at it. */
+  emitted: boolean;
   color: Color;
   usedBy: SnapshotUse[];
+  /** The system params that name it, as `{ system, param }`. */
+  paramOf: { system: string; param: string }[];
 };
 
 export type SnapshotRole = {
@@ -128,8 +130,8 @@ export function buildSnapshot({
   stale: boolean;
   gamut: Gamut;
   changes: Change[];
-  undo?: Edit | null;
-  redo?: Edit | null;
+  undo?: Edit[] | null;
+  redo?: Edit[] | null;
   definition: SnapshotDefinition;
   configPath?: string;
   backgrounds?: Background[];
@@ -159,7 +161,6 @@ export function buildSnapshot({
       params: system.params,
       colorParams: system.colorParams,
       selector: system.selector,
-      preview: algorithmFor(system.algorithm)?.preview ?? null,
       steps: system.steps.map((step) => ({
         selector: step.selector,
         publicStep: step.publicStep,
@@ -171,8 +172,14 @@ export function buildSnapshot({
     constants: resolved.statics.map((constant) => ({
       path: constant.path,
       cssName: publicPath(constant.segments, "css", "-"),
+      emitted: constant.emitted,
       color: constant.color,
       usedBy: lineage.get(constant.path) ?? [],
+      paramOf: resolved.systems.flatMap((system) =>
+        system.colorParams
+          .filter((param) => param.constant === constant.path)
+          .map((param) => ({ system: system.system, param: param.path })),
+      ),
     })),
     roles: resolved.roles.map((role) => ({
       section: role.section,

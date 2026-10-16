@@ -21,7 +21,7 @@ export function SystemPage({ system }: { system: SnapshotSystem }) {
       <p className="desc">{system.description}</p>
       <Params system={system} />
       <Probe key={system.system} system={system} />
-      <Strip system={system} withDeltas={system.preview?.shape !== "palette"} />
+      <Strip system={system} withDeltas />
       <table>
         <thead>
           <tr>
@@ -103,7 +103,7 @@ function ParamValue({ value, path, system }: { value: unknown; path: string; sys
         ? { kind: "default", algorithm: system.algorithm, path }
         : { kind: "param", system: system.system, path };
     return (
-      <ColorChip color={colorParam.color} label={String(value)} edit={target}>
+      <ColorChip color={colorParam.color} label={String(value)} edit={target} named={colorParam.constant}>
         {colorParam.from === "defaults" && <span className="muted">shared default</span>}
       </ColorChip>
     );

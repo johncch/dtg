@@ -1,12 +1,14 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { changesOf, discard, openFile, redo, undo, withEdit, workingText } from "../dist/working-copy.js";
+import { changesOf, discard, editsOf, openFile, redo, undo, withEdit, withEdits, workingText } from "../dist/working-copy.js";
 import { readValue } from "../dist/edit.js";
 
 const DISK = `dtg: 1
-systems:
+palette:
   paper: "#ffffff"
   ink: "#313133" # text
+
+systems:
   sky:
     algorithm: tint
     params: { base: "#fafdff", tint: "#001a28" }
@@ -25,10 +27,10 @@ describe("working copy", () => {
     const copy = {
       diskText: DISK,
       undone: [],
-      edits: [
-        { target: paper, value: "#fffaf0" },
-        { target: skyBase, value: "#f0f4ff" },
-        { target: paper, value: "#fff5e0" },
+      steps: [
+        [{ action: "set", target: paper, value: "#fffaf0" }],
+        [{ action: "set", target: skyBase, value: "#f0f4ff" }],
+        [{ action: "set", target: paper, value: "#fff5e0" }],
       ],
     };
     const { text, dropped } = workingText(copy);
@@ -42,15 +44,15 @@ describe("working copy", () => {
     const changes = changesOf({
       diskText: DISK,
       undone: [],
-      edits: [
-        { target: paper, value: "#fffaf0" },
-        { target: skyBase, value: "#f0f4ff" },
-        { target: paper, value: "#fff5e0" },
+      steps: [
+        [{ action: "set", target: paper, value: "#fffaf0" }],
+        [{ action: "set", target: skyBase, value: "#f0f4ff" }],
+        [{ action: "set", target: paper, value: "#fff5e0" }],
       ],
     });
     assert.deepEqual(changes, [
-      { target: skyBase, from: "#fafdff", to: "#f0f4ff" },
-      { target: paper, from: "#ffffff", to: "#fff5e0" },
+      { action: "set", target: skyBase, from: "#fafdff", to: "#f0f4ff" },
+      { action: "set", target: paper, from: "#ffffff", to: "#fff5e0" },
     ]);
   });
 
@@ -58,18 +60,18 @@ describe("working copy", () => {
     const changes = changesOf({
       diskText: DISK,
       undone: [],
-      edits: [
-        { target: paper, value: "#fffaf0" },
-        { target: paper, value: "#ffffff" },
+      steps: [
+        [{ action: "set", target: paper, value: "#fffaf0" }],
+        [{ action: "set", target: paper, value: "#ffffff" }],
       ],
     });
     assert.deepEqual(changes, []);
   });
 
   test("edits carry over when the file changes underneath them", () => {
-    const edits = [{ target: skyBase, value: "#f0f4ff" }];
+    const edits = [{ action: "set", target: skyBase, value: "#f0f4ff" }];
     const pulled = DISK.replace('"#313133" # text', '"#202022" # darker text');
-    const { text, dropped } = workingText({ diskText: pulled, edits, undone: [] });
+    const { text, dropped } = workingText({ diskText: pulled, steps: [edits], undone: [] });
     assert.deepEqual(dropped, []);
     assert.equal(readValue(text, ink), "#202022");
     assert.equal(readValue(text, skyBase), "#f0f4ff");
@@ -80,41 +82,41 @@ describe("working copy", () => {
     const copy = {
       diskText: withoutPaper,
       undone: [],
-      edits: [
-        { target: paper, value: "#fffaf0" },
-        { target: skyBase, value: "#f0f4ff" },
+      steps: [
+        [{ action: "set", target: paper, value: "#fffaf0" }],
+        [{ action: "set", target: skyBase, value: "#f0f4ff" }],
       ],
     };
     const { text, dropped } = workingText(copy);
-    assert.deepEqual(dropped, [{ target: paper, value: "#fffaf0" }]);
+    assert.deepEqual(dropped, [{ action: "set", target: paper, value: "#fffaf0" }]);
     assert.equal(readValue(text, skyBase), "#f0f4ff");
-    assert.deepEqual(changesOf(copy), [{ target: skyBase, from: "#fafdff", to: "#f0f4ff" }]);
+    assert.deepEqual(changesOf(copy), [{ action: "set", target: skyBase, from: "#fafdff", to: "#f0f4ff" }]);
   });
 });
 
 describe("undo and redo", () => {
-  const a = { target: paper, value: "#fffaf0" };
-  const b = { target: skyBase, value: "#f0f4ff" };
-  const c = { target: ink, value: "#202022" };
+  const a = { action: "set", target: paper, value: "#fffaf0" };
+  const b = { action: "set", target: skyBase, value: "#f0f4ff" };
+  const c = { action: "set", target: ink, value: "#202022" };
   const three = [a, b, c].reduce(withEdit, openFile(DISK));
 
   test("undo takes back the last edit, redo brings it back", () => {
     const back = undo(three);
-    assert.deepEqual(back.edits, [a, b]);
+    assert.deepEqual(editsOf(back), [a, b]);
     assert.equal(readValue(workingText(back).text, ink), "#313133");
-    assert.deepEqual(redo(back).edits, [a, b, c]);
+    assert.deepEqual(editsOf(redo(back)), [a, b, c]);
     assert.deepEqual(redo(back).undone, []);
   });
 
   test("with nothing to undo or redo, the copy is returned as it was", () => {
-    assert.equal(undo(openFile(DISK)).edits.length, 0);
+    assert.equal(undo(openFile(DISK)).steps.length, 0);
     assert.deepEqual(redo(three), three);
   });
 
   test("a new edit after an undo leaves nothing to redo", () => {
-    const d = { target: paper, value: "#eeeeee" };
+    const d = { action: "set", target: paper, value: "#eeeeee" };
     const branched = withEdit(undo(three), d);
-    assert.deepEqual(branched.edits, [a, b, d]);
+    assert.deepEqual(editsOf(branched), [a, b, d]);
     assert.deepEqual(redo(branched), branched);
   });
 
@@ -122,7 +124,19 @@ describe("undo and redo", () => {
     const cleared = discard(three);
     assert.deepEqual(changesOf(cleared), []);
     assert.equal(workingText(cleared).text, DISK);
-    assert.deepEqual(redo(cleared).edits, [a]);
-    assert.deepEqual(redo(redo(redo(cleared))).edits, [a, b, c]);
+    assert.deepEqual(editsOf(redo(cleared)), [a]);
+    assert.deepEqual(editsOf(redo(redo(redo(cleared)))), [a, b, c]);
+  });
+});
+
+describe("steps", () => {
+  const a = { action: "set" as const, target: paper, value: "#fffaf0" };
+  const b = { action: "set" as const, target: skyBase, value: "#f0f4ff" };
+
+  test("edits made together are one step: one undo takes them all back, one redo brings them back", () => {
+    const rolled = withEdits(openFile(DISK), [a, b]);
+    assert.equal(changesOf(rolled).length, 2);
+    assert.deepEqual(undo(rolled).steps, []);
+    assert.deepEqual(redo(undo(rolled)).steps, [[a, b]]);
   });
 });

@@ -12,68 +12,51 @@ type OklchScaleParams = {
   base: Color;
   toward: [Color, Color];
   hueShift: number;
-  stops: Record<string, number>;
+  midpoint: number;
 };
 
 /**
- * A chromatic scale blended from a base color toward two targets in OKLCH.
- * `stops` maps stop names to the fraction of base in the blend (1 = the
- * base itself). Stop names are numeric: below 500 blends toward
- * `toward[0]` (the light side), above 500 toward `toward[1]` (the dark
- * side). All stops are declared — the scale is a public palette.
+ * A chromatic scale from a light target through the base to a dark target,
+ * blended in OKLCH. The selector is a position 0–1000: 0 is `toward[0]`,
+ * 500 the base, 1000 `toward[1]`. How much of the base a position carries
+ * follows one curve, mirrored about 500, whose shape `midpoint` sets: the
+ * share of base at 250 (and 750). 0.5 is a straight line.
  */
 export const scale: Algorithm = {
   name: "scale",
   description:
-    "A chromatic scale blended from the 500 base color in OKLCH. Stops below 500 blend toward the light target, stops above 500 toward the dark target; each stop's value is the fraction of base remaining in the blend. Hue is held near the base hue — hueShift 0 locks it entirely, 100 follows the natural interpolated path.",
+    "A chromatic scale through the base color in OKLCH. The selector is a position from 0 to 1000: 0 is the light target, 500 the base, 1000 the dark target. midpoint is how much of the base shows at 250 and 750 — 0.5 is an even line, lower keeps the ends paler and deeper for longer. Hue is held near the base hue — hueShift 0 locks it entirely, 100 follows the natural interpolated path.",
 
   params: {
     base: { kind: "color" },
     toward: { kind: "list", of: { kind: "color" }, length: 2 },
     hueShift: { kind: "number", default: 0 },
-    stops: { kind: "map", of: { kind: "number" } },
+    midpoint: { kind: "number", default: 0.5 },
   },
 
-  emit: "all",
-
   selector(params) {
-    const stops = Object.keys((params as OklchScaleParams).stops);
-    for (const stop of stops) {
-      if (!Number.isFinite(Number(stop))) {
-        throw new Error(
-          `scale stop names must be numeric, got "${stop}"`,
-        );
-      }
+    const { midpoint } = params as OklchScaleParams;
+    if (!(midpoint > 0 && midpoint < 1)) {
+      throw new Error(`midpoint must be between 0 and 1, got ${midpoint}`);
     }
-    return { fields: [{ name: "stop", kind: "choice", options: stops }] };
+    return { fields: [{ name: "stop", kind: "number", min: 0, max: 1000 }] };
   },
 
   resolve(selector, params) {
-    const { base, toward, hueShift, stops } = params as OklchScaleParams;
-    const stop = selector.stop as string;
-    const baseFraction = stops[stop];
-    if (baseFraction === 1) return base;
+    const { base, toward, hueShift, midpoint } = params as OklchScaleParams;
+    const stop = selector.stop as number;
+    if (stop === 500) return base;
 
+    const fromEnd = stop < 500 ? stop / 500 : (1000 - stop) / 500;
+    const baseFraction = fromEnd ** (Math.log(midpoint) / Math.log(0.5));
     const [light, dark] = toward;
     const gamut = widestGamut([base, light, dark]);
     const baseChannels = channelsIn(base, gamut);
     const baseHue = baseHueOf(baseChannels);
     const rgb =
-      Number(stop) < 500
-        ? oklchInterpolate(
-            channelsIn(light, gamut),
-            baseChannels,
-            baseFraction,
-            baseHue,
-            hueShift,
-          )
-        : oklchInterpolate(
-            baseChannels,
-            channelsIn(dark, gamut),
-            1 - baseFraction,
-            baseHue,
-            hueShift,
-          );
+      stop < 500
+        ? oklchInterpolate(channelsIn(light, gamut), baseChannels, baseFraction, baseHue, hueShift)
+        : oklchInterpolate(baseChannels, channelsIn(dark, gamut), 1 - baseFraction, baseHue, hueShift);
     return colorFromRgb(rgb, gamut);
   },
 };

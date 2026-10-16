@@ -49,7 +49,7 @@ export function RefEditor({
   const [original] = useState(written);
   const [text, setText] = useState(original);
   const value = text.trim();
-  const edit = value !== original ? { target, value } : null;
+  const edit = value !== original ? { action: "set" as const, target, value } : null;
   const latest = useRef(edit);
   latest.current = edit;
   useEffect(() => preview(edit), [value]);

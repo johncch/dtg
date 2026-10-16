@@ -1,10 +1,13 @@
-import { parseColor } from "./color-math.js";
+import { parseColor, type Color } from "./color-math.js";
 import type { Algorithm, ColorParam, ParamKind, Params } from "./contract.js";
+
+/** A color param, and the constant it names when it names one rather than writing a color. */
+export type ParsedColorParam = ColorParam & { constant: string | null };
 
 export type ParsedParams = {
   values: Params;
   /** Every color among them, with the dotted path it was written at. */
-  colors: ColorParam[];
+  colors: ParsedColorParam[];
 };
 
 /**
@@ -14,6 +17,7 @@ export type ParsedParams = {
 export function parseParams(
   algorithm: Algorithm,
   written: Record<string, unknown>,
+  constants: ReadonlyMap<string, Color> = new Map(),
 ): ParsedParams {
   const known = Object.keys(algorithm.params);
   for (const key of Object.keys(written)) {
@@ -24,14 +28,22 @@ export function parseParams(
     }
   }
 
-  const colors: ColorParam[] = [];
+  const colors: ParsedColorParam[] = [];
 
   function parseValue(kind: ParamKind, value: unknown, path: string): unknown {
     const context = `${algorithm.name} param '${path}'`;
     switch (kind.kind) {
       case "color": {
+        const named = typeof value === "string" ? constants.get(value) : undefined;
+        if (named) {
+          colors.push({ path, color: named, constant: value as string });
+          return named;
+        }
+        if (typeof value === "string" && /^[A-Za-z][\w-]*(\.[A-Za-z][\w-]*)*$/.test(value)) {
+          throw new Error(`${context}: no constant "${value}" (a color param is a color, or the path of a constant)`);
+        }
         const color = parseColor(value, context);
-        colors.push({ path, color });
+        colors.push({ path, color, constant: null });
         return color;
       }
       case "number":

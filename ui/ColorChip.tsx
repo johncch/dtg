@@ -16,6 +16,7 @@ export function ColorChip({
   size = "regular",
   label = formatColor(color, "srgb"),
   edit,
+  named = null,
   children,
 }: {
   color: Color;
@@ -25,6 +26,8 @@ export function ColorChip({
   label?: string;
   /** Where an authored color is written, which makes the chip open the picker. Derived colors have none. */
   edit?: EditTarget;
+  /** The palette color an editable value names, when it names one rather than writing a color. */
+  named?: string | null;
   /** Shown under the value and part of the same hover target, e.g. the ref a role points at. */
   children?: ReactNode;
 }) {
@@ -47,7 +50,7 @@ export function ColorChip({
   );
   if (edit) {
     return (
-      <EditableChip color={color} target={edit} className={className}>
+      <EditableChip color={color} target={edit} named={named} className={className}>
         {content}
       </EditableChip>
     );
@@ -59,14 +62,16 @@ export function ColorChip({
   );
 }
 
-function EditableChip({
+export function EditableChip({
   color,
   target,
+  named = null,
   className,
   children,
 }: {
   color: Color;
   target: EditTarget;
+  named?: string | null;
   className: string;
   children: ReactNode;
 }) {
@@ -84,17 +89,19 @@ function EditableChip({
         </ColorTip>
       )}
     >
-      {({ handle, close }) => <OpenedColorEditor color={color} target={target} handle={handle} close={close} />}
+      {({ handle, close }) => <OpenedColorEditor color={color} target={target} named={named} handle={handle} close={close} />}
     </Popup>
   );
 }
 
 function OpenedColorEditor({
   color,
+  named,
   ...editor
 }: { color: Color } & Omit<Parameters<typeof ColorEditor>[0], "original">) {
   // While the picker is open the chip redraws with the color being tried,
-  // so the color the definition had is taken once, at the moment of opening.
+  // so what the definition had is taken once, at the moment of opening.
   const [original] = useState(color);
-  return <ColorEditor original={original} {...editor} />;
+  const [namedAtOpening] = useState(named);
+  return <ColorEditor original={original} named={namedAtOpening} {...editor} />;
 }

@@ -35,7 +35,7 @@ export function OverviewPage({ snapshot }: { snapshot: Snapshot }) {
       {snapshot.constants.length > 0 && (
         <>
           <h2>
-            <Link to={{ page: "constants" }}>Constants</Link>{" "}
+            <Link to={{ page: "constants" }}>Palette</Link>{" "}
             <span className="muted">{snapshot.constants.length}</span>
           </h2>
           <div className="strip-wrap">

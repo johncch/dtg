@@ -8,11 +8,13 @@ dtg: 1
 modes: [light, dark]
 changelog:
   - 2026-08-16: shadow.2 became shadow.3
-systems:
+palette:
   paper: "#ffffff"
   reds:
     alias: warm
     rose: "#ff0000"
+
+systems:
   sky:
     algorithm: tint
     alias: light
@@ -88,8 +90,10 @@ describe("dtcg", () => {
   test("a system named static is preserved beside constants", () => {
     const collision = resolveDefinition(`
 dtg: 1
-systems:
+palette:
   paper: "#ffffff"
+
+systems:
   static:
     algorithm: tint
     params: { base: "#ffffff", tint: "#000000" }
@@ -108,12 +112,14 @@ describe("wide-gamut emit", () => {
   const wide = resolveDefinition(`
 dtg: 1
 modes: [light, dark]
-systems:
+palette:
   paper: "#ffffff"
   ghost: "color(srgb 1 0 0 / 0.5)"
   vivid: "color(display-p3 1 0 0)"
   lush: "oklch(0.72 0.28 145)"
   brand: "#b30a0a"
+
+systems:
   wide:
     algorithm: tint
     params: { base: "#ffffff", tint: "color(display-p3 1 0 0)" }
@@ -211,9 +217,11 @@ describe("dtcg gamut warning", () => {
   const wide = resolveDefinition(`
 dtg: 1
 modes: [light]
-systems:
+palette:
   brand: "#b30a0a"
   vivid: "color(display-p3 1 0 0)"
+
+systems:
   ramp:
     algorithm: tint
     params: { base: "#ffffff", tint: "color(display-p3 1 0 0)" }
@@ -283,7 +291,7 @@ describe("the mode axis", () => {
     const aliases = resolveDefinition(`
 dtg: 1
 modes: [light, dark]
-systems:
+palette:
   ink: "#111111"
   paper: "#ffffff"
 roles:
@@ -301,7 +309,7 @@ roles:
     const aliases = resolveDefinition(`
 dtg: 1
 modes: [light, dark]
-systems: { ink: "#111111" }
+palette: { ink: "#111111" }
 roles:
   label:
     base: [ink, ink]
@@ -321,7 +329,7 @@ modes:
   warm:
   cooldusk: { extends: warm }
   dark:
-systems:
+palette:
   ink: "#313133"
   paper: "#ffffff"
 roles:
@@ -357,7 +365,7 @@ dtg: 1
 modes:
   light:
   dark: { extends: light }
-systems: { ink: "#313133" }
+palette: { ink: "#313133" }
 roles:
   label:
     base: [ink, ~]
@@ -385,7 +393,7 @@ roles:
 describe("emit with no modes", () => {
   const flat = resolveDefinition(`
 dtg: 1
-systems:
+palette:
   ink: "#313133"
 roles:
   ink:
@@ -405,7 +413,7 @@ roles:
 describe("nested role paths", () => {
   const nested = resolveDefinition(`
 dtg: 1
-systems:
+palette:
   ink: "#112233"
 roles:
   label:
@@ -435,7 +443,7 @@ modes:
   light: { scheme: light }
   dark: { scheme: dark }
   dark-hc: { extends: dark }
-systems: { ink: "#313133", paper: "#ffffff", loud: "#000000" }
+palette: { ink: "#313133", paper: "#ffffff", loud: "#000000" }
 roles:
   surface:
     card: [paper, ink, loud]
@@ -499,7 +507,7 @@ modes:
   light:
   dim: { extends: light }
   dimmer: { extends: dim }
-systems: { ink: "#313133", paper: "#ffffff" }
+palette: { ink: "#313133", paper: "#ffffff" }
 roles:
   label:
     primary: [ink, paper, ink]
@@ -508,5 +516,36 @@ roles:
     assert.ok(css.includes("\n:root, .dim, .dimmer {"));
     assert.ok(css.includes("\n.dim, .dimmer {"));
     assert.ok(css.includes("\n.dimmer {"));
+  });
+});
+
+describe("a palette group marked emit: false", () => {
+  const SRC = `dtg: 1
+palette:
+  white: "#ffffff"
+  hues:
+    emit: false
+    sky: "#03a2e8"
+    rose: "#e0115f"
+systems:
+  sky:
+    algorithm: tint
+    params: { base: hues.sky, tint: "#001a28" }
+roles:
+  surface: { canvas: sky(3), accent: hues.rose }
+`;
+  const css = emitCss(resolveDefinition(SRC), "plain");
+
+  test("is an input: its colors feed systems without emitting", () => {
+    assert.ok(!css.includes("--color-hues-sky"));
+    assert.ok(css.includes("--color-white: #ffffff;"));
+  });
+
+  test("still emits a color a role points at", () => {
+    assert.ok(css.includes("--color-hues-rose: #e0115f;"));
+  });
+
+  test("takes only true or false", () => {
+    assert.throws(() => resolveDefinition(SRC.replace("emit: false", "emit: no-thanks")), /`emit` on a group is true or false/);
   });
 });

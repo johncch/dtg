@@ -5,23 +5,20 @@
   --color-light-3: #f3f6f9;
   /* night (tint) */
   --color-night-4: #1e2528;
-  /* warm (blend) */
-  --color-warm-red-6: #faf0f0;
-  --color-warm-red-100: #b30a0a;
-  --color-warm-blue-6: #f6f8fb;
-  --color-warm-blue-100: #6192bb;
-  /* perceptual (blend) */
-  --color-perceptual-red-6: #fdf2f0;
-  /* lightmix (blend) */
-  --color-lightmix-red-6: #fbf8f8;
+  /* warm-wash.red (tint) */
+  --color-warm-wash-red-6: #faf0f0;
+  --color-warm-wash-red-100: #b30a0a;
+  /* warm-wash.blue (tint) */
+  --color-warm-wash-blue-6: #f6f8fb;
+  --color-warm-wash-blue-100: #6192bb;
   /* theme (scale) */
   --color-theme-50: #f1f9fe;
   --color-theme-500: #03a2e8;
-  --color-theme-950: #011f31;
+  --color-theme-950: #011f30;
   /* wide (tint) */
   --color-wide-60: #ff7070;
-  /* widemix (blend) */
-  --color-widemix-deep-80: #0788ff;
+  /* widemix (tint) */
+  --color-widemix-80: #0788ff;
   /* grouped.inner (tint) */
   --color-renamed-inner-10: #ffe6e6;
   --color-renamed-inner-20: #ffcccc;
@@ -35,9 +32,8 @@
 
 :root {
   --surface-canvas: var(--color-light-3);
-  --surface-tint: var(--color-warm-red-6);
-  --surface-full: var(--color-warm-red-100);
-  --surface-perceptual: var(--color-perceptual-red-6);
+  --surface-tint: var(--color-warm-wash-red-6);
+  --surface-full: var(--color-warm-wash-red-100);
   --surface-scale: var(--color-theme-50);
   --surface-nested: var(--color-renamed-inner-10);
   --surface-echo: var(--surface-canvas);
@@ -55,13 +51,12 @@
 
 .dark {
   --surface-canvas: var(--color-night-4);
-  --surface-tint: var(--color-warm-blue-6);
-  --surface-full: var(--color-warm-blue-100);
-  --surface-perceptual: var(--color-lightmix-red-6);
+  --surface-tint: var(--color-warm-wash-blue-6);
+  --surface-full: var(--color-warm-wash-blue-100);
   --surface-scale: var(--color-theme-950);
   --surface-nested: var(--color-renamed-inner-20);
   --surface-echo: var(--surface-canvas);
-  --surface-wide: var(--color-widemix-deep-80);
+  --surface-wide: var(--color-widemix-80);
   --surface-lush: var(--color-vivid);
   --label: var(--color-paper);
   --label-muted: var(--color-ink-muted);
@@ -77,7 +72,7 @@
 @supports (color: color(display-p3 1 1 1)) {
   :root {
     --color-wide-60: color(display-p3 1 0.4 0.4);
-    --color-widemix-deep-80: color(display-p3 0.2 0.52 1);
+    --color-widemix-80: color(display-p3 0.2 0.52 1);
     --color-vivid: color(display-p3 1 0 0);
     --color-lush: color(display-p3 0.2261 0.7896 0.1678);
   }
@@ -92,7 +87,6 @@
   --color-surface-canvas: var(--surface-canvas);
   --color-surface-tint: var(--surface-tint);
   --color-surface-full: var(--surface-full);
-  --color-surface-perceptual: var(--surface-perceptual);
   --color-surface-scale: var(--surface-scale);
   --color-surface-nested: var(--surface-nested);
   --color-surface-echo: var(--surface-echo);

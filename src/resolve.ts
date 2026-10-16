@@ -2,13 +2,11 @@ import { parse } from "yaml";
 import {
   assertNameFragment,
   type Algorithm,
-  type ColorParam,
   type Params,
   type SelectorShape,
 } from "./contract.js";
-import { parseParams } from "./params.js";
+import { parseParams, type ParsedColorParam } from "./params.js";
 import {
-  allSelectors,
   formatRef,
   orderOf,
   parseCall,
@@ -24,12 +22,11 @@ import {
   type Color,
   type Gamut,
 } from "./color-math.js";
-import { blend } from "./algorithms/blend.js";
 import { tint } from "./algorithms/tint.js";
 import { scale } from "./algorithms/scale.js";
 import { overlay } from "./algorithms/overlay.js";
 
-const builtinAlgorithms: Algorithm[] = [blend, tint, scale, overlay];
+const builtinAlgorithms: Algorithm[] = [tint, scale, overlay];
 
 function registryOf(extra: Algorithm[]): Map<string, Algorithm> {
   return new Map(
@@ -46,11 +43,12 @@ const TOP_LEVEL_RESERVED = [
   "modes",
   "defaults",
   "systems",
+  "palette",
   "changelog",
 ];
 // A system node's keys. Params live in their own block, so this list can
 // grow without ever colliding with an algorithm's parameter names.
-const SYSTEM_RESERVED = ["algorithm", "params", "alias", "overrides"];
+const SYSTEM_RESERVED = ["algorithm", "params", "alias", "overrides", "emit"];
 
 const RENAMED_ALGORITHMS: Record<string, string> = {
   "ink-ramp": "tint",
@@ -165,7 +163,7 @@ export type ResolvedStep = {
  * system's own `params`, or the `defaults` block every system of that
  * algorithm shares — which is where an edit to it has to land.
  */
-export type ResolvedColorParam = ColorParam & { from: "system" | "defaults" };
+export type ResolvedColorParam = ParsedColorParam & { from: "system" | "defaults" };
 
 export type ResolvedSystem = {
   /** Internal dotted path — the stable identity refs point at. */
@@ -201,6 +199,8 @@ export type ResolvedStatic = {
   path: string;
   segments: PathSegment[];
   color: Color;
+  /** False for a color in a group marked `emit: false` that no role points at. */
+  emitted: boolean;
 };
 
 /** Joins a path for emitting, applying each segment's alias. */
@@ -453,14 +453,14 @@ export function resolveDefinition(
     /** As written, `defaults` merged under the system's own. */
     writtenParams: Record<string, unknown>;
     params: Params;
-    colorParams: ColorParam[];
+    colorParams: ParsedColorParam[];
     /** Top-level param keys the system wrote itself; the rest came from `defaults`. */
     ownParams: Set<string>;
     selectorShape: SelectorShape;
     overrides: Record<string, string>;
     alias?: AliasValue;
-    /** Every selector, when the algorithm emits all of them; null when it emits on demand. */
-    emitsAll: string[] | null;
+    /** The selectors the system publishes whether or not a ref asks for them. */
+    emit: string[];
     segments: PathSegment[];
   };
   const systems = new Map<string, SystemEntry>();
@@ -468,32 +468,74 @@ export function resolveDefinition(
   const systemsBlock = (doc.systems ?? {}) as Record<string, unknown>;
   const systemsAlias = parseAlias(systemsBlock.alias, "systems block");
 
-  // A string is a constant, an object with `algorithm` is a system, and any
-  // other object is a group. Groups nest, so a path is the identity.
-  function walkSystems(node: Record<string, unknown>, prefix: PathSegment[]) {
+  // The palette is read first, so a system's params can name any of its
+  // colors. A string is a color and any object a group; groups nest, so a
+  // path is the identity.
+  const paletteBlock = doc.palette ?? {};
+  // `emit: false` on a group makes its colors inputs: they emit only when a
+  // role points at one, since a reference always emits what it names.
+  const silent = new Set<string>();
+  function walkPalette(node: Record<string, unknown>, prefix: PathSegment[], emits: boolean) {
     for (const [key, raw] of Object.entries(node)) {
-      if (key === "alias") continue;
+      if ((key === "alias" || key === "emit") && prefix.length > 0) continue;
       const segments = [...prefix, { name: key }];
       const path = segments.map((seg) => seg.name).join(".");
       if (typeof raw === "string") {
         try {
-          statics.push({
-            path,
-            segments,
-            color: parseColor(raw, `constant "${path}"`),
-          });
+          statics.push({ path, segments, color: parseColor(raw, `palette color "${path}"`), emitted: true });
+          if (!emits) silent.add(path);
         } catch (e) {
           errors.push((e as Error).message);
         }
         continue;
       }
       if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
-        errors.push(`"${path}": expected a color, a group, or a system`);
+        errors.push(`palette "${path}": expected a color or a group`);
+        continue;
+      }
+      const block = raw as Record<string, unknown>;
+      if (block.algorithm !== undefined) {
+        errors.push(`palette "${path}": a palette holds colors and groups — a system goes under \`systems\``);
+        continue;
+      }
+      if (block.emit !== undefined && typeof block.emit !== "boolean") {
+        errors.push(`palette "${path}": \`emit\` on a group is true or false`);
+        continue;
+      }
+      walkPalette(
+        block,
+        [...prefix, { name: key, alias: parseAlias(block.alias, `palette "${path}"`) }],
+        (block.emit as boolean | undefined) ?? emits,
+      );
+    }
+  }
+  if (typeof paletteBlock !== "object" || Array.isArray(paletteBlock)) {
+    errors.push("`palette` must be a map of colors and groups");
+  } else {
+    walkPalette(paletteBlock as Record<string, unknown>, [], true);
+  }
+  const constantColors = new Map(statics.map((constant) => [constant.path, constant.color]));
+
+  // An object with `algorithm` is a system, and any other object is a group.
+  // Groups nest, so a path is the identity.
+  function walkSystems(node: Record<string, unknown>, prefix: PathSegment[]) {
+    for (const [key, raw] of Object.entries(node)) {
+      if (key === "alias") continue;
+      const segments = [...prefix, { name: key }];
+      const path = segments.map((seg) => seg.name).join(".");
+      if (typeof raw === "string") {
+        errors.push(`"${path}": a color with no recipe goes under \`palette:\` now — move it there; refs to it stay as they are`);
+        continue;
+      }
+      if (raw == null || typeof raw !== "object" || Array.isArray(raw)) {
+        errors.push(`"${path}": expected a group or a system`);
         continue;
       }
       const block = raw as Record<string, unknown>;
       if (block.emits !== undefined) {
-        errors.push(`system "${path}": \`emits\` was renamed — use \`alias\``);
+        errors.push(
+          `system "${path}": \`emits\` is not a key — a public name is \`alias\`, and the steps to publish are listed under \`emit\``,
+        );
         continue;
       }
       const alias = parseAlias(block.alias, `"${path}"`);
@@ -516,9 +558,9 @@ export function resolveDefinition(
         );
         continue;
       }
-      if (algoName === "compose") {
+      if (algoName === "blend" || algoName === "compose") {
         errors.push(
-          `system "${path}": \`compose\` was renamed to \`blend\` — its params are now \`base\`, \`toward\` and \`space\``,
+          `system "${path}": \`${algoName}\` is gone — a tint over a shared base does the same, one per color, in a group: \`${path}-wash: { red: { algorithm: tint, params: { base, tint } } }\`. Refs move from \`${path}(red 6)\` to \`${path}-wash.red(6)\`, and the \`alpha\` form is \`tint\``,
         );
         continue;
       }
@@ -536,6 +578,11 @@ export function resolveDefinition(
         );
         continue;
       }
+      if (block.emit !== undefined && !Array.isArray(block.emit)) {
+        errors.push(`system "${path}": \`emit\` is a list of the selectors to publish, as [50, 100] or ["red 6"]`);
+        continue;
+      }
+      const emit = ((block.emit ?? []) as unknown[]).map((selector) => String(selector).trim().split(/\s+/).join(" "));
       const paramsBlock = block.params;
       if (
         paramsBlock != null &&
@@ -548,13 +595,17 @@ export function resolveDefinition(
         ...defaults[algoName],
         ...((paramsBlock ?? {}) as Record<string, unknown>),
       };
+      if (algoName === "scale" && writtenParams.stops !== undefined) {
+        errors.push(
+          `system "${path}": scale's \`stops\` are gone — its selector is any stop 0–1000, \`midpoint\` shapes the curve, and the stops to publish are listed under \`emit\``,
+        );
+        continue;
+      }
       let parsed: ReturnType<typeof parseParams>;
       let selectorShape: SelectorShape;
-      let emitsAll: string[] | null;
       try {
-        parsed = parseParams(algo, writtenParams);
+        parsed = parseParams(algo, writtenParams, constantColors);
         selectorShape = algo.selector(parsed.values);
-        emitsAll = algo.emit === "all" ? allSelectors(selectorShape) : null;
       } catch (e) {
         errors.push(`system "${path}": ${(e as Error).message}`);
         continue;
@@ -568,12 +619,18 @@ export function resolveDefinition(
         selectorShape,
         overrides: (block.overrides ?? {}) as Record<string, string>,
         alias,
-        emitsAll,
+        emit,
         segments: named,
       });
     }
   }
   walkSystems(systemsBlock, []);
+
+  for (const constant of statics) {
+    if (systems.has(constant.path)) {
+      errors.push(`"${constant.path}" is both a palette color and a system — refs would be ambiguous`);
+    }
+  }
 
   const stepCache = new Map<string, ResolvedStep | undefined>();
   const stepOrders = new Map<ResolvedStep, number[]>();
@@ -936,6 +993,12 @@ export function resolveDefinition(
     const resolved = resolveRole(path, []);
     if (resolved) roles.push(resolved);
   }
+  const pointedAt = new Set(
+    roles.flatMap((role) => role.perMode.flatMap((entry) => (entry.target.kind === "constant" ? [entry.target.name] : []))),
+  );
+  for (const constant of statics) {
+    constant.emitted = !silent.has(constant.path) || pointedAt.has(constant.path);
+  }
 
   // ---- public-name uniqueness (aliases and omissions can collide) ----
   for (const target of ["css", "figma"]) {
@@ -961,35 +1024,14 @@ export function resolveDefinition(
 
   const resolvedSystems: ResolvedSystem[] = [];
   for (const [name, sys] of systems) {
-    let steps: ResolvedStep[];
-    if (sys.emitsAll) {
-      steps = sys.emitsAll
-        .map((selector) => resolveStep(name, selector, `system "${name}"`))
-        .filter((s): s is ResolvedStep => s != null);
-    } else {
-      steps = [...stepCache.entries()]
-        .filter(([key, step]) => step != null && key.startsWith(`${name}(`))
-        .map(([, step]) => step as ResolvedStep)
-        .map((step) => ({ step, order: stepOrders.get(step) ?? [] }))
-        .sort(compareSteps)
-        .map((ordered) => ordered.step);
-    }
-    // An input outside the gamut the arithmetic runs in is clipped on the way
-    // in, and the definition still reads as if it were wide. This asks the
-    // algorithm what gamut it works in rather than inspecting the steps: a
-    // system whose demanded steps are all pale tints still lost the anchor.
-    const workingGamut = sys.algo.workingGamut?.(sys.params) ?? null;
-    if (workingGamut) {
-      const clipped = sys.colorParams.filter((param) =>
-        needsMapping(param.color, workingGamut),
-      );
-      if (clipped.length > 0) {
-        warnings.push(
-          `system "${name}" is given ${clipped.length} color${clipped.length === 1 ? "" : "s"} outside ${workingGamut}, but its transform runs in ${workingGamut} — the extra gamut is discarded on the way in. Every space has a display-p3 counterpart that keeps the same interpolation; switch to it rather than changing the interpolation itself.`,
-        );
-      }
-    }
-
+    // What a system publishes is what its `emit` lists plus what refs demand.
+    for (const selector of sys.emit) resolveStep(name, selector, `system "${name}" emit`);
+    const steps = [...stepCache.entries()]
+      .filter(([key, step]) => step != null && key.startsWith(`${name}(`))
+      .map(([, step]) => step as ResolvedStep)
+      .map((step) => ({ step, order: stepOrders.get(step) ?? [] }))
+      .sort(compareSteps)
+      .map((ordered) => ordered.step);
     const emitted = new Set(steps.map((s) => s.selector));
     for (const selector of Object.keys(sys.overrides)) {
       if (!emitted.has(selector)) {

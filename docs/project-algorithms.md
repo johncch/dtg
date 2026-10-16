@@ -8,9 +8,11 @@ and there is no toolkit. Read `how-this-works.md` first for the contract.
 ## Why
 
 Algorithms are compiled into dtg, so a color recipe only one project needs
-has to ship to every project. `blend` is the case in hand: fifthrevision's
-whole definition is five `blend` systems, nothing else uses it, and it is the
-only algorithm that ever used the old tuner's controls. How a recipe
+has to ship to every project. `blend` was the case in hand: fifthrevision's
+whole definition was five `blend` systems, nothing else used it, and it was the
+only algorithm that ever used the old tuner's controls. (On 2026-10-16 it was
+removed instead of moved — a group of tints does the same — so this design
+waits for its next real case.) How a recipe
 generates colors, and how it is edited, are often specific to one app.
 
 A project should be able to keep its own algorithms beside its definition,

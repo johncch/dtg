@@ -34,7 +34,7 @@ describe("golden output", () => {
     const used = new Set(resolved.systems.map((s) => s.algorithm));
     assert.deepEqual(
       [...used].sort(),
-      ["blend", "overlay", "scale", "tint"],
+      ["overlay", "scale", "tint"],
     );
   });
 
@@ -44,7 +44,6 @@ describe("golden output", () => {
     );
     assert.deepEqual([...kinds].sort(), ["constant", "role", "step"]);
     const refs = resolved.roles.flatMap((r) => r.perMode.map((e) => e.ref));
-    assert.ok(refs.some((r) => /^\w+\(\w+ [\d.]+ alpha\)$/.test(r)));
     assert.ok(refs.some((r) => r.endsWith(" tint)")));
     assert.ok(refs.some((r) => r.startsWith("transparent(")));
     assert.ok(refs.some((r) => /^\w+\.[\w.]+\(/.test(r)));
