@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { Snapshot } from "../src/snapshot.js";
+import { STATIC } from "./mode.js";
 
 export type SnapshotState =
   | { status: "loading" }
@@ -11,7 +12,8 @@ export function useSnapshot(): SnapshotState {
 
   useEffect(() => {
     const load = () => {
-      fetch("/api/snapshot")
+      // A static copy reads the file written beside it, relative to wherever it is served from.
+      fetch(STATIC ? "snapshot.json" : "/api/snapshot")
         .then((response) => {
           if (!response.ok) throw new Error(`the server answered ${response.status}`);
           return response.json() as Promise<Snapshot>;
@@ -22,6 +24,7 @@ export function useSnapshot(): SnapshotState {
         );
     };
     load();
+    if (STATIC) return;
 
     const live = new EventSource("/events");
     live.onmessage = (event) => {

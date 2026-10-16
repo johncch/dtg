@@ -268,10 +268,10 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 
 - `cli.ts` — command dispatch and flag parsing for `dev` and `emit`.
 - `outputs.ts` — writing the configured outputs for a resolved definition.
-  `emit` calls it once, or on every change with `--live`; `dev --emit` calls
+  `build` calls it once, or on every change with `--watch`; `dev --build` calls
   it whenever the definition file changes. Outputs follow the file on disk,
   never the working copy's unsaved edits. Writing outputs is always an
-  explicit action — `dtg emit`, or the `--emit` flag on one `dev` run. No
+  explicit action — `dtg build`, or the `--build` flag on one `dev` run. No
   setting in `dtg.config.yaml` can turn it on: a config file must not be able to
   overwrite the files an app ships.
 - `config.ts` — reading `dtg.config.yaml`, and `dtg init`'s placeholder for it. Where the
@@ -292,6 +292,11 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `dev-server.ts`, `watch.ts` — the HTTP and SSE server and definition file
   watching. The server holds no markup: it serves one HTML shell, the built
   browser bundle, and `/api/snapshot`.
+- `app-shell.ts`, `site.ts` — the app's one HTML page, and `dtg docs`, which
+  writes that page, the bundle and the snapshot as files. The page names its
+  mode: `served` by dev, or `static`, where the app reads `snapshot.json`
+  beside it, addresses pages in the fragment so any host at any folder can
+  serve it, and offers no editing.
 - `edit.ts` — writing one value into the definition's text: an authored
   color, or the ref a role holds for a mode. An edit is a `set`, which needs
   a value to write over, or for a constant also an `add`, `rename` or
@@ -357,7 +362,7 @@ Anything outside those three is a real defect. Promoting this check into a
       on definition edits; a resolve error keeps serving the last good state
       behind an error banner. Restart to pick up changes to the tool's own
       code.
-- [x] CSS emitter (`dtg emit`): `@theme` primitives block, `:root` and
+- [x] CSS emitter (`dtg build`, `dtg emit` until 0.3.0): `@theme` primitives block, `:root` and
       `.dark` semantic blocks, `@theme inline` wiring for every role. Public
       naming is inline via `alias` and `omit`. `format: plain` (the default)
       emits primitives into `:root` instead, for any project not on
@@ -375,6 +380,9 @@ Anything outside those three is a real defect. Promoting this check into a
       nearest color name on each roll, and once saved its name stays. Every
       palette color emits, since apps use them directly, unless its group
       says `emit: false`; an unsaved roll never reaches the outputs anyway.
+- [x] `dtg docs`: the browser as static files, read-only, for a site's
+      `public/` folder or GitHub Pages. `emit` became `build` alongside it,
+      so each command names what it makes.
 - [x] Params and `defaults` naming a palette color (`base: hues.sky`).
       Renaming a palette color rewrites every ref, `transparent()` and param
       that names it.

@@ -23,6 +23,7 @@ import {
   type Lineage,
   type ResolvedDefinition,
 } from "./resolve.js";
+import { appShell } from "./app-shell.js";
 import { buildSnapshot } from "./snapshot.js";
 import { watchDefinition } from "./watch.js";
 import {
@@ -44,25 +45,6 @@ const UI_CONTENT_TYPES: Record<string, string> = {
   css: "text/css; charset=utf-8",
   png: "image/png",
 };
-
-/**
- * The app's only HTML. Every page address gets the same document; the bundle
- * reads the path and draws the page.
- */
-const appShell = (title: string) => `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</title>
-<link rel="icon" type="image/png" href="/ui/favicon.png">
-<link rel="stylesheet" href="/ui/dtg-ui.css">
-</head>
-<body>
-<div id="app"></div>
-<script type="module" src="/ui/dtg-ui.js"></script>
-</body>
-</html>`;
 
 type State = {
   copy: WorkingCopy;
@@ -337,7 +319,7 @@ export function startDevServer(
     }
 
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    res.end(appShell(`dtg · ${resolve(definitionPath)}`));
+    res.end(appShell(`dtg · ${resolve(definitionPath)}`, "served"));
   });
 
   server.listen(port, () => {

@@ -5,6 +5,8 @@ import type { Color } from "../../src/color-math.js";
 import type { SnapshotConstant } from "../../src/snapshot.js";
 import type { Change } from "../../src/working-copy.js";
 import { EditableChip } from "../ColorChip.js";
+import { ColorTip } from "../ColorTip.js";
+import { STATIC } from "../mode.js";
 import { colorNameOf } from "../names.js";
 import { paintCss } from "../paint.js";
 import { Popup, type PopupPanel } from "../Popup.js";
@@ -129,6 +131,7 @@ export function PalettePage({
   latestRoll.current = roll;
 
   useEffect(() => {
+    if (STATIC) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== " " || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
       if (isTextField(event.target) || document.querySelector(".popover")) return;
@@ -148,21 +151,23 @@ export function PalettePage({
             palette
           </span>
         </h1>
-        <button
-          type="button"
-          className="btn"
-          disabled={!palette.entries.some((entry) => !isLocked(entry.path))}
-          title="Give every unlocked color a new random color"
-          onClick={roll}
-        >
-          randomize
-        </button>
+        {!STATIC && (
+          <button
+            type="button"
+            className="btn"
+            disabled={!palette.entries.some((entry) => !isLocked(entry.path))}
+            title="Give every unlocked color a new random color"
+            onClick={roll}
+          >
+            randomize
+          </button>
+        )}
       </div>
       {note && <p className="note">{note}</p>}
       <p className="desc">
-        A group of constants, looked at together. Space rolls every unlocked color; a color the file has starts locked,
-        one added since the last save starts unlocked and takes the name of each color it rolls to. Saving freezes a
-        name.
+        {STATIC
+          ? "A group of constants, looked at together."
+          : "A group of constants, looked at together. Space rolls every unlocked color; a color the file has starts locked, one added since the last save starts unlocked and takes the name of each color it rolls to. Saving freezes a name."}
       </p>
       <div className="palette-row">
         {palette.entries.map((entry) => (
@@ -174,7 +179,7 @@ export function PalettePage({
             onToggleLock={() => toggle(entry.path)}
           />
         ))}
-        <AddColor group={palette.group} taken={taken} />
+        {!STATIC && <AddColor group={palette.group} taken={taken} />}
       </div>
     </>
   );
@@ -214,13 +219,30 @@ function PaletteEntry({
 }) {
   const { commit } = useTrying();
   const target: ConstantTarget = { kind: "constant", path: entry.path };
+  const swatch = (
+    <>
+      <span className="palette-entry-fill" style={{ background: paintCss(entry.color) }} />
+      <span className="palette-entry-value" style={{ color: labelColorOn(entry.color) }}>
+        {formatColor(entry.color, "srgb")}
+      </span>
+    </>
+  );
+  if (STATIC) {
+    return (
+      <div className="palette-entry">
+        <ColorTip color={entry.color}>
+          <span className="palette-entry-color">{swatch}</span>
+        </ColorTip>
+        <div className="palette-entry-foot">
+          <span className="palette-entry-name">{entry.name}</span>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="palette-entry">
       <EditableChip color={entry.color} target={target} className="palette-entry-color">
-        <span className="palette-entry-fill" style={{ background: paintCss(entry.color) }} />
-        <span className="palette-entry-value" style={{ color: labelColorOn(entry.color) }}>
-          {formatColor(entry.color, "srgb")}
-        </span>
+        {swatch}
       </EditableChip>
       <div className="palette-entry-foot">
         <Popup title="Rename" className="palette-entry-name" label={entry.name} focus="field">

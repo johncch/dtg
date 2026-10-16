@@ -4,6 +4,7 @@ import { loadConfig, writePlaceholderConfig } from "./config.js";
 import { startDevServer } from "./dev-server.js";
 import { writeOutputs } from "./outputs.js";
 import { resolveDefinition } from "./resolve.js";
+import { writeSite } from "./site.js";
 import { watchDefinition } from "./watch.js";
 
 const { version } = JSON.parse(
@@ -35,7 +36,17 @@ if (command === "init") {
     fail((e as Error).message);
   }
   console.log("wrote dtg.config.yaml — point `definitions` and `outputs` at your files");
-} else if (command === "dev" || command === "emit") {
+} else if (command === "emit") {
+  fail("`dtg emit` is now `dtg build` — the same flags, the same outputs");
+} else if (command === "docs") {
+  const out = flagValue("--out") ?? fail("docs: name the folder to write with --out <dir>");
+  try {
+    const config = loadConfig({ definition: flagValue("--definition") });
+    console.log(`${writeSite(config.definition, config.gamut, out, "dtg.config.yaml")}\n  → ${out}/index.html`);
+  } catch (e) {
+    fail((e as Error).message);
+  }
+} else if (command === "dev" || command === "build") {
   let config;
   try {
     config = loadConfig({
@@ -52,11 +63,12 @@ if (command === "init") {
   }
 
   if (command === "dev") {
+    if (args.includes("--emit")) fail("`dtg dev --emit` is now `dtg dev --build`");
     startDevServer(
       config.definition,
       Number(flagValue("--port") ?? "4401"),
       config.gamut,
-      args.includes("--emit") ? config : null,
+      args.includes("--build") ? config : null,
     );
   } else {
     const { definition } = config;
@@ -67,7 +79,8 @@ if (command === "init") {
         resolveDefinition(readFileSync(config.definition, "utf8"), [], config.gamut),
       );
 
-    if (args.includes("--live")) {
+    if (args.includes("--live")) fail("`dtg build --live` is now `dtg build --watch`");
+    if (args.includes("--watch")) {
       const emitCaught = () => {
         try {
           emitOnce();
@@ -98,22 +111,28 @@ usage: dtg <command> [flags]
 commands
   init      write a placeholder dtg.config.yaml in this folder
   dev       browse and edit the definition in a browser
-  emit      write the configured outputs
+  build     write the configured outputs
+  docs      write a read-only copy of the browser as static files, to publish
 
 dev
   --port <n>                  port to serve on (default 4401)
-  --emit                      also write the outputs, at startup and whenever
+  --build                     also write the outputs, at startup and whenever
                               the definition file changes
 
-emit
-  --live                      keep running; write again on every change to
+build
+  --watch                     keep running; write again on every change to
                               the definition file
 
-dev and emit
+docs
+  --out <dir>                 the folder to write: index.html, snapshot.json
+                              and ui/. Serve it from any static host, at any
+                              path; it reads nothing at runtime but its own files
+
+dev, build and docs
   --definition <file>         the definition to read (default: \`definitions\`
                               in dtg.config.yaml)
 
-outputs (emit, and dev --emit)
+outputs (build, and dev --build)
   --css <path>                write CSS here
   --css-format <plain|tailwind>
                               plain (default), or tailwind: primitives in

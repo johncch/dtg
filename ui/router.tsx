@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore, type AnchorHTMLAttributes, type MouseEvent, type Ref } from "react";
+import { STATIC } from "./mode.js";
 
 export type Route =
   | { page: "overview" }
@@ -52,14 +53,34 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
+/**
+ * The page's path and the anchor within it. A static copy can be served from
+ * any folder by a host that knows nothing of the app's pages, so both live in
+ * the fragment there: `#/system/theme#s-500`.
+ */
+function pagePath(): string {
+  return STATIC ? location.hash.slice(1).split("#")[0] || "/" : location.pathname;
+}
+
+function anchor(): string {
+  const fragment = location.hash.slice(1);
+  return decodeURIComponent(STATIC ? fragment.split("#").slice(1).join("#") : fragment);
+}
+
+/** The address of a page and an anchor in it, written the way this copy of the app is reached. */
+function addressOf(route: Exclude<Route, { page: "unknown" }>, hash?: string): string {
+  const page = hrefFor(route);
+  const fragment = hash ? `#${encodeURIComponent(hash)}` : "";
+  return STATIC ? `#${page}${fragment}` : `${page}${fragment}`;
+}
+
 export function useRoute(): Route {
-  const pathname = useSyncExternalStore(subscribe, () => location.pathname);
-  return parse(pathname);
+  return parse(useSyncExternalStore(subscribe, pagePath));
 }
 
 /** The fragment without its "#", or "" when there is none. */
 export function useHash(): string {
-  return useSyncExternalStore(subscribe, () => decodeURIComponent(location.hash.slice(1)));
+  return useSyncExternalStore(subscribe, anchor);
 }
 
 /**
@@ -89,7 +110,7 @@ export function Link({
   hash?: string;
   ref?: Ref<HTMLAnchorElement>;
 }) {
-  const href = hash ? `${hrefFor(to)}#${encodeURIComponent(hash)}` : hrefFor(to);
+  const href = addressOf(to, hash);
   const follow = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
     if (event.defaultPrevented) return;

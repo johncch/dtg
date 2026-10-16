@@ -5,6 +5,7 @@ import { isOpaque } from "../../src/color-math.js";
 import { ColorTip } from "../ColorTip.js";
 import { paintCss } from "../paint.js";
 import { Popup } from "../Popup.js";
+import { STATIC } from "../mode.js";
 import { RefEditor } from "../RefEditor.js";
 import { Link, useScrollToHash } from "../router.js";
 import { INHERIT } from "../../src/selector.js";
@@ -100,6 +101,30 @@ function RoleRow({
         const trail = refTrail(snapshot, entry, index);
         const trailText = <code>{trail.join(" → ")}</code>;
         const inheritedNote = entry.inherited && <span className="muted">inherited from {parent}</span>;
+        if (STATIC) {
+          return (
+            <td key={index}>
+              <ColorTip
+                color={entry.color}
+                reference={
+                  <>
+                    <RefLink snapshot={snapshot} target={entry.target}>
+                      {trailText}
+                    </RefLink>
+                    {inheritedNote}
+                  </>
+                }
+              >
+                <span className={entry.inherited ? "chip chip-inherited" : "chip"}>
+                  <span className={isOpaque(entry.color) ? "swatch" : "swatch swatch-alpha"}>
+                    <span className="swatch-color" style={{ background: paintCss(entry.color) }} />
+                  </span>
+                  <code>{entry.ref}</code>
+                </span>
+              </ColorTip>
+            </td>
+          );
+        }
         return (
           <td key={index}>
             <Popup

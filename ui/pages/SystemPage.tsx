@@ -3,6 +3,7 @@ import { formatRef } from "../../src/selector.js";
 import type { SnapshotStep, SnapshotSystem } from "../../src/snapshot.js";
 import { ColorChip } from "../ColorChip.js";
 import { NumberParam } from "../NumberParam.js";
+import { STATIC } from "../mode.js";
 import { Probe } from "../Probe.js";
 import { useScrollToHash } from "../router.js";
 import { stepAnchor, stepDeltaE, Strip } from "../Strip.js";
@@ -22,7 +23,8 @@ export function SystemPage({ system }: { system: SnapshotSystem }) {
       {system.note && <p className="note">{system.note}</p>}
       <p className="desc">{system.description}</p>
       <Params system={system} />
-      <Probe key={system.system} system={system} />
+      {/* The preview asks the server to resolve a step; a static copy has none. */}
+      {!STATIC && <Probe key={system.system} system={system} />}
       <section className="box">
         <h2 className="box-title">Steps</h2>
         <div className="steps-body">

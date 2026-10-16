@@ -123,13 +123,22 @@ pnpm add -D @fifthrevision/dtg
 dtg init                                           # write a placeholder dtg.config.yaml here
 dtg --version                                      # or -v; --help or -h lists every flag
 dtg dev  [--port <n>]                              # browse and edit: ramps, deltaE, lineage, roles
-         [--emit]                                  # also write the outputs when the definition file changes
-dtg emit [--live] [--css <path>]                   # generate the CSS
-         [--css-format <plain|tailwind>]           # default plain
-         [--dtcg <path>]                           # DTCG; written only when asked
+         [--build]                                 # also write the outputs when the definition file changes
+dtg build [--watch] [--css <path>]                 # generate the CSS
+          [--css-format <plain|tailwind>]          # default plain
+          [--dtcg <path>]                          # DTCG; written only when asked
+dtg docs --out <dir>                               # a read-only copy of the browser, to publish
 ```
 
-`dtg dev --emit` writes the same outputs `dtg emit` does, once at startup and
+`dtg docs` writes the browser as plain files: `index.html`, `snapshot.json`
+and `ui/`. Any static host serves it, from any folder — a site's `public/`
+directory, or GitHub Pages. It is read-only: everything you can look at in
+`dtg dev` is there, but nothing edits, and the step preview, which asks the
+dev server to resolve a selector, is left out. Pages are addressed in the
+fragment (`#/system/theme`), so deep links work on a host that knows nothing
+of the app.
+
+`dtg dev --build` writes the same outputs `dtg build` does, once at startup and
 again whenever the definition file changes — a save from the app or an edit
 by hand. They follow the file, never the unsaved edits on top of it. It is a
 flag only, asked for per run: no setting in `dtg.config.yaml` turns it on, so
