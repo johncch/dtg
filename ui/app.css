@@ -32,6 +32,10 @@ main h2 { font-size: var(--text-heading); margin: 26px 0 10px; }
 main h2 a { color: var(--fg); }
 .sub { color: var(--muted); font-size: var(--text-body); margin-bottom: 18px; }
 .desc { color: var(--muted); font-size: var(--text-body); max-width: 620px; line-height: 1.5; margin: 8px 0 14px; }
+.source .tok-comment { color: var(--faint); font-style: italic; }
+.source .tok-key { color: var(--link); }
+.source .tok-number, .source .tok-punct { color: var(--muted); }
+.source .tok-swatch { display: inline-block; width: 0.8em; height: 0.8em; margin-right: 0.35em; border-radius: 3px; vertical-align: -0.05em; box-shadow: inset 0 0 0 1px var(--swatch-border); }
 .source { font-family: "SF Mono", ui-monospace, monospace; font-size: var(--text-value); line-height: 1.5; padding: 14px 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); overflow-x: auto; tab-size: 2; }
 code { font-family: "SF Mono", ui-monospace, monospace; font-size: var(--text-value); }
 a code { color: var(--link); }
