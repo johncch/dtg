@@ -34,7 +34,7 @@ if (command === "init") {
   } catch (e) {
     fail((e as Error).message);
   }
-  console.log("wrote dtg.yaml — point `definitions` and `outputs` at your files");
+  console.log("wrote dtg.config.yaml — point `definitions` and `outputs` at your files");
 } else if (command === "dev" || command === "emit") {
   let config;
   try {
@@ -96,7 +96,7 @@ if (command === "init") {
 usage: dtg <command> [flags]
 
 commands
-  init      write a placeholder dtg.yaml in this folder
+  init      write a placeholder dtg.config.yaml in this folder
   dev       browse and edit the definition in a browser
   emit      write the configured outputs
 
@@ -111,7 +111,7 @@ emit
 
 dev and emit
   --definition <file>         the definition to read (default: \`definitions\`
-                              in dtg.yaml)
+                              in dtg.config.yaml)
 
 outputs (emit, and dev --emit)
   --css <path>                write CSS here
@@ -127,8 +127,8 @@ outputs (emit, and dev --emit)
                               (default srgb); match your Figma document
 
   Outputs are a set. Name none and you get CSS at tokens.generated.css
-  beside the definition. Name any, here or under \`outputs\` in dtg.yaml,
-  and you get exactly those.
+  beside the definition. Name any, here or under \`outputs\` in
+  dtg.config.yaml, and you get exactly those.
 
 other
   -v, --version               print the version

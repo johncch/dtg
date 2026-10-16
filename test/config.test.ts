@@ -8,9 +8,9 @@ import { loadConfig, writePlaceholderConfig } from "../dist/config.js";
 const DEFINITION = join("design-tokens", "c.dtg.yaml");
 
 /**
- * loadConfig reads dtg.yaml from the cwd, so each case gets its own. The
- * dtg.yaml written names the definition, since nothing finds one unnamed;
- * a case with no dtg.yaml passes it as the flag.
+ * loadConfig reads dtg.config.yaml from the cwd, so each case gets its own. The
+ * dtg.config.yaml written names the definition, since nothing finds one unnamed;
+ * a case with no dtg.config.yaml passes it as the flag.
  */
 function inProject(dtgYaml: string | null, run: () => void) {
   const dir = mkdtempSync(join(tmpdir(), "dtg-cfg-"));
@@ -18,7 +18,7 @@ function inProject(dtgYaml: string | null, run: () => void) {
   writeFileSync(join(dir, DEFINITION), "dtg: 1\n");
   if (dtgYaml != null) {
     const named = dtgYaml.includes("definitions:") ? dtgYaml : `definitions: ${DEFINITION}\n${dtgYaml}`;
-    writeFileSync(join(dir, "dtg.yaml"), named);
+    writeFileSync(join(dir, "dtg.config.yaml"), named);
   }
   const cwd = process.cwd();
   try {
@@ -31,7 +31,7 @@ function inProject(dtgYaml: string | null, run: () => void) {
 }
 
 describe("outputs is a set, not a bag of defaults", () => {
-  test("no dtg.yaml at all — css", () => {
+  test("no dtg.config.yaml at all — css", () => {
     inProject(null, () => {
       const c = loadConfig({ definition: DEFINITION });
       assert.equal(c.cssOut, join("design-tokens", "tokens.generated.css"), "beside the definition");
@@ -40,7 +40,7 @@ describe("outputs is a set, not a bag of defaults", () => {
     });
   });
 
-  test("a dtg.yaml naming no outputs — still css", () => {
+  test("a dtg.config.yaml naming no outputs — still css", () => {
     inProject("definitions: design-tokens\n", () => {
       assert.ok(loadConfig({}).cssOut);
     });
@@ -82,19 +82,19 @@ describe("gamut", () => {
     inProject(null, () => assert.equal(loadConfig({ definition: DEFINITION }).gamut, "display-p3"));
   });
 
-  test("dtg.yaml sets it", () => {
+  test("dtg.config.yaml sets it", () => {
     inProject("gamut: srgb\n", () => assert.equal(loadConfig({}).gamut, "srgb"));
   });
 
   test("an unknown gamut is an error", () => {
     inProject("gamut: rec2020\n", () =>
-      assert.throws(() => loadConfig({}), /dtg\.yaml gamut: expected one of srgb, display-p3/),
+      assert.throws(() => loadConfig({}), /dtg\.config\.yaml gamut: expected one of srgb, display-p3/),
     );
   });
 });
 
 describe("init", () => {
-  test("writes a dtg.yaml the loader reads", () => {
+  test("writes a dtg.config.yaml the loader reads", () => {
     inProject(null, () => {
       writePlaceholderConfig();
       const config = loadConfig({});
@@ -105,8 +105,8 @@ describe("init", () => {
 
   test("never replaces one that is there", () => {
     inProject("definitions: mine.dtg.yaml\n", () => {
-      assert.throws(() => writePlaceholderConfig(), /dtg\.yaml is already here/);
-      assert.equal(readFileSync("dtg.yaml", "utf8"), "definitions: mine.dtg.yaml\n");
+      assert.throws(() => writePlaceholderConfig(), /dtg\.config\.yaml is already here/);
+      assert.equal(readFileSync("dtg.config.yaml", "utf8"), "definitions: mine.dtg.yaml\n");
     });
   });
 });
@@ -116,7 +116,7 @@ describe("where the definition is", () => {
     inProject(null, () => assert.throws(() => loadConfig({}), /no definition to read — run `dtg init`/));
   });
 
-  test("dtg.yaml names a file, or a directory holding one", () => {
+  test("dtg.config.yaml names a file, or a directory holding one", () => {
     inProject(`definitions: ${DEFINITION}\n`, () => assert.equal(loadConfig({}).definition, DEFINITION));
     inProject("definitions: design-tokens\n", () => assert.equal(loadConfig({}).definition, DEFINITION));
   });

@@ -33,7 +33,7 @@ export type Snapshot = {
   undo: Edit | null;
   redo: Edit | null;
   definition: SnapshotDefinition;
-  /** The full path of the `dtg.yaml` the settings are kept in, whether or not it exists yet. */
+  /** The full path of the `dtg.config.yaml` the settings are kept in, whether or not it exists yet. */
   configPath: string;
   /** The page colors the app can be looked at against. Never empty. */
   backgrounds: SnapshotBackground[];
@@ -55,7 +55,7 @@ export type SnapshotDefinition = {
 
 export type SnapshotBackground = {
   name: string;
-  /** As `dtg.yaml` has it, or would: hex or `oklch()`. */
+  /** As `dtg.config.yaml` has it, or would: hex or `oklch()`. */
   written: string;
   color: Color;
 };
@@ -119,7 +119,7 @@ export function buildSnapshot({
   undo = null,
   redo = null,
   definition,
-  configPath = "dtg.yaml",
+  configPath = "dtg.config.yaml",
   backgrounds = DEFAULT_BACKGROUNDS,
 }: {
   resolved: ResolvedDefinition;

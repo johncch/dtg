@@ -119,7 +119,7 @@ pnpm add -D @fifthrevision/dtg
 ## Commands
 
 ```
-dtg init                                           # write a placeholder dtg.yaml here
+dtg init                                           # write a placeholder dtg.config.yaml here
 dtg --version                                      # or -v; --help or -h lists every flag
 dtg dev  [--port <n>]                              # browse and edit: ramps, deltaE, lineage, roles
          [--emit]                                  # also write the outputs when the definition file changes
@@ -131,29 +131,29 @@ dtg emit [--live] [--css <path>]                   # generate the CSS
 `dtg dev --emit` writes the same outputs `dtg emit` does, once at startup and
 again whenever the definition file changes — a save from the app or an edit
 by hand. They follow the file, never the unsaved edits on top of it. It is a
-flag only, asked for per run: no setting in `dtg.yaml` turns it on, so
+flag only, asked for per run: no setting in `dtg.config.yaml` turns it on, so
 opening a definition never overwrites the files an app ships.
 
 Definition resolution: `--definition <file>` if given; else the
-`definitions` entry in `dtg.yaml`. There is no default place dtg looks:
-`dtg init` writes a `dtg.yaml` to fill in. The CSS output defaults to
+`definitions` entry in `dtg.config.yaml`. There is no default place dtg looks:
+`dtg init` writes a `dtg.config.yaml` to fill in. The CSS output defaults to
 `tokens.generated.css` beside the definition. DTCG is written only when you
 name a path for it.
 
 ## Project layout
 
-The files can live wherever the project keeps its styles; `dtg.yaml` at the
+The files can live wherever the project keeps its styles; `dtg.config.yaml` at the
 root says where. One arrangement:
 
 ```
 design-tokens/
   colors.dtg.yaml          # the definition (decisions)
   tokens.generated.css     # generated, committed, never hand-edited
-  tokens.json              # generated DTCG, committed — opt in via dtg.yaml
-dtg.yaml                   # names the definition and the outputs
+  tokens.json              # generated DTCG, committed — opt in via dtg.config.yaml
+dtg.config.yaml            # names the definition and the outputs
 ```
 
-`dtg.yaml` for that arrangement:
+`dtg.config.yaml` for that arrangement:
 
 ```yaml
 definitions: design-tokens/ # a dir (globs *.dtg.yaml) or an explicit file
@@ -192,12 +192,12 @@ dev:
     dusk: oklch(0.3 0.05 260)
 ```
 
-The app's Settings page edits this list and writes each change to `dtg.yaml`
+The app's Settings page edits this list and writes each change to `dtg.config.yaml`
 at once, creating the file if the project has none. It is config, not the
 definition, so it is outside the app's unsaved changes and undo. Nothing
 under `dev` affects what is emitted.
 
-Precedence: CLI flags, then `dtg.yaml`, then convention defaults.
+Precedence: CLI flags, then `dtg.config.yaml`, then convention defaults.
 
 ## The definition file
 

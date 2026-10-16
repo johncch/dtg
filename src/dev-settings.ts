@@ -4,7 +4,7 @@ import { parseColor } from "./color-math.js";
 /** A page color to look at the tokens against in `dtg dev`. `color` is as written: hex or `oklch()`. */
 export type Background = { name: string; color: string };
 
-/** What the app offers when `dtg.yaml` names no backgrounds. */
+/** What the app offers when `dtg.config.yaml` names no backgrounds. */
 export const DEFAULT_BACKGROUNDS: Background[] = [{ name: "white", color: "#ffffff" }];
 
 const BACKGROUNDS_KEY = ["dev", "backgrounds"];
@@ -21,7 +21,7 @@ export function assertBackgrounds(backgrounds: Background[]): void {
 }
 
 /**
- * The backgrounds a `dtg.yaml` declares under `dev.backgrounds`, in the order
+ * The backgrounds a `dtg.config.yaml` declares under `dev.backgrounds`, in the order
  * written; none when it declares none. Read from the document rather than
  * the parsed value, because a parsed map hands number-like names back sorted.
  */
@@ -39,7 +39,7 @@ export function readBackgrounds(configText: string): Background[] {
   return backgrounds;
 }
 
-/** A `dtg.yaml` with its backgrounds replaced, and everything else it says kept. */
+/** A `dtg.config.yaml` with its backgrounds replaced, and everything else it says kept. */
 export function withBackgrounds(configText: string, backgrounds: Background[]): string {
   assertBackgrounds(backgrounds);
   const doc = parseDocument(configText);

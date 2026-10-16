@@ -13,7 +13,7 @@ const NEW_BACKGROUND_COLOR = "#ffffff";
 
 /**
  * How this app shows the definition: settings the project keeps under `dev`
- * in `dtg.yaml`. A change here is written to that file at once. It is config,
+ * in `dtg.config.yaml`. A change here is written to that file at once. It is config,
  * not the definition, so it is never one of the unsaved changes and undo does
  * not reach it.
  */
@@ -142,7 +142,7 @@ export function SettingsPage({
           </tr>
         </tbody>
       </table>
-      {failure && <p className="changes-error">Could not write dtg.yaml: {failure}</p>}
+      {failure && <p className="changes-error">Could not write dtg.config.yaml: {failure}</p>}
     </>
   );
 }
@@ -157,7 +157,7 @@ function BackgroundPicker({
   original: Color;
   handle: HTMLAttributes<HTMLDivElement>;
   close: ReactNode;
-  /** Called with the color as `dtg.yaml` would write it. */
+  /** Called with the color as `dtg.config.yaml` would write it. */
   onPick: (color: string) => void;
 }) {
   const gamut = useProjectGamut();

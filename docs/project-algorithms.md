@@ -19,11 +19,11 @@ any interface code.
 
 ## The shape
 
-### In `dtg.yaml`
+### In `dtg.config.yaml`
 
 ```yaml
 algorithms:
-  - src/styles/algorithms/blend.js     # a path, relative to dtg.yaml
+  - src/styles/algorithms/blend.js     # a path, relative to dtg.config.yaml
   - "@acme/dtg-algorithms/duotone"     # or a package name
 ```
 
@@ -156,7 +156,7 @@ Move `blend` out of dtg and into fifthrevision as the first real case:
 
 1. ~~Define the new contract; rewrite the built-ins in it.~~ Done, without
    the toolkit: the built-ins still import `color-math.ts`.
-2. Define the toolkit. Add `algorithms:` to `dtg.yaml`; load it in `emit` and `dev`.
+2. Define the toolkit. Add `algorithms:` to `dtg.config.yaml`; load it in `emit` and `dev`.
 3. Move `blend` into fifthrevision.
 4. Accept when fifthrevision's generated CSS is byte-for-byte unchanged. It
    already has a parity script.

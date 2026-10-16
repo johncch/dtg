@@ -59,11 +59,11 @@ round-trip to the colors the site ships today.
 
 `emitCss` takes a `CssFormat`: `plain` (default) puts primitives in `:root`,
 `tailwind` keeps the `@theme` wrapper and the `@theme inline` utility block.
-`dtg.yaml` accepts `outputs.css` as a bare path or `{ path, format }`, and
+`dtg.config.yaml` accepts `outputs.css` as a bare path or `{ path, format }`, and
 `--css-format` overrides both.
 
 **Plain is the default**, so a project that never opts in gets CSS a browser
-can use. Tailwind consumers opt in explicitly — Sunnyday's `dtg.yaml` is
+can use. Tailwind consumers opt in explicitly — Sunnyday's `dtg.config.yaml` is
 pinned to `format: tailwind`, verified emitting its `colors.generated.css`
 byte-for-byte unchanged.
 

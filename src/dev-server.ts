@@ -36,7 +36,7 @@ import {
   type WorkingCopy,
 } from "./working-copy.js";
 
-const CONFIG_PATH = "dtg.yaml";
+const CONFIG_PATH = "dtg.config.yaml";
 
 const UI_CONTENT_TYPES: Record<string, string> = {
   js: "text/javascript; charset=utf-8",
@@ -99,7 +99,7 @@ export function startDevServer(
   emitFromDisk();
 
   // Backgrounds are settings, not the definition: they are read from and
-  // written to `dtg.yaml` directly, outside the working copy and its undo.
+  // written to `dtg.config.yaml` directly, outside the working copy and its undo.
   const readConfig = () => (existsSync(CONFIG_PATH) ? readFileSync(CONFIG_PATH, "utf8") : "");
   let backgrounds: Background[] = [];
   const takeBackgroundsFromConfig = () => {

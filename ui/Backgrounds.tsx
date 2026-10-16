@@ -9,7 +9,7 @@ const DARK_BELOW = 0.6;
 
 /**
  * Which of the project's backgrounds the app is drawn on. The list is the
- * project's, in `dtg.yaml`; the choice is this browser's.
+ * project's, in `dtg.config.yaml`; the choice is this browser's.
  */
 export function Backgrounds({ backgrounds }: { backgrounds: SnapshotBackground[] }) {
   const [activeName, setActiveName] = useState(() => localStorage.getItem(ACTIVE));

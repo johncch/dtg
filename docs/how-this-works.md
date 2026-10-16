@@ -240,11 +240,11 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   it whenever the definition file changes. Outputs follow the file on disk,
   never the working copy's unsaved edits. Writing outputs is always an
   explicit action — `dtg emit`, or the `--emit` flag on one `dev` run. No
-  setting in `dtg.yaml` can turn it on: a config file must not be able to
+  setting in `dtg.config.yaml` can turn it on: a config file must not be able to
   overwrite the files an app ships.
-- `config.ts` — reading `dtg.yaml`, and `dtg init`'s placeholder for it. Where the
+- `config.ts` — reading `dtg.config.yaml`, and `dtg init`'s placeholder for it. Where the
   definition is has no default; the config or a flag names it. Precedence is CLI flags,
-  then `dtg.yaml`, then defaults.
+  then `dtg.config.yaml`, then defaults.
 - `resolve.ts` — the grammar lives here. YAML in, `ResolvedDefinition` out
   (systems with their steps, statics, sections, roles with a ref per mode,
   plus accumulated warnings). Public-name resolution is here too:
@@ -267,7 +267,7 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   the whole file. A ref edit can also carry `~`, putting a mode back to
   inheriting; a ref for a mode past the end of the role's list is added to
   it, with `~` holding any modes in between.
-- `dev-settings.ts` — what a project keeps under `dev` in `dtg.yaml` for the
+- `dev-settings.ts` — what a project keeps under `dev` in `dtg.config.yaml` for the
   app's own use: today the backgrounds to view against. The dev server reads
   it, watches it, and writes it straight to the file when the Settings page
   changes it. It is config, not the definition, so it stays out of the

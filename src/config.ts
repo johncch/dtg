@@ -45,20 +45,20 @@ outputs:
   css: colors.generated.css
 `;
 
-/** Writes a placeholder dtg.yaml into the current folder. Never replaces one that is there. */
+/** Writes a placeholder dtg.config.yaml into the current folder. Never replaces one that is there. */
 export function writePlaceholderConfig(): void {
   try {
-    writeFileSync("dtg.yaml", PLACEHOLDER_CONFIG, { flag: "wx" });
+    writeFileSync("dtg.config.yaml", PLACEHOLDER_CONFIG, { flag: "wx" });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
-    throw new Error("dtg.yaml is already here — edit it, or remove it first");
+    throw new Error("dtg.config.yaml is already here — edit it, or remove it first");
   }
 }
 
 /**
- * Where the definition is has no default: `dtg.yaml` or a flag says. An
+ * Where the definition is has no default: `dtg.config.yaml` or a flag says. An
  * unnamed CSS output lands beside the definition.
- * Precedence: CLI flags > dtg.yaml > defaults.
+ * Precedence: CLI flags > dtg.config.yaml > defaults.
  */
 export function loadConfig(flags: {
   definition?: string;
@@ -70,8 +70,8 @@ export function loadConfig(flags: {
   dtcgColorSpace?: string;
 }): DtgConfig {
   let fileConfig: Record<string, unknown> = {};
-  if (existsSync("dtg.yaml")) {
-    fileConfig = (parse(readFileSync("dtg.yaml", "utf8")) ?? {}) as Record<
+  if (existsSync("dtg.config.yaml")) {
+    fileConfig = (parse(readFileSync("dtg.config.yaml", "utf8")) ?? {}) as Record<
       string,
       unknown
     >;
@@ -79,7 +79,7 @@ export function loadConfig(flags: {
   const outputs = (fileConfig.outputs ?? {}) as Record<string, unknown>;
   if (outputs.figma != null) {
     throw new Error(
-      "dtg.yaml outputs.figma: the bespoke Figma payload was removed — use `dtcg` instead, which carries the same collections, modes, values and aliases plus stable identities",
+      "dtg.config.yaml outputs.figma: the bespoke Figma payload was removed — use `dtcg` instead, which carries the same collections, modes, values and aliases plus stable identities",
     );
   }
   const css = parseCssOutput(outputs.css);
@@ -88,7 +88,7 @@ export function loadConfig(flags: {
   for (const key of Object.keys(outputs)) {
     if (!["css", "scss", "dtcg"].includes(key)) {
       throw new Error(
-        `dtg.yaml outputs: unknown output "${key}" (known: css, scss, dtcg)`,
+        `dtg.config.yaml outputs: unknown output "${key}" (known: css, scss, dtcg)`,
       );
     }
   }
@@ -123,7 +123,7 @@ export function loadConfig(flags: {
       dtcg.colorSpace ??
       "srgb",
     gamut:
-      assertColorSpace(fileConfig.gamut, "dtg.yaml gamut") ??
+      assertColorSpace(fileConfig.gamut, "dtg.config.yaml gamut") ??
       "display-p3",
   };
 }
@@ -138,21 +138,21 @@ function parseCssOutput(value: unknown): {
   if (typeof value === "string") return { path: value };
   if (typeof value !== "object" || Array.isArray(value)) {
     throw new Error(
-      "dtg.yaml outputs.css: expected a path or { path, format }",
+      "dtg.config.yaml outputs.css: expected a path or { path, format }",
     );
   }
   const block = value as Record<string, unknown>;
   for (const key of Object.keys(block)) {
     if (key !== "path" && key !== "format" && key !== "modes") {
       throw new Error(
-        `dtg.yaml outputs.css: unknown key "${key}" (known: path, format, modes)`,
+        `dtg.config.yaml outputs.css: unknown key "${key}" (known: path, format, modes)`,
       );
     }
   }
   return {
     path: block.path as string | undefined,
-    format: assertCssFormat(block.format, "dtg.yaml outputs.css.format"),
-    modes: assertModeRendering(block.modes, "dtg.yaml outputs.css.modes"),
+    format: assertCssFormat(block.format, "dtg.config.yaml outputs.css.format"),
+    modes: assertModeRendering(block.modes, "dtg.config.yaml outputs.css.modes"),
   };
 }
 
@@ -181,14 +181,14 @@ function parseDtcgOutput(value: unknown): {
   if (typeof value === "string") return { path: value };
   if (typeof value !== "object" || Array.isArray(value)) {
     throw new Error(
-      "dtg.yaml outputs.dtcg: expected a path or { path, colorSpace }",
+      "dtg.config.yaml outputs.dtcg: expected a path or { path, colorSpace }",
     );
   }
   const block = value as Record<string, unknown>;
   for (const key of Object.keys(block)) {
     if (key !== "path" && key !== "colorSpace") {
       throw new Error(
-        `dtg.yaml outputs.dtcg: unknown key "${key}" (known: path, colorSpace)`,
+        `dtg.config.yaml outputs.dtcg: unknown key "${key}" (known: path, colorSpace)`,
       );
     }
   }
@@ -196,7 +196,7 @@ function parseDtcgOutput(value: unknown): {
     path: block.path as string | undefined,
     colorSpace: assertColorSpace(
       block.colorSpace,
-      "dtg.yaml outputs.dtcg.colorSpace",
+      "dtg.config.yaml outputs.dtcg.colorSpace",
     ),
   };
 }
@@ -228,12 +228,12 @@ function assertCssFormat(
 function definitionIn(target: string | undefined): string {
   if (target == null) {
     throw new Error(
-      "no definition to read — run `dtg init` and point `definitions` in dtg.yaml at it, or pass --definition",
+      "no definition to read — run `dtg init` and point `definitions` in dtg.config.yaml at it, or pass --definition",
     );
   }
   if (target.endsWith(".yaml")) return target;
   if (!existsSync(target)) {
-    throw new Error(`dtg.yaml definitions: no ${target}/ directory`);
+    throw new Error(`dtg.config.yaml definitions: no ${target}/ directory`);
   }
   const files = readdirSync(target).filter((f) => f.endsWith(".dtg.yaml"));
   if (files.length === 0) {
