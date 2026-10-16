@@ -276,7 +276,12 @@ export type ResolvedDefinition = {
   sections: ResolvedSection[];
   roles: ResolvedRole[];
   warnings: string[];
+  /** Index-parallel to the `probes` asked for. */
+  probed: Probe[];
 };
+
+/** A ref into a system resolved without demanding it, so nothing is emitted for it. */
+export type Probe = { ref: string; color: Color } | { ref: string; error: string };
 
 export function publicSystemName(
   system: ResolvedSystem,
@@ -372,6 +377,8 @@ export function resolveDefinition(
   extraAlgorithms: Algorithm[] = [],
   /** The project's gamut: the widest colors the definition is meant to use. */
   gamut: Gamut = "display-p3",
+  /** Refs into systems to resolve on the side, as `sky(7)`. */
+  probes: string[] = [],
 ): ResolvedDefinition {
   const doc = parse(yamlText) as Record<string, unknown>;
   const errors: string[] = [];
@@ -1008,6 +1015,17 @@ export function resolveDefinition(
     });
   }
 
+  // Every system's steps are gathered above, so a probe landing in the step
+  // cache from here on cannot make itself demanded.
+  const probed: Probe[] = probes.map((ref) => {
+    const call = parseCall(ref);
+    if (!call) return { ref, error: `"${ref}" is not a ref into a system` };
+    const errorsBefore = errors.length;
+    const step = resolveStep(call.name, call.selector, `probe "${ref}"`);
+    const failures = errors.splice(errorsBefore);
+    return step ? { ref, color: step.color } : { ref, error: failures.join("; ") };
+  });
+
   // The project's gamut is a ceiling on what is authored, not a clamp: a
   // color above it resolves and emits untouched, and this only says so.
   for (const constant of statics) {
@@ -1041,5 +1059,6 @@ export function resolveDefinition(
     sections,
     roles,
     warnings,
+    probed,
   };
 }

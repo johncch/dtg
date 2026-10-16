@@ -2,7 +2,7 @@
 
 **Read `docs/how-this-works.md` before changing anything.** It is the design
 doc: the grammar, the algorithms, and — most importantly — the decisions
-that were settled in long-form conversation with John and should not be
+that were settled in long-form conversation with Chong Han and should not be
 re-litigated (no middle scale tier, no role flags, no literals in the
 semantic tier, demand-driven primitives, deterministic generation, explicit
 over inferred). `README.md` is the user-facing summary of the same system.
@@ -35,6 +35,6 @@ Working notes:
   `.js` specifier onto a `.ts` file — so the script builds first and a stale
   artifact cannot give a false pass. Beyond that, verification is the dev
   server and (for Sunnyday) parity of emitted CSS against what shipped.
-- Extend by conversation with John first, in small steps. If a feature
+- Extend by conversation with Chong Han first, in small steps. If a feature
   can't be expressed as "edit one line of definition, regenerate," question
   the feature.

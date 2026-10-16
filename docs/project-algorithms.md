@@ -1,7 +1,7 @@
 # Project algorithms
 
 **Status: the contract is built, loading is not.** Settled in conversation
-with John on 2026-10-12. The built-ins are written in the shape below and
+with Chong Han on 2026-10-12. The built-ins are written in the shape below and
 the resolver takes extra algorithms; nothing loads a project's files yet,
 and there is no toolkit. Read `how-this-works.md` first for the contract.
 
@@ -135,7 +135,7 @@ old contract kept alongside a new one.
   built-in. This is the part most likely to need another kind when a third
   project arrives.
 - **How a system's page is laid out.** Not designed, on purpose. The
-  direction (John, 2026-10-12): an algorithm names prebuilt components dtg
+  direction (Chong Han, 2026-10-12): an algorithm names prebuilt components dtg
   ships — something like `layout: () => [grid, gradient]` — and never brings
   its own. Fifthrevision's `blend` is the case to design it against: its
   four anchors only read as a gradient. It would be returned as plain data,

@@ -97,6 +97,11 @@ body.on-dark .popover { box-shadow: 0 12px 36px rgba(0,0,0,0.7), 0 2px 8px rgba(
 .ref-control select, .ref-number { font: inherit; font-size: var(--text-value); color: var(--fg); padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px; background: transparent; }
 .ref-number { width: 62px; flex: none; }
 .ref-control-check input { margin: 0; }
+.probe { margin: 0 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); overflow: hidden; }
+.probe-title { margin: 0; padding: 8px 16px; font-size: var(--text-label); font-weight: normal; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); border-bottom: 1px solid var(--border); background: var(--panel-head); }
+.probe-body { display: flex; gap: 24px; align-items: flex-start; padding: 14px 16px; }
+.probe-preview { flex: none; width: 40%; }
+.probe-controls { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .ref-error { font-size: var(--text-label); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ref-in-file { align-self: flex-start; }
 .chip-inherited code { font-style: italic; color: var(--muted); }

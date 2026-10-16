@@ -258,6 +258,20 @@ export function startDevServer(
       return;
     }
 
+    if (url.pathname === "/api/probe" && req.method === "POST") {
+      readJson(req).then((body) => {
+        const { ref } = body as { ref: string };
+        try {
+          const [probe] = resolveDefinition(workingText(state.copy).text, [], gamut, [ref]).probed;
+          if ("error" in probe) sendJson(422, { error: probe.error });
+          else sendJson(200, { color: probe.color });
+        } catch (e) {
+          sendJson(422, { error: (e as Error).message });
+        }
+      });
+      return;
+    }
+
     if (url.pathname === "/api/edits" && req.method === "POST") {
       readJson(req).then((body) => {
         const { edit } = body as { edit: Edit };

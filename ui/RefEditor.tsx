@@ -120,7 +120,7 @@ export function RefEditor({
   );
 }
 
-type Step = { kind: "step"; system: SnapshotSystem; selector: Selector };
+export type Step = { kind: "step"; system: SnapshotSystem; selector: Selector };
 /** `opacity` null is the constant itself; a number is it taken through transparent(). */
 type Constant = { kind: "constant"; path: string; opacity: number | null };
 type Pointing = Step | Constant;
@@ -154,7 +154,7 @@ function refOf(pointing: Pointing): string {
 }
 
 /** A selector for `shape` that keeps what it can of what the ref pointed at before. */
-function carriedOver(from: Pointing | null, shape: SelectorShape): Selector {
+export function carriedOver(from: Pointing | null, shape: SelectorShape): Selector {
   const parts = from?.kind === "step" ? Object.values(from.selector) : [from?.opacity];
   const numbers = parts.filter((part) => typeof part === "number");
   const form = from?.kind === "step" ? from.selector.form : null;
@@ -240,7 +240,7 @@ function SourceControl({
   );
 }
 
-function StepControls({ step, onChange }: { step: Step; onChange: (step: Step) => void }) {
+export function StepControls({ step, onChange }: { step: Step; onChange: (step: Step) => void }) {
   const { system, selector } = step;
   const forms = system.selector.forms ?? [];
   return (

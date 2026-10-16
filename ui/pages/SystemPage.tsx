@@ -2,6 +2,7 @@ import type { EditTarget } from "../../src/edit.js";
 import { formatRef } from "../../src/selector.js";
 import type { SnapshotStep, SnapshotSystem } from "../../src/snapshot.js";
 import { ColorChip } from "../ColorChip.js";
+import { Probe } from "../Probe.js";
 import { useScrollToHash } from "../router.js";
 import { stepAnchor, stepDeltaE, Strip } from "../Strip.js";
 import { UsedBy } from "../UsedBy.js";
@@ -19,6 +20,7 @@ export function SystemPage({ system }: { system: SnapshotSystem }) {
       </h1>
       <p className="desc">{system.description}</p>
       <Params system={system} />
+      <Probe key={system.system} system={system} />
       <Strip system={system} withDeltas={system.preview?.shape !== "palette"} />
       <table>
         <thead>
