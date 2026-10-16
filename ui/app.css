@@ -51,9 +51,16 @@ tr.domain-row a:hover { text-decoration: underline; }
 .params .param { font-size: var(--text-label); color: var(--muted); }
 .params .param .param-value { margin-top: 3px; color: var(--fg); }
 .strip-wrap { margin: 10px 0 18px; }
+/* --cells is the step count: a row is as wide as its cells at full size, and narrower only when the page is. */
+.strip-wrap { max-width: calc(var(--cells) * 64px); }
+.strip-caption { font-size: var(--text-label); color: var(--faint); margin-bottom: 4px; }
 .strip { display: flex; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
-.strip a { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; min-height: 60px; padding: 4px 2px; text-decoration: none; position: relative; overflow: hidden; }
-.strip a .step-label { font-size: var(--text-label); font-weight: 600; position: relative; }
+.strip a, .strip-labels span, .strip-gaps .gap { flex: 1 1 0; min-width: 0; }
+.strip a, .strip-baseline { display: block; height: 52px; position: relative; overflow: hidden; }
+.strip-baseline { flex: 1 1 0; border-right: 1px solid var(--border); }
+.strip-labels .strip-baseline-label { color: var(--faint); font-weight: 400; }
+.strip-labels { display: flex; margin-top: 4px; }
+.strip-labels span { text-align: center; font-size: var(--text-label); font-weight: 600; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .strip-fill { position: absolute; inset: 0; }
 .strip-gaps { display: flex; margin-top: 3px; }
 .palette-head { display: flex; align-items: center; gap: 12px; }
@@ -71,10 +78,11 @@ tr.domain-row a:hover { text-decoration: underline; }
 .palette-entry-remove { flex: none; width: 28px; align-self: stretch; border: 0; background: none; color: var(--muted); cursor: pointer; }
 .palette-add { flex: none; width: 48px; border: 0; border-left: 1px solid var(--border); background: none; color: var(--muted); font-size: var(--text-heading); cursor: pointer; }
 .palette-add:hover { background: var(--hover); color: var(--fg); }
-.strip-gaps .gap { flex: 1; position: relative; height: 14px; }
+.strip-gaps .gap { position: relative; height: 14px; }
 .strip-gaps .gap span { position: absolute; right: 0; transform: translateX(50%); font-size: var(--text-label); font-family: "SF Mono", ui-monospace, monospace; color: var(--faint); }
 .swatch { display: inline-block; vertical-align: middle; border-radius: 6px; overflow: hidden; position: relative; flex-shrink: 0; }
 .swatch-alpha::before, .tip-swatch-translucent::before { content: ""; position: absolute; inset: 0; background: conic-gradient(#e6e6e6 0 25%, #fff 0 50%, #e6e6e6 0 75%, #fff 0) 0 0 / 12px 12px; clip-path: polygon(100% 0, 100% 100%, 0 100%); }
+body.on-dark .swatch-alpha::before, body.on-dark .tip-swatch-translucent::before { background: conic-gradient(#2c2c2c 0 25%, #1c1c1c 0 50%, #2c2c2c 0 75%, #1c1c1c 0) 0 0 / 12px 12px; }
 .swatch-color { position: absolute; inset: 0; display: block; }
 .cell { display: flex; align-items: center; gap: 8px; }
 .chip { display: inline-flex; align-items: center; gap: 8px; vertical-align: middle; }
@@ -128,9 +136,10 @@ body.on-dark .popover { box-shadow: 0 12px 36px rgba(0,0,0,0.7), 0 2px 8px rgba(
 .ref-control select, .ref-number { font: inherit; font-size: var(--text-value); color: var(--fg); padding: 3px 6px; border: 1px solid var(--border); border-radius: 5px; background: transparent; }
 .ref-number { width: 62px; flex: none; }
 .ref-control-check input { margin: 0; }
-.probe { margin: 0 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); overflow: hidden; }
-.probe-title { margin: 0; padding: 8px 16px; font-size: var(--text-label); font-weight: normal; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); border-bottom: 1px solid var(--border); background: var(--panel-head); }
+.box { margin: 0 0 16px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); overflow: hidden; }
+.box-title { margin: 0; padding: 8px 16px; font-size: var(--text-label); font-weight: normal; text-transform: uppercase; letter-spacing: 0.06em; color: var(--faint); border-bottom: 1px solid var(--border); background: var(--panel-head); }
 .probe-body { display: flex; gap: 24px; align-items: flex-start; padding: 14px 16px; }
+.steps-body { padding: 4px 16px 6px; }
 .probe-preview { flex: none; width: 40%; }
 .probe-controls { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
 .ref-error { font-size: var(--text-label); color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }

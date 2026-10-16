@@ -16,7 +16,7 @@ export function ConstantsPage({ constants }: { constants: SnapshotConstant[] }) 
       <p className="desc">
         Every color picked by hand, with no recipe behind it. A role points at one by path;{" "}
         <code>transparent(name 70)</code> takes one at an alpha. Unlike a system step, each one emits whether or not
-        anything demands it.
+        anything uses it.
       </p>
       <table>
         <thead>

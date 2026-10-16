@@ -19,8 +19,8 @@ export function Probe({ system }: { system: SnapshotSystem }) {
   const answer = useProbe(ref, system);
 
   return (
-    <section className="probe">
-      <h2 className="probe-title">Preview</h2>
+    <section className="box">
+      <h2 className="box-title">Preview</h2>
       <div className="probe-body">
         <div className="probe-preview">
           {answer.kind === "color" && <ColorFacts color={answer.color} reference={<code>{ref}</code>} />}

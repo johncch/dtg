@@ -1,8 +1,9 @@
-import type { Snapshot } from "../../src/snapshot.js";
+import type { CSSProperties } from "react";
+import type { Snapshot, SnapshotConstant } from "../../src/snapshot.js";
 import { ColorTip } from "../ColorTip.js";
 import { paintCss } from "../paint.js";
 import { Link } from "../router.js";
-import { labelColorOn, Strip } from "../Strip.js";
+import { Strip } from "../Strip.js";
 import { constantAnchor } from "./ConstantsPage.js";
 
 export function OverviewPage({ snapshot }: { snapshot: Snapshot }) {
@@ -38,20 +39,25 @@ export function OverviewPage({ snapshot }: { snapshot: Snapshot }) {
             <Link to={{ page: "constants" }}>Palette</Link>{" "}
             <span className="muted">{snapshot.constants.length}</span>
           </h2>
-          <div className="strip-wrap">
-            <div className="strip">
-              {snapshot.constants.map((constant) => (
-                <ColorTip key={constant.path} color={constant.color}>
-                  <Link to={{ page: "constants" }} hash={constantAnchor(constant.path)}>
-                    <span className="strip-fill" style={{ background: paintCss(constant.color) }} />
-                    <span className="step-label" style={{ color: labelColorOn(constant.color) }}>
-                      {constant.path}
-                    </span>
-                  </Link>
-                </ColorTip>
-              ))}
+          {constantGroups(snapshot.constants).map(({ group, constants }) => (
+            <div className="strip-wrap" key={group ?? ""} style={{ "--cells": constants.length } as CSSProperties}>
+              {group != null && <div className="strip-caption">{group}</div>}
+              <div className="strip">
+                {constants.map((constant) => (
+                  <ColorTip key={constant.path} color={constant.color}>
+                    <Link to={{ page: "constants" }} hash={constantAnchor(constant.path)} aria-label={constant.path}>
+                      <span className="strip-fill" style={{ background: paintCss(constant.color) }} />
+                    </Link>
+                  </ColorTip>
+                ))}
+              </div>
+              <div className="strip-labels">
+                {constants.map((constant) => (
+                  <span key={constant.path}>{constant.path.slice(constant.path.lastIndexOf(".") + 1)}</span>
+                ))}
+              </div>
             </div>
-          </div>
+          ))}
         </>
       )}
       <h2>Role domains</h2>
@@ -69,4 +75,17 @@ export function OverviewPage({ snapshot }: { snapshot: Snapshot }) {
       </ul>
     </>
   );
+}
+
+/** Palette colors by group, the ungrouped ones first, each group in the order written. */
+function constantGroups(constants: SnapshotConstant[]): { group: string | null; constants: SnapshotConstant[] }[] {
+  const groups: { group: string | null; constants: SnapshotConstant[] }[] = [];
+  for (const constant of constants) {
+    const cut = constant.path.lastIndexOf(".");
+    const group = cut === -1 ? null : constant.path.slice(0, cut);
+    let holder = groups.find((candidate) => candidate.group === group);
+    if (!holder) groups.push((holder = { group, constants: [] }));
+    holder.constants.push(constant);
+  }
+  return groups.sort((a, b) => Number(a.group != null) - Number(b.group != null));
 }

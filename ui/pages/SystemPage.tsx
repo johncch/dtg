@@ -21,7 +21,12 @@ export function SystemPage({ system }: { system: SnapshotSystem }) {
       <p className="desc">{system.description}</p>
       <Params system={system} />
       <Probe key={system.system} system={system} />
-      <Strip system={system} withDeltas />
+      <section className="box">
+        <h2 className="box-title">Steps</h2>
+        <div className="steps-body">
+          <Strip system={system} withDeltas />
+        </div>
+      </section>
       <table>
         <thead>
           <tr>
@@ -29,7 +34,7 @@ export function SystemPage({ system }: { system: SnapshotSystem }) {
             <th>Ref</th>
             <th>Value</th>
             <th>ΔE prev</th>
-            <th>Demanded by</th>
+            <th>Used by</th>
           </tr>
         </thead>
         <tbody>
