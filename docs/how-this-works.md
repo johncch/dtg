@@ -106,6 +106,10 @@ Canonical. The README carries the user-facing version of the same rules.
 - **Raw hex is legal only inside `palette` and `systems`.** The semantic tier points and
   derives; every color traces back to an anchor. This is the core invariant:
   a literal is a value that has forgotten its reason.
+- `none`, CSS's missing component, reads as `0` in any slot. It's a
+  spelling: `oklch(70% 0 none)` and `oklch(70% 0 0)` are the same gray, and
+  whether a color has a hue is decided by its chroma (see Color spaces).
+  Writing back puts `0`.
 
 Removed spellings are still detected and error with a pointer, rather than
 being silently ignored: a top-level `emit:` block (replaced by inline
@@ -124,14 +128,15 @@ Three built-ins, each *total*, with no optional-parameter modes.
 - **`tint`** (`base`, `tint`, both required): a tint composited over base;
   the selector is the tint's alpha percent. The token name doubles as the
   recipe, so `light-15` is 15% ink. Steps are opaque surface colors, and the
-  ramp also backs `transparent()`.
+  ramp also backs `transparent()`. Composited in encoded sRGB.
 - **`scale`** (`base`, `toward: [light, dark]`, `hueShift`, `midpoint`): a
   continuous curve through the base in OKLCH. The selector is any stop
   0–1000: 0 is `toward[0]`, 500 the base, 1000 `toward[1]`. The share of base
   at a stop is its distance from the near end raised to a power, mirrored
   about 500; `midpoint` (default 0.5, a straight line) is the share at 250
   and 750, and sets the power. `hueShift` 0 locks every stop to the base
-  hue, 100 follows the natural interpolated hue path. Scale was a lookup
+  hue, 100 follows the natural interpolated hue path. Blended in OKLCH from
+  OKLab. Scale was a lookup
   table of named stops; a single curve fit mosaic's hand-picked table to
   within ΔE 1.2 and made every stop between addressable.
 - **`overlay`** (`color`): color at selector % opacity, never flattened.
@@ -184,6 +189,60 @@ fraction. Both are now single functions in `color-math.ts`. If you find
 yourself writing color arithmetic or a color string inside
 `algorithms/`, it belongs one level down.
 
+### Color spaces: how a color is written, what it is, and where the math runs
+
+Settled 2026-10-19, after a Tailwind replication exposed that a color's
+written form was changing results.
+
+Three things that used to blur together are kept apart:
+
+- **The written form** is how a definition spells a color: hex, `oklch()`,
+  `oklab()`, `color(srgb …)`, `color(display-p3 …)`. It is kept only to
+  write the file back and to emit the authored bytes exactly. It never
+  reaches the math.
+- **The value** is what the color is, held in OKLab. It's unbounded, so any
+  color from any gamut fits, and the same color has the same value however
+  it was written.
+- **The math space** is the set of numbers an operation averages, and it is
+  the algorithm's choice, part of what the algorithm means. The same two
+  colors mix to different colors in each: 50% black over white is `#808080`
+  in encoded sRGB, `#bcbcbc` in linear light, `#636363` in OKLab.
+  `color-math.ts` offers `composite(layer, ground, alpha, space)` over
+  `srgb`, `display-p3`, `linear` and `oklab`; the encoded spaces extend past
+  0–1, so a color outside them is carried rather than clipped. An algorithm
+  may fix its space or expose it as a param.
+  - `tint` composites in **encoded sRGB**, fixed. That is the long-standing
+    meaning of opacity in CSS and Figma, and every existing tint keeps its
+    value byte for byte.
+  - `scale` blends in **OKLCH**, converted straight from OKLab, with no
+    detour through RGB channels.
+
+Browsers composite in the space of the surface they draw on, not one tied to
+the color: Chrome flattens P3 red at 60% over white to `color(display-p3 1
+0.4 0.4)` on a P3 canvas and to the clipped sRGB result on an sRGB canvas.
+So a flattened step matches its translucent twin (`sky(15)` and
+`sky(15 tint)`) exactly for sRGB colors on an sRGB surface. For a color
+outside sRGB no flattened value matches every surface; `tint`'s answer is
+about 0.03 (OKLab ΔE) from a P3 surface's for P3 red at 60%, and dtg's
+near-gray tints differ by under 0.001.
+
+A gamut appears only at the edges: the project's `gamut` warns about
+authored colors, and the outputs encode into sRGB and P3. No algorithm
+receives or infers a gamut. `widestGamut`, which guessed one from how inputs
+were written, is gone. It is why an `oklch()` base outside sRGB was clipped,
+and why the same blue written as hex and as `color(display-p3 …)` produced
+different steps.
+
+**Hue.** Whether a color has a hue is a property of its value, never of its
+spelling. A color whose chroma is below ε (1e-5) has no hue. ε sits in a
+wide gap: exact hex grays carry rounding noise up to about 4e-8, and the
+least colorful non-gray hex color (`#feffff`) has chroma of about 1e-3.
+Where an operation needs a hue that a color doesn't have (a blend, or
+`scale` holding its base hue), it takes the other color's hue. If neither
+has one, the result is gray. This replaces three thresholds that disagreed:
+0.001 in blending, 5e-5 when writing back, and none at all for `scale`'s
+base hue, which made a gray base lock to noise.
+
 ### The algorithm contract
 
 `src/contract.ts` defines `Algorithm`:
@@ -205,10 +264,6 @@ yourself writing color arithmetic or a color string inside
 - `resolve(selector, params)` returns a color. The selector arrives parsed,
   one value per field plus `form`. It throws with a human-readable message
   on a selector the system cannot produce.
-- `workingGamut(params)` is optional: the gamut the arithmetic runs in, when
-  it has a fixed one.
-- `preview` is optional and holds `shape`: a ramp, where neighbor deltas
-  mean something, or a palette, where they do not.
 
 There are no naming or ordering hooks. A step's public name is its fields
 joined by `-`, then the form (`sky(3.5 tint)` emits as `3_5-tint`), and steps sort
@@ -246,8 +301,11 @@ doing so is in `project-algorithms.md`.
    two lines. Twins are declared as sibling roles
    (`primary-translucent: [sky(15 tint), ...]`), so twinship stays
    recoverable by inspection.
-5. **Overrides pin flattened hexes only.** The uncomposited form always
-   follows pure ink math, and the resolver warns when the two overlap. Hand-tunes are
+5. **Overrides pin flattened steps only, with any opaque color.** An
+   override takes any color the grammar accepts, so a wide-gamut step can be
+   pinned exactly. It must be opaque, because it stands in for a flattened
+   step. The uncomposited form always follows the recipe, and the resolver
+   warns when the two overlap. Hand-tunes are
    explicit, visible, and survive regeneration. Exceptions either get
    promoted into the system later or stay flagged, never silent.
 6. **Constants emit, systems publish what they list, roles reference.** A

@@ -16,9 +16,9 @@
   --color-theme-500: #03a2e8;
   --color-theme-950: #011f30;
   /* wide (tint) */
-  --color-wide-60: #ff7070;
+  --color-wide-60: #ff5a5c;
   /* widemix (tint) */
-  --color-widemix-80: #0788ff;
+  --color-widemix-80: #2288ff;
   /* grouped.inner (tint) */
   --color-renamed-inner-10: #ffe6e6;
   --color-renamed-inner-20: #ffcccc;
@@ -71,8 +71,8 @@
 /* Wider than sRGB — shown at full strength where supported */
 @supports (color: color(display-p3 1 1 1)) {
   :root {
-    --color-wide-60: color(display-p3 1 0.4 0.4);
-    --color-widemix-80: color(display-p3 0.2 0.52 1);
+    --color-wide-60: color(display-p3 0.9736 0.336 0.3401);
+    --color-widemix-80: color(display-p3 0.2364 0.5183 0.9963);
     --color-vivid: color(display-p3 1 0 0);
     --color-lush: color(display-p3 0.2261 0.7896 0.1678);
   }

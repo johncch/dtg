@@ -2,8 +2,12 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import {
   alphaComposite,
+  composite,
+  convert,
+  formatAuthored,
   formatColor,
   hexToRgb,
+  NO_HUE_BELOW_CHROMA,
   parseColor,
   toOklab,
   oklabDeltaE,
@@ -29,6 +33,43 @@ describe("color math", () => {
       alphaComposite(hexToRgb("#b30a0a"), hexToRgb("#ffffff"), 0.06),
     );
     assert.equal(got, "#faf0f0");
+  });
+  test("the no-hue threshold sits between hex gray noise and the least colorful hex", () => {
+    let grayNoise = 0;
+    for (let v = 0; v < 256; v++) {
+      const [, a, b] = toOklab(parseColor(rgbToHex([v, v, v]), "gray"));
+      grayNoise = Math.max(grayNoise, Math.hypot(a, b));
+    }
+    const [, a, b] = toOklab(parseColor("#feffff", "near gray"));
+    assert.ok(grayNoise < NO_HUE_BELOW_CHROMA);
+    assert.ok(Math.hypot(a, b) > NO_HUE_BELOW_CHROMA);
+  });
+  test("a gray is written back with hue 0, whatever hue it was written with", () => {
+    const lab = toOklab(parseColor("oklch(0.7 0 200)", "ctx"));
+    assert.equal(formatAuthored(lab, 0.5), "oklch(0.7 0 0 / 0.5)");
+  });
+  test("the mix space decides what 50% black over white is", () => {
+    const black = parseColor("#000000", "black");
+    const white = parseColor("#ffffff", "white");
+    const at = (space: "srgb" | "linear" | "oklab") => formatColor(composite(black, white, 0.5, space), "srgb");
+    assert.equal(at("srgb"), "#808080");
+    assert.equal(at("linear"), "#bcbcbc");
+    assert.equal(at("oklab"), "#636363");
+  });
+  test("in linear light, sRGB and P3 numbers mix to the same color", () => {
+    const red = parseColor("#ff0000", "red");
+    const sameRedInP3 = convert(red, "display-p3");
+    const white = parseColor("#ffffff", "white");
+    assert.equal(
+      formatColor(composite(red, white, 0.1, "linear"), "srgb"),
+      formatColor(composite(sameRedInP3, white, 0.1, "linear"), "srgb"),
+    );
+  });
+  test("encoded sRGB and encoded P3 disagree on a colorful mix", () => {
+    const p3Red = parseColor("color(display-p3 1 0 0)", "p3 red");
+    const white = parseColor("#ffffff", "white");
+    assert.equal(formatColor(composite(p3Red, white, 0.6, "display-p3"), "display-p3"), "color(display-p3 1 0.4 0.4)");
+    assert.equal(formatColor(composite(p3Red, white, 0.6, "srgb"), "display-p3"), "color(display-p3 0.9736 0.336 0.3401)");
   });
   test("deltaE is zero for a color against itself and symmetric otherwise", () => {
     assert.equal(oklabDeltaE("#3366cc", "#3366cc"), 0);
@@ -81,6 +122,13 @@ describe("parseColor", () => {
     assert.equal(parseColor("#ff8000", "ctx").alpha, 1);
     assert.equal(parseColor("color(srgb 1 0.5 0 / 0.4)", "ctx").alpha, 0.4);
     assert.equal(parseColor("oklch(0.7 0.1 40 / 40%)", "ctx").alpha, 0.4);
+  });
+
+  test("none reads as 0 in any slot, as Tailwind writes its grays", () => {
+    assert.equal(srgb("oklch(98.5% 0 none)"), srgb("oklch(98.5% 0 0)"));
+    assert.equal(srgb("oklab(0.7 none none)"), srgb("oklab(0.7 0 0)"));
+    assert.equal(srgb("color(display-p3 1 none 0)"), srgb("color(display-p3 1 0 0)"));
+    assert.equal(parseColor("oklch(0.5 0.1 200 / none)", "ctx").alpha, 0);
   });
 
   test("rejects what it cannot read, naming the context", () => {

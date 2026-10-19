@@ -3,15 +3,12 @@ export type Rgb = [number, number, number];
 const COLOR_FORMS =
   "#rgb, #rrggbb, oklch(L C H), oklab(L a b), color(srgb r g b) or color(display-p3 r g b), each with an optional `/ alpha`";
 
-/** The deliberately narrower color form used by flattened step overrides. */
-export function assertHex(value: unknown, context: string): string {
-  if (typeof value !== "string" || !/^#[0-9a-fA-F]{6}$/.test(value)) {
-    throw new Error(
-      `${context}: expected a 6-digit hex color, got ${JSON.stringify(value)}`,
-    );
-  }
-  return value.toLowerCase();
-}
+/**
+ * A color with less chroma than this has no hue, however it was written.
+ * Exact hex grays carry rounding noise up to ~4e-8; the least colorful
+ * non-gray hex (#feffff) has ~1e-3.
+ */
+export const NO_HUE_BELOW_CHROMA = 1e-5;
 
 /**
  * A color literal from a definition file. Authoring is not limited to sRGB:
@@ -113,6 +110,7 @@ function expectCount(
 /** A number, or a percentage of `full` — CSS lets either stand in most slots. */
 function component(text: string, full: number, context: string): number {
   const raw = text.trim();
+  if (raw.toLowerCase() === "none") return 0;
   const pct = raw.endsWith("%");
   const n = Number(pct ? raw.slice(0, -1) : raw);
   if (raw === "" || !Number.isFinite(n)) {
@@ -123,6 +121,7 @@ function component(text: string, full: number, context: string): number {
 
 function angle(text: string, context: string): number {
   const raw = text.trim().toLowerCase();
+  if (raw === "none") return 0;
   const n = Number(raw.endsWith("deg") ? raw.slice(0, -3) : raw);
   if (!Number.isFinite(n)) {
     throw new Error(`${context}: expected an angle, got ${JSON.stringify(text)}`);
@@ -211,21 +210,6 @@ function oklabToLinearRgb(lab: [number, number, number]): Rgb {
   return matmul(LMS_TO_RGB, lms);
 }
 
-function rgbToOklch(rgb: Rgb): [number, number, number] {
-  const [L, a, b] = linearRgbToOklab(rgb.map(srgbToLinear) as Rgb);
-  return [
-    L,
-    Math.hypot(a, b),
-    ((Math.atan2(b, a) * 180) / Math.PI + 360) % 360,
-  ];
-}
-
-function oklchToRgb([L, C, h]: [number, number, number]): Rgb {
-  const a = C * Math.cos((h * Math.PI) / 180);
-  const b = C * Math.sin((h * Math.PI) / 180);
-  return oklabToLinearRgb([L, a, b]).map(linearToSrgb) as Rgb;
-}
-
 function lerpAngle(a: number, b: number, t: number): number {
   let d = b - a;
   if (d > 180) d -= 360;
@@ -236,30 +220,84 @@ function lerpAngle(a: number, b: number, t: number): number {
   return r;
 }
 
-/**
- * Blend `from` → `to` at t in OKLCH. L and C interpolate linearly; hue is
- * held at `baseHue`, allowed to drift hueShift% of the way toward the
- * natural interpolated hue. A near-neutral endpoint has no meaningful hue
- * angle (float noise), so the chromatic endpoint's hue wins outright.
- */
-export function oklchInterpolate(
-  from: Rgb,
-  to: Rgb,
-  t: number,
-  baseHue: number,
-  hueShift: number,
-): Rgb {
-  const [L1, C1, h1] = rgbToOklch(from);
-  const [L2, C2, h2] = rgbToOklch(to);
-  const L = L1 + t * (L2 - L1);
-  const C = C1 + t * (C2 - C1);
-  const naturalH = C1 < 0.001 ? h2 : C2 < 0.001 ? h1 : lerpAngle(h1, h2, t);
-  const h = lerpAngle(baseHue, naturalH, hueShift / 100);
-  return oklchToRgb([L, Math.max(0, C), h]);
+/** The color's OKLCH hue, or null when its chroma is too low to have one. */
+export function hueOf(color: Color): number | null {
+  const [, C, h] = oklabToOklch(toOklab(color));
+  return C < NO_HUE_BELOW_CHROMA ? null : h;
 }
 
-export function baseHueOf(rgb: Rgb): number {
-  return rgbToOklch(rgb)[2];
+/**
+ * Blend `from` → `to` at t in OKLCH. L and C move linearly; hue is held at
+ * `heldHue` and drifts hueShift% of the way toward the natural interpolated
+ * hue. A color with no hue takes the other's.
+ */
+export function blendOklch(
+  from: Color,
+  to: Color,
+  t: number,
+  heldHue: number,
+  hueShift: number,
+): Color {
+  const [L1, C1] = oklabToOklch(toOklab(from));
+  const [L2, C2] = oklabToOklch(toOklab(to));
+  const h1 = hueOf(from);
+  const h2 = hueOf(to);
+  const naturalHue = h1 == null ? (h2 ?? heldHue) : h2 == null ? h1 : lerpAngle(h1, h2, t);
+  const h = lerpAngle(heldHue, naturalHue, hueShift / 100);
+  return colorFromExtendedChannels(
+    oklabToLinearRgb(oklchToOklab([L1 + t * (L2 - L1), Math.max(0, C1 + t * (C2 - C1)), h])).map(
+      extendedLinearToEncoded,
+    ) as Rgb,
+    "srgb",
+  );
+}
+
+/**
+ * The numbers a composite averages. Each gives a different color for the same
+ * inputs — 50% black over white is #808080 in encoded sRGB, #bcbcbc in linear
+ * light, #636363 in OKLab — so an algorithm picks one as part of what it means.
+ */
+export type MixSpace = "srgb" | "display-p3" | "linear" | "oklab";
+
+/**
+ * Lays `layer` over `ground` at `alpha`, averaging in `space`'s numbers. The
+ * encoded spaces extend past 0–255, so a color outside them is carried rather
+ * than clipped.
+ */
+export function composite(layer: Color, ground: Color, alpha: number, space: MixSpace): Color {
+  if (space === "oklab") {
+    return colorFromOklab(mixChannels(toOklab(layer), toOklab(ground), alpha));
+  }
+  if (space === "linear") {
+    const mixed = mixChannels(oklabToLinearRgb(toOklab(layer)), oklabToLinearRgb(toOklab(ground)), alpha);
+    return colorFromOklab(linearRgbToOklab(mixed));
+  }
+  return colorFromExtendedChannels(
+    alphaComposite(extendedChannels(layer, space), extendedChannels(ground, space), alpha),
+    space,
+  );
+}
+
+function mixChannels(layer: Rgb, ground: Rgb, alpha: number): Rgb {
+  return layer.map((c, i) => alpha * c + (1 - alpha) * ground[i]) as Rgb;
+}
+
+/** Encoded channels 0..255 in `gamut`, unclamped. A color authored in that gamut gives its channels untouched. */
+function extendedChannels(color: Color, gamut: Gamut): Rgb {
+  if (color.space === gamut) return color.coords.map((c) => c * 255) as Rgb;
+  return oklabToLinear(toOklab(color), gamut).map(extendedLinearToEncoded) as Rgb;
+}
+
+function extendedLinearToEncoded(c: number): number {
+  return Math.sign(c) * linearToSrgb(Math.abs(c));
+}
+
+/** Channels inside 0..255 stay in `gamut`, so their bytes are exact; anything wider is kept as OKLab. */
+function colorFromExtendedChannels(rgb: Rgb, gamut: Gamut): Color {
+  if (rgb.every((c) => c >= 0 && c <= 255)) return colorFromRgb(rgb, gamut);
+  return colorFromOklab(
+    linearToOklab(rgb.map((c) => Math.sign(c) * srgbToLinear(Math.abs(c))) as Rgb, gamut),
+  );
 }
 
 /** Perceptual distance between two opaque colors in OKLAB (0 = identical, ~1 = black↔white). */
@@ -522,15 +560,6 @@ export function channelsIn(color: Color, gamut: Gamut): Rgb {
 }
 
 /**
- * The gamut a transform should work in: the widest any input was authored in.
- * Compositing a P3 color in sRGB would clip it before the arithmetic ran,
- * so one wide input widens the whole operation.
- */
-export function widestGamut(colors: Color[]): Gamut {
-  return colors.some((c) => c.space === "display-p3") ? "display-p3" : "srgb";
-}
-
-/**
  * A color as a definition writes it: hex when sRGB holds it, because hex is
  * what people read and a hex step is far below what an eye can tell apart;
  * `oklch()` when it does not, or when it carries an alpha hex has no place for.
@@ -539,6 +568,6 @@ export function formatAuthored(lab: Oklab, alpha = 1): string {
   if (alpha >= 1 && inGamut(lab, "srgb")) return formatIn(lab, "srgb");
   const [L, C, H] = oklabToOklch(lab);
   const short = (n: number, digits: number) => String(Number(n.toFixed(digits)));
-  const body = `${short(L, 4)} ${short(C, 4)} ${short(C < 5e-5 ? 0 : H, 2)}`;
+  const body = `${short(L, 4)} ${short(C, 4)} ${short(C < NO_HUE_BELOW_CHROMA ? 0 : H, 2)}`;
   return alpha >= 1 ? `oklch(${body})` : `oklch(${body} / ${short(alpha, 4)})`;
 }

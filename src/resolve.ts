@@ -14,8 +14,6 @@ import {
   publicStepOf,
 } from "./selector.js";
 import {
-  assertHex,
-  colorFromHex,
   needsMapping,
   parseColor,
   isOpaque,
@@ -466,7 +464,7 @@ export function resolveDefinition(
     /** Top-level param keys the system wrote itself; the rest came from `defaults`. */
     ownParams: Set<string>;
     selectorShape: SelectorShape;
-    overrides: Record<string, string>;
+    overrides: Record<string, unknown>;
     alias?: AliasValue;
     /** The selectors the system publishes whether or not a ref asks for them. */
     emit: string[];
@@ -641,7 +639,7 @@ export function resolveDefinition(
         colorParams: parsed.colors,
         ownParams: new Set(Object.keys(paramsBlock ?? {})),
         selectorShape,
-        overrides: (block.overrides ?? {}) as Record<string, string>,
+        overrides: (block.overrides ?? {}) as Record<string, unknown>,
         alias,
         emit,
         segments: named,
@@ -687,7 +685,12 @@ export function resolveDefinition(
               `override "${key}": overrides pin flattened steps only; "${selector}" is translucent`,
             );
           }
-          overrideColor = colorFromHex(assertHex(override, `override "${key}"`));
+          overrideColor = parseColor(override, `override "${key}"`);
+          if (!isOpaque(overrideColor)) {
+            throw new Error(
+              `override "${key}": an override stands in for a flattened step, so it must be opaque; got ${JSON.stringify(override)}`,
+            );
+          }
         }
         step = {
           selector,

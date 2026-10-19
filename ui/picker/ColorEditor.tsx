@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type HTMLAttributes, type ReactNode } from "react";
-import { colorFromOklab, formatAuthored, isOpaque, oklabToOklch, oklchToOklab, parseColor, toOklab, type Color, type Oklch } from "../../src/color-math.js";
+import { colorFromOklab, formatAuthored, isOpaque, NO_HUE_BELOW_CHROMA, oklabToOklch, oklchToOklab, parseColor, toOklab, type Color, type Oklch } from "../../src/color-math.js";
 import type { EditTarget } from "../../src/edit.js";
 import type { SnapshotConstant } from "../../src/snapshot.js";
 import { ColorTip } from "../ColorTip.js";
@@ -13,7 +13,7 @@ import { Picker } from "./Picker.js";
 export function lchOf(color: Color): Oklch {
   const [L, C, H] = oklabToOklch(toOklab(color));
   // A gray has no hue; start the bar at 0 rather than at a rounding error.
-  return C < 5e-5 ? [L, 0, 0] : [L, C, H];
+  return C < NO_HUE_BELOW_CHROMA ? [L, 0, 0] : [L, C, H];
 }
 
 /** What the editor would write: nothing yet, a color from the picker, or the path of a palette color. */

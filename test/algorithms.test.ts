@@ -5,10 +5,13 @@ import { algorithmFor } from "../dist/resolve.js";
 import { step } from "./step.ts";
 import {
   type Color,
+  convert,
   formatColor,
   hexToOklab,
   isOpaque,
   oklabToOklch,
+  parseColor,
+  toOklab,
 } from "../dist/color-math.js";
 
 const css = (v: { color: Color }) => formatColor(v.color, "srgb");
@@ -149,5 +152,46 @@ describe("a bounded number param", () => {
     const theme = { base: "#03a2e8", toward: ["#fafdff", "#001a28"] };
     assert.throws(() => parseParams(scale, { ...theme, hueShift: 120 }), /param 'hueShift': expected 0–100, got 120/);
     assert.doesNotThrow(() => parseParams(scale, { ...theme, hueShift: 100 }));
+  });
+});
+
+describe("color spaces: how a color is written never reaches the math", () => {
+  const scale = algorithmFor("scale")!;
+  const distance = (a: Color, b: Color) => {
+    const [x, y] = [toOklab(a), toOklab(b)];
+    return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+  };
+  const GREEN_500 = "oklch(72.3% 0.219 149.579)";
+
+  test("the same blue written as hex and as display-p3 gives the same scale", () => {
+    const p3 = convert(parseColor("#3b82f6", "blue"), "display-p3").coords;
+    const asP3 = `color(display-p3 ${p3.map((c) => c.toFixed(12)).join(" ")})`;
+    const ends = { toward: ["#ffffff", "#000000"], hueShift: 0, midpoint: 0.5 };
+    for (const stop of ["100", "250", "750", "900"]) {
+      const fromHex = step(scale, { ...ends, base: "#3b82f6" }, stop).color;
+      const fromP3 = step(scale, { ...ends, base: asP3 }, stop).color;
+      assert.ok(distance(fromHex, fromP3) < 1e-6, `stop ${stop} differs by ${distance(fromHex, fromP3)}`);
+    }
+  });
+
+  test("an oklch base outside sRGB is not clipped next to 500", () => {
+    const params = { base: GREEN_500, toward: ["#ffffff", "#000000"], hueShift: 0, midpoint: 0.5 };
+    const at500 = step(scale, params, "500").color;
+    for (const stop of ["499", "501"]) {
+      const d = distance(step(scale, params, stop).color, at500);
+      assert.ok(d < 0.002, `stop ${stop} is ${d} from the base`);
+    }
+  });
+
+  test("a full tint toward a color outside sRGB is that color", () => {
+    const full = step(tint, { base: "#ffffff", tint: GREEN_500 }, "100").color;
+    assert.ok(distance(full, parseColor(GREEN_500, "green")) < 1e-6);
+  });
+
+  test("a gray base takes its hue from the end it blends toward", () => {
+    const hue = (c: Color) => oklabToOklch(toOklab(c))[2];
+    const params = { base: "#808080", toward: ["#ffffff", "#1d3a8a"], hueShift: 0, midpoint: 0.5 };
+    const blue = hue(parseColor("#1d3a8a", "blue"));
+    assert.ok(Math.abs(hue(step(scale, params, "750").color) - blue) < 2);
   });
 });
