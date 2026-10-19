@@ -214,6 +214,27 @@ blue:
   `gamut: srgb` keeps the curve exact everywhere.
 - The math is OKLCH from OKLab throughout, like `scale`.
 
+**Why `scale` and `curve` both exist.** Settled 2026-10-19. They share a
+selector meaning (a position relative to a pick) and an operation
+(interpolating channels through it), and `scale` can nearly be written as a
+`curve`. They stay separate anyway, because an algorithm is allowed to be
+specific: it serves the way an app wants to make its colors, not every way.
+
+- `scale` is for one ramp steered by two end colors and a `midpoint`: pick a
+  base and where it should end up. That is how Mosaic makes its ramps, and
+  the colors-as-ends input is the point of it, not a limitation.
+- `curve` is for a family of ramps that should behave alike, or a shape that
+  needs channel-by-channel control. Its curves can live in `defaults`, so
+  every hue shares one shape and each system is just an anchor; tweaking the
+  shared curve moves every ramp together. It is also the one for shapes two
+  end colors cannot make (chroma peaking off the base, hue turning only in
+  the darks) and for steps that must stay in gamut by construction.
+
+What `curve` showed that does generalize is the `curve` param kind: shapes
+inside an algorithm are curves, drawn and edited the same way wherever they
+appear. `tone` will use them along lightness, which needs the pivot to be
+optional.
+
 ### The seam: color-math owns color, algorithms own vocabulary
 
 `color-math.ts` holds every arithmetic operation and every color format.

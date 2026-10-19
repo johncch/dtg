@@ -105,6 +105,11 @@ palette:
     assert.match(edited, /params: \{ base: "#fafdff", tint: "#001a28", glow: "#fff" \}/);
   });
 
+  test("an added word goes unquoted, as it would be written by hand", () => {
+    const edited = applyEdits(SRC, [{ action: "set", target: { kind: "param", system: "theme", path: "gamut" }, value: "display-p3" }]);
+    assert.match(edited, /params: \{ base: "#03a2e8", gamut: display-p3 \}/);
+  });
+
   test("a param is added on its own line in a block params map", () => {
     const block = SRC.replace(
       `params: { base: "#03a2e8" }`,

@@ -61,14 +61,17 @@ export function describeTarget(target: EditTarget): string {
   }
 }
 
+/** Unquoted, `#` starts a comment and flow punctuation ends the value; this is what can go without quotes. */
+function plainSafe(value: string): boolean {
+  return /^[A-Za-z][\w().%/ -]*$/.test(value) && !value.endsWith(" ");
+}
+
 /** A value as YAML source, in the quoting the value it replaces was written in where that is safe. */
 function sourceFor(value: string, replaced: Scalar): string {
   if (replaced.type === Scalar.QUOTE_SINGLE && !value.includes("'")) return `'${value}'`;
   // A number written bare stays a number; quoting it would make it a string.
   if (replaced.type === Scalar.PLAIN && typeof replaced.value === "number" && /^-?\d+(\.\d+)?$/.test(value)) return value;
-  // Unquoted, `#` starts a comment and flow punctuation ends the value.
-  const plainSafe = /^[A-Za-z][\w().%/ -]*$/.test(value) && !value.endsWith(" ");
-  if (replaced.type === Scalar.PLAIN && plainSafe) return value;
+  if (replaced.type === Scalar.PLAIN && plainSafe(value)) return value;
   return JSON.stringify(value);
 }
 
@@ -226,7 +229,7 @@ function withConstantAdded(text: string, target: ConstantTarget, value: string):
 
 /** A param the system does not write yet, added to its `params` block: the algorithm's default stops applying. */
 function withParamAdded(text: string, target: Extract<EditTarget, { kind: "param" }>, value: string): string {
-  const source = /^-?\d+(\.\d+)?$/.test(value) ? value : (structureSource(value) ?? JSON.stringify(value));
+  const source = /^-?\d+(\.\d+)?$/.test(value) || plainSafe(value) ? value : (structureSource(value) ?? JSON.stringify(value));
   return withEntryAdded(text, ["systems", ...target.system.split("."), "params"], target.path, source, target, "but not as a value");
 }
 

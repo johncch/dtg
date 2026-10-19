@@ -54,6 +54,24 @@ describe("snapshot", () => {
     ]);
   });
 
+  test("a system lists the options of its choice params", () => {
+    const curved = buildSnapshot({
+      resolved: resolveDefinition(`
+dtg: 1
+systems:
+  blue: { algorithm: curve, params: { anchor: "#3b82f6" }, emit: [500] }
+`),
+      lineage: new Map(),
+      error: null,
+      stale: false,
+      gamut: "display-p3",
+      changes: [],
+      definition: { path: "colors.dtg.yaml", text: "" },
+    });
+    assert.deepEqual(curved.systems[0].choices, { gamut: ["srgb", "display-p3"] });
+    assert.deepEqual(snapshot.systems[0].choices, {});
+  });
+
   test("an overridden step keeps what the algorithm generated", () => {
     const sky = snapshot.systems.find((s) => s.system === "sky")!;
     assert.equal(sky.steps[0].generated, null);

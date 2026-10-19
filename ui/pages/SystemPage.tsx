@@ -2,6 +2,7 @@ import type { EditTarget } from "../../src/edit.js";
 import { formatRef } from "../../src/selector.js";
 import type { SnapshotStep, SnapshotSystem } from "../../src/snapshot.js";
 import { ColorChip } from "../ColorChip.js";
+import { ChoiceParam } from "../ChoiceParam.js";
 import { CurveParam } from "../CurveParam.js";
 import { NumberParam } from "../NumberParam.js";
 import { STATIC } from "../mode.js";
@@ -130,6 +131,18 @@ function ParamValue({ value, path, system }: { value: unknown; path: string; sys
     );
   }
   const defaulted = system.defaultedParams.includes(path.split(".")[0]);
+  const options = system.choices[path];
+  if (options && typeof value === "string") {
+    return (
+      <ChoiceParam
+        name={path}
+        value={value}
+        options={options}
+        target={{ kind: "param", system: system.system, path }}
+        defaulted={defaulted}
+      />
+    );
+  }
   if (typeof value === "number") {
     const target: EditTarget =
       defaulted || system.ownParams.includes(path.split(".")[0])

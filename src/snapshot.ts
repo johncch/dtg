@@ -96,6 +96,8 @@ export type SnapshotSystem = {
   curves: Record<string, ResolvedCurve>;
   /** The bounds the algorithm declares for its number params, by name, for a slider to run between. */
   numberRanges: Record<string, { min: number; max: number }>;
+  /** The options the algorithm declares for its choice params, by name, for a control to pick among. */
+  choices: Record<string, string[]>;
   /** Which of `params` are colors, so the page knows what can be edited. */
   colorParams: ResolvedColorParam[];
   /** What a ref into this system is made of, so the page can draw a control for each part. */
@@ -180,6 +182,7 @@ export function buildSnapshot({
       defaultedParams: system.defaultedParams,
       curves: system.curves,
       numberRanges: numberRangesOf(system.algorithm),
+      choices: choicesOf(system.algorithm),
       colorParams: system.colorParams,
       selector: system.selector,
       steps: system.steps.map((step) => ({
@@ -216,6 +219,13 @@ export function buildSnapshot({
       })),
     })),
   };
+}
+
+function choicesOf(algorithm: string): Record<string, string[]> {
+  const params = algorithmFor(algorithm)?.params ?? {};
+  return Object.fromEntries(
+    Object.entries(params).flatMap(([name, kind]) => (kind.kind === "choice" ? [[name, kind.options]] : [])),
+  );
 }
 
 function numberRangesOf(algorithm: string): Record<string, { min: number; max: number }> {
