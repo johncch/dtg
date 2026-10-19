@@ -10,6 +10,7 @@ import {
   type Lineage,
   type RefTarget,
   type ResolvedColorParam,
+  type ResolvedCurve,
   type ResolvedDefinition,
 } from "./resolve.js";
 import { formatRef } from "./selector.js";
@@ -87,8 +88,12 @@ export type SnapshotSystem = {
   params: Record<string, unknown>;
   /** The system's hand-written description, or null; `description` is the algorithm's. */
   note: string | null;
-  /** The top-level params the system wrote itself; the rest came from `defaults`. */
+  /** The top-level params the system wrote itself. */
   ownParams: string[];
+  /** The params nothing writes; their value in `params` is the algorithm's default, and setting one writes it into the system. */
+  defaultedParams: string[];
+  /** Each `curve` param, every field filled in, with its pivot and bounds, for the page to draw and edit. */
+  curves: Record<string, ResolvedCurve>;
   /** The bounds the algorithm declares for its number params, by name, for a slider to run between. */
   numberRanges: Record<string, { min: number; max: number }>;
   /** Which of `params` are colors, so the page knows what can be edited. */
@@ -172,6 +177,8 @@ export function buildSnapshot({
       params: system.params,
       note: system.description ?? null,
       ownParams: system.ownParams,
+      defaultedParams: system.defaultedParams,
+      curves: system.curves,
       numberRanges: numberRangesOf(system.algorithm),
       colorParams: system.colorParams,
       selector: system.selector,

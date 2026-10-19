@@ -96,10 +96,52 @@ palette:
     assert.notEqual(step(SRC), step(edited));
   });
 
-  test("a target the definition does not have is an error, not a new key", () => {
+  test("a param the system does not write is added to its params, a number bare", () => {
+    const edited = applyEdits(SRC, [
+      { action: "set", target: { kind: "param", system: "theme", path: "midpoint" }, value: "0.4" },
+      { action: "set", target: { kind: "param", system: "sky", path: "glow" }, value: "#fff" },
+    ]);
+    assert.match(edited, /params: \{ base: "#03a2e8", midpoint: 0\.4 \}/);
+    assert.match(edited, /params: \{ base: "#fafdff", tint: "#001a28", glow: "#fff" \}/);
+  });
+
+  test("a param is added on its own line in a block params map", () => {
+    const block = SRC.replace(
+      `params: { base: "#03a2e8" }`,
+      `params:\n      base: "#03a2e8" # brand`,
+    );
+    const edited = applyEdits(block, [{ action: "set", target: { kind: "param", system: "theme", path: "hueShift" }, value: "15" }]);
+    assert.match(edited, /      base: "#03a2e8" # brand\n      hueShift: 15\n/);
+  });
+
+  test("a whole list is written over the list a param holds, or added as one", () => {
+    const withEase = SRC.replace(`params: { base: "#03a2e8" }`, `params: { base: "#03a2e8", ease: [[0, 0, 1, 1], [0, 0, 1, 1]] }`);
+    const pair = JSON.stringify([[0.3, 0.1, 0.6, 1], [0, 0, 1, 1]]);
+    const target = { kind: "param", system: "theme", path: "ease" } as const;
+    assert.match(applyEdits(withEase, [{ action: "set", target, value: pair }]), /ease: \[\[0\.3, 0\.1, 0\.6, 1\], \[0, 0, 1, 1\]\] \}/);
+    assert.match(applyEdits(SRC, [{ action: "set", target, value: pair }]), /params: \{ base: "#03a2e8", ease: \[\[0\.3, 0\.1, 0\.6, 1\], \[0, 0, 1, 1\]\] \}/);
+    assert.equal(readValue(withEase, target), JSON.stringify([[0, 0, 1, 1], [0, 0, 1, 1]]));
+  });
+
+  test("a whole curve is written as a flow map, over a block map or as a new param", () => {
+    const curve = JSON.stringify({ from: 0.97, to: 0.25, easing: [[0.3, 0.1, 0.6, 1], [0.33, 0.33, 0.67, 0.67]] });
+    const flow = "{ from: 0.97, to: 0.25, easing: [[0.3, 0.1, 0.6, 1], [0.33, 0.33, 0.67, 0.67]] }";
+    const target = { kind: "param", system: "theme", path: "lightness" } as const;
+    assert.ok(applyEdits(SRC, [{ action: "set", target, value: curve }]).includes(`params: { base: "#03a2e8", lightness: ${flow} }`));
+    const block = SRC.replace(`params: { base: "#03a2e8" }`, `params:\n      base: "#03a2e8"\n      lightness:\n        from: 0.9\n        to: 0.3`);
+    const edited = applyEdits(block, [{ action: "set", target, value: curve }]);
+    assert.ok(edited.includes(`      lightness:\n        ${flow}\n`), edited);
+    assert.equal(readValue(block, target), JSON.stringify({ from: 0.9, to: 0.3 }));
+  });
+
+  test("a target with nowhere to be added is an error, not a new key", () => {
     assert.throws(
-      () => applyEdits(SRC, [{ action: "set", target: { kind: "param", system: "sky", path: "glow" }, value: "#fff" }]),
-      /nothing written for sky glow to edit/,
+      () => applyEdits(SRC, [{ action: "set", target: { kind: "param", system: "nope", path: "glow" }, value: "#fff" }]),
+      /nothing written for nope glow to be added to/,
+    );
+    assert.throws(
+      () => applyEdits(SRC, [{ action: "set", target: { kind: "param", system: "theme", path: "toward.5" }, value: "#fff" }]),
+      /nothing written for theme toward\.5 to edit/,
     );
   });
 });

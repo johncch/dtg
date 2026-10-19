@@ -2,6 +2,7 @@ import type { EditTarget } from "../../src/edit.js";
 import { formatRef } from "../../src/selector.js";
 import type { SnapshotStep, SnapshotSystem } from "../../src/snapshot.js";
 import { ColorChip } from "../ColorChip.js";
+import { CurveParam } from "../CurveParam.js";
 import { NumberParam } from "../NumberParam.js";
 import { STATIC } from "../mode.js";
 import { Probe } from "../Probe.js";
@@ -105,6 +106,17 @@ function Params({ system }: { system: SnapshotSystem }) {
 
 function ParamValue({ value, path, system }: { value: unknown; path: string; system: SnapshotSystem }) {
   const { colorParams } = system;
+  const curve = system.curves[path];
+  if (curve) {
+    return (
+      <CurveParam
+        name={path}
+        curve={curve}
+        target={{ kind: "param", system: system.system, path }}
+        defaulted={system.defaultedParams.includes(path)}
+      />
+    );
+  }
   const colorParam = colorParams.find((param) => param.path === path);
   if (colorParam) {
     const target: EditTarget =
@@ -117,14 +129,24 @@ function ParamValue({ value, path, system }: { value: unknown; path: string; sys
       </ColorChip>
     );
   }
+  const defaulted = system.defaultedParams.includes(path.split(".")[0]);
   if (typeof value === "number") {
-    const target: EditTarget = system.ownParams.includes(path.split(".")[0])
-      ? { kind: "param", system: system.system, path }
-      : { kind: "default", algorithm: system.algorithm, path };
+    const target: EditTarget =
+      defaulted || system.ownParams.includes(path.split(".")[0])
+        ? { kind: "param", system: system.system, path }
+        : { kind: "default", algorithm: system.algorithm, path };
     return (
-      <NumberParam name={path} value={value} target={target} range={system.numberRanges[path] ?? null} shared={target.kind === "default"} />
+      <NumberParam
+        name={path}
+        value={value}
+        target={target}
+        range={system.numberRanges[path] ?? null}
+        shared={target.kind === "default"}
+        defaulted={defaulted}
+      />
     );
   }
+  if (defaulted) return <code className="muted">{JSON.stringify(value)}</code>;
   if (Array.isArray(value)) {
     return (
       <span className="cell">

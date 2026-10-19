@@ -6,6 +6,7 @@ import {
   type SelectorShape,
 } from "./contract.js";
 import { parseParams, type ParsedColorParam } from "./params.js";
+import type { CurveValue, Pivot, Span } from "./curve-math.js";
 import {
   formatRef,
   orderOf,
@@ -23,8 +24,64 @@ import {
 import { tint } from "./algorithms/tint.js";
 import { scale } from "./algorithms/scale.js";
 import { overlay } from "./algorithms/overlay.js";
+import { curve } from "./algorithms/curve.js";
 
-const builtinAlgorithms: Algorithm[] = [tint, scale, overlay];
+const CURVE_SAMPLES = 41;
+const CURVE_SWATCHES = 121;
+
+function curvesOf(
+  algorithm: Algorithm,
+  params: Params,
+  shape: SelectorShape,
+  steps: ResolvedStep[],
+): Record<string, ResolvedCurve> {
+  const pivots = algorithm.curvePivots?.(params) ?? {};
+  return Object.fromEntries(
+    Object.entries(algorithm.params).flatMap(([name, kind]) => {
+      if (kind.kind !== "curve" || !pivots[name]) return [];
+      const field = shape.fields.find((candidate) => candidate.name === kind.along);
+      if (!field || field.kind !== "number") {
+        throw new Error(`${algorithm.name} param "${name}" runs along "${kind.along}", which is not a number field of its selector`);
+      }
+      const span = { min: field.min, max: field.max };
+      const samples =
+        shape.fields.length === 1
+          ? Array.from({ length: CURVE_SAMPLES }, (_, i) => {
+              const at = span.min + (i / (CURVE_SAMPLES - 1)) * (span.max - span.min);
+              return { at, color: algorithm.resolve({ form: null, [kind.along]: at }, params) };
+            })
+          : [];
+      const marks = steps.flatMap((step) => {
+        const { values } = parseSelector(algorithm.name, shape, step.selector);
+        const at = values[kind.along];
+        return values.form == null && typeof at === "number" ? [{ at, color: step.color, step: step.publicStep }] : [];
+      });
+      const swatches = algorithm.curveSwatch
+        ? Array.from({ length: CURVE_SWATCHES }, (_, i) => {
+            const value = kind.min + (i / (CURVE_SWATCHES - 1)) * (kind.max - kind.min);
+            return { value, color: algorithm.curveSwatch!(params, name, value) };
+          })
+        : [];
+      const curve: ResolvedCurve = {
+        value: params[name] as CurveValue,
+        pivot: pivots[name],
+        min: kind.min,
+        max: kind.max,
+        default: kind.default,
+        along: kind.along,
+        span,
+        samples,
+        marks,
+        label: kind.label ?? null,
+        unit: kind.unit ?? null,
+        swatches,
+      };
+      return [[name, curve]];
+    }),
+  );
+}
+
+const builtinAlgorithms: Algorithm[] = [tint, scale, overlay, curve];
 
 function registryOf(extra: Algorithm[]): Map<string, Algorithm> {
   return new Map(
@@ -163,6 +220,31 @@ export type ResolvedStep = {
  */
 export type ResolvedColorParam = ParsedColorParam & { from: "system" | "defaults" };
 
+/**
+ * A `curve` param as a page draws it: its value with every field filled in,
+ * where it passes through what the algorithm holds fixed, and — because it
+ * runs along a selector field — the colors along it and where the system's
+ * steps sit on it.
+ */
+export type ResolvedCurve = {
+  value: CurveValue;
+  pivot: Pivot;
+  min: number;
+  max: number;
+  default: CurveValue;
+  along: string;
+  span: Span;
+  /** The system's color at evenly spaced points across the span; empty when the selector has fields besides `along`. */
+  samples: { at: number; color: Color }[];
+  /** Each emitted step whose selector is a plain point along the curve. */
+  marks: { at: number; color: Color; step: string }[];
+  /** What the curve's values measure, and the unit written after them; null when the algorithm says nothing. */
+  label: string | null;
+  unit: string | null;
+  /** What values across `min`–`max` look like, from the algorithm's `curveSwatch`; empty without one. Only the editor uses these. */
+  swatches: { value: number; color: Color }[];
+};
+
 export type ResolvedSystem = {
   /** Internal dotted path — the stable identity refs point at. */
   system: string;
@@ -170,9 +252,14 @@ export type ResolvedSystem = {
   alias?: AliasValue;
   algorithm: string;
   algorithmDescription: string;
+  /** Every param the algorithm declares, as written, or as the algorithm's default where nothing is written. */
   params: Record<string, unknown>;
-  /** The top-level params the system wrote itself; the rest of `params` came from `defaults`. */
+  /** The top-level params the system wrote itself. */
   ownParams: string[];
+  /** The params nothing writes, neither the system nor `defaults`; their value in `params` is the algorithm's default. */
+  defaultedParams: string[];
+  /** Each `curve` param, every field filled in, with where it passes through what the algorithm holds fixed. */
+  curves: Record<string, ResolvedCurve>;
   colorParams: ResolvedColorParam[];
   /** What a ref into this system is made of. */
   selector: SelectorShape;
@@ -1087,11 +1174,13 @@ export function resolveDefinition(
       algorithmDescription: sys.algo.description,
       // In the order the algorithm declares them, not the order `defaults` and the system's own block merged in.
       params: Object.fromEntries(
-        Object.keys(sys.algo.params)
-          .filter((key) => key in sys.writtenParams)
-          .map((key) => [key, sys.writtenParams[key]]),
+        Object.entries(sys.algo.params)
+          .filter(([key, kind]) => key in sys.writtenParams || ("default" in kind && kind.default !== undefined))
+          .map(([key, kind]) => [key, key in sys.writtenParams ? sys.writtenParams[key] : "default" in kind ? kind.default : undefined]),
       ),
       ownParams: [...sys.ownParams],
+      defaultedParams: Object.keys(sys.algo.params).filter((key) => !(key in sys.writtenParams)),
+      curves: curvesOf(sys.algo, sys.params, sys.selectorShape, steps),
       colorParams,
       selector: sys.selectorShape,
       steps,

@@ -210,3 +210,23 @@ body.on-dark .tip { box-shadow: 0 8px 28px rgba(0,0,0,0.7), 0 2px 6px rgba(0,0,0
 .copyable .copy:hover { background: var(--hover); color: var(--fg); }
 .tip-name { font-weight: 600; }
 .tip-status { font-size: var(--text-label); color: var(--muted); }
+
+.curve-drawing { display: block; overflow: visible; }
+.curve-drawing-large { width: 100%; height: auto; touch-action: none; margin: 4px 0 8px; }
+.curve-frame { fill: none; stroke: var(--border); }
+.curve-zero { stroke: var(--border); stroke-dasharray: 3 3; }
+.curve-arm { stroke: var(--faint); stroke-width: 1; }
+.curve-line { fill: none; stroke: var(--fg); stroke-width: 1.5; }
+.curve-handle { fill: var(--panel); stroke: var(--link); stroke-width: 1.5; cursor: grab; }
+.curve-end { fill: var(--link); stroke: var(--panel); stroke-width: 1.5; cursor: ns-resize; }
+.curve-anchor { fill: var(--fg); stroke: var(--panel); stroke-width: 1; }
+.curve-editor { width: 320px; }
+.curve-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: var(--text-label); color: var(--muted); }
+.curve-fields label { display: flex; flex-direction: column; gap: 3px; }
+.curve-easing { margin-top: 8px; font-size: var(--text-label); }
+.curve-easing-fields { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-top: 3px; }
+.curve-fields .ref-input, .curve-easing-fields .ref-input { width: 100%; min-width: 0; box-sizing: border-box; }
+.curve-mark { stroke: var(--panel); stroke-width: 1.5; }
+.curve-anchor-ring { fill: none; stroke: var(--fg); stroke-width: 1.5; }
+.curve-axis-label { font-size: 9px; fill: var(--muted); font-family: "SF Mono", ui-monospace, monospace; }
+.curve-label { margin: 0 0 2px; font-size: var(--text-label); color: var(--muted); }

@@ -1,4 +1,5 @@
 import { describe, test } from "node:test";
+import { cubicBezier, curveAt, type Ease } from "../dist/curve-math.js";
 import assert from "node:assert/strict";
 import {
   alphaComposite,
@@ -134,6 +135,28 @@ describe("parseColor", () => {
   test("rejects what it cannot read, naming the context", () => {
     for (const bad of ["ff8000", "#gggggg", "rgb(1,2,3)", "oklch(0.7 0.1)", "color(rec2020 1 0 0)", 123, null, undefined]) {
       assert.throws(() => parseColor(bad, "some param"), /some param/);
+    }
+  });
+});
+
+describe("curve math", () => {
+  const pivot = { at: 400, value: 0.6 };
+  const straight = { from: 1, to: 0, easing: [[0.33, 0.33, 0.67, 0.67], [0.33, 0.33, 0.67, 0.67]] as [Ease, Ease] };
+  test("a curve starts at from, passes through the pivot, and ends at to", () => {
+    const span = { min: 0, max: 1000 };
+    assert.ok(Math.abs(curveAt(straight, pivot, 0, span) - 1) < 1e-9);
+    assert.ok(Math.abs(curveAt(straight, pivot, 400, span) - 0.6) < 1e-9);
+    assert.ok(Math.abs(curveAt(straight, pivot, 1000, span) - 0) < 1e-9);
+  });
+  test("a curve runs across whatever span its field has", () => {
+    const span = { min: 0, max: 100 };
+    const half = { at: 50, value: 0.5 };
+    assert.ok(Math.abs(curveAt(straight, half, 25, span) - 0.75) < 1e-6);
+  });
+  test("the default easing is a straight line, as [0, 0, 1, 1] is", () => {
+    for (const x of [0.1, 0.25, 0.5, 0.9]) {
+      assert.ok(Math.abs(cubicBezier([0.33, 0.33, 0.67, 0.67], x) - x) < 1e-6);
+      assert.ok(Math.abs(cubicBezier([0, 0, 1, 1], x) - x) < 1e-6);
     }
   });
 });

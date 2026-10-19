@@ -1,4 +1,5 @@
 import type { Color } from "./color-math.js";
+import type { CurveValue, Pivot } from "./curve-math.js";
 
 /** What a param is. dtg validates against it and parses it before any hook runs. */
 export type ParamKind =
@@ -6,8 +7,17 @@ export type ParamKind =
   /** `min` and `max` bound the value; dtg rejects one outside them, and the app offers a slider between them. */
   | { kind: "number"; default?: number; min?: number; max?: number }
   | { kind: "choice"; options: string[]; default?: string }
-  | { kind: "list"; of: ParamKind; length?: number }
-  | { kind: "map"; of: ParamKind };
+  | { kind: "list"; of: ParamKind; length?: number; default?: unknown[] }
+  | { kind: "map"; of: ParamKind }
+  /**
+   * One channel as `{ from, to, easing }`, running through a pivot the
+   * algorithm's `curvePivots` supplies. It runs `along` one of the selector's
+   * number fields, across that field's range, which is how a page can place
+   * the system's steps on it. `min` and `max` bound `from` and `to`; a field
+   * left out takes the default's. `label` says what the curve's values
+   * measure and `unit` is written after them, for the page's axis.
+   */
+  | { kind: "curve"; along: string; min: number; max: number; default: CurveValue; label?: string; unit?: string };
 
 /**
  * A system's params as the hooks receive them: every color already a
@@ -46,6 +56,13 @@ export type Algorithm = {
   selector(params: Params): SelectorShape;
   /** Throws with a human message on a selector this system cannot produce. */
   resolve(selector: Selector, params: Params): Color;
+  /** For each `curve` param, where it passes through what the algorithm holds fixed, so an editor can draw it. */
+  curvePivots?(params: Params): Record<string, Pivot>;
+  /**
+   * What a value of a `curve` param looks like, for the editor to paint behind
+   * the curve. Only the editor uses it; outputs come from `resolve` alone.
+   */
+  curveSwatch?(params: Params, name: string, value: number): Color;
 };
 
 /**

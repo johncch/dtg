@@ -143,6 +143,76 @@ Three built-ins, each *total*, with no optional-parameter modes.
   Shadows and scrims. This is why `shadow` is not a baseless tint: what
   kind of value a system produces is the **algorithm's nature**, declared
   once in the systems block, never a per-role flag.
+- **`curve`** (experimental): a ramp drawn through a picked color, shaped
+  by editable curves. See below.
+
+### `curve` (experimental)
+
+Settled 2026-10-19 while trying to replicate Tailwind's palette, which
+`scale` could not: Tailwind's steps are hand-picked, with uneven lightness
+gaps, chroma that peaks at 400 or 600 rather than at the base, and hue that
+turns as warm colors darken. `curve` exists to explore that shape. It is
+experimental: its params may change without a removed-spelling error.
+
+```yaml
+blue:
+  algorithm: curve
+  params:
+    anchor: hues.blue      # the ramp passes through it exactly
+    at: 500                # where the anchor sits
+    gamut: display-p3      # what full chroma is measured against
+    lightness: { from: 0.97, to: 0.25 }   # OKLab lightness
+    chroma: { from: 0.4, to: 0.7 }        # share of the gamut's maximum
+    hue: { from: 0, to: -32, easing: [[0.33, 0.33, 0.67, 0.67], [0.6, 0, 0.8, 1]] }  # degrees from the anchor's
+```
+
+- **The selector is a position, 0–1000,** so `blue(500)` emits
+  `--color-blue-500`. The number is relative to the pick, as in Tailwind
+  and Material 2: `at` declares where the anchor sits, and `blue(at)` is
+  the anchor exactly. A step number does not mean the same lightness across
+  hues. An algorithm whose selector *is* lightness is a separate one
+  (`tone`, on the roadmap), because the selector's meaning is the
+  algorithm's nature.
+- **Three channels, each a curve:** lightness (OKLab L), chroma (a share of
+  the most `gamut` holds at that lightness and hue), and hue (degrees from
+  the anchor's). A curve runs `from` its value at 0, through the anchor's
+  own value at `at`, `to` its value at 1000. `easing` is two CSS
+  `cubic-bezier(x1, y1, x2, y2)` lists, before the anchor and after it: x in
+  0–1, y free, so a curve can overshoot. The default,
+  `[0.33, 0.33, 0.67, 0.67]`, is a straight line with its handles a third of
+  the way along, where the editor can grab them. A field left out takes the
+  default's, so `{ from: 0.4, to: 0.7 }` is a whole curve.
+- **`curve` is a param kind,** not something only this algorithm knows. An
+  algorithm declares `{ kind: "curve", along, min, max, default }`; dtg
+  checks the fields, the bounds and the easing, and fills what is left out.
+  `along` names the selector field the curve runs along, here `stop`, and
+  the curve spans that field's range. Where it passes through what the
+  algorithm holds fixed comes from the optional `curvePivots(params)` hook;
+  the math that runs a curve through its pivot is one function, `curveAt`,
+  shared by the algorithm and the page.
+- **The page draws a curve from what the algorithm produces,** not from
+  drawing instructions. Because the curve runs along a selector field, dtg
+  resolves the system at evenly spaced points along it and sends those
+  colors with the curve, and places each emitted step on it by reading the
+  step's value for that field. The page shows the colors as a strip under
+  the curve and the steps as dots in their own colors; both follow a drag,
+  since previews are resolved like everything else.
+- **One control per curve.** In `dtg dev` a curve param is a chip in the
+  params row showing the curve in small, with the anchor marked. It opens
+  like a number param does: the curve to drag (its ends up and down, its
+  four easing handles anywhere) with `from`, `to` and the easing as numbers
+  below, tried live on the page and kept on close. An edit writes the whole
+  curve as one flow map.
+- **Chroma as a share of the maximum** keeps every step inside `gamut` while
+  the shares stay at or below 1, and lets chroma peak where the gamut is
+  widest without a param for it. An anchor outside `gamut` has a share above
+  1 and pulls its neighbors out with it; the outputs map them.
+- **`gamut` defaults to `display-p3`,** the most vivid rendition that stays
+  compatible: P3 screens get the full color and the CSS carries the nearest
+  sRGB color for the rest. On sRGB screens, neighboring steps past the sRGB
+  edge land on it together, so a shaped chroma curve looks flatter there.
+  `gamut: srgb` keeps the curve exact everywhere.
+- The math is OKLCH from OKLab throughout, like `scale`.
 
 ### The seam: color-math owns color, algorithms own vocabulary
 
@@ -264,6 +334,12 @@ base hue, which made a gray base lock to noise.
 - `resolve(selector, params)` returns a color. The selector arrives parsed,
   one value per field plus `form`. It throws with a human-readable message
   on a selector the system cannot produce.
+- `curvePivots(params)` is optional: for each `curve` param, the position
+  and value it passes through, so the page can draw the curve. Only an
+  algorithm with curve params has it.
+- `curveSwatch(params, name, value)` is optional: the color a value of a
+  `curve` param stands for, painted behind the curve in the editor. It never
+  reaches an output.
 
 There are no naming or ordering hooks. A step's public name is its fields
 joined by `-`, then the form (`sky(3.5 tint)` emits as `3_5-tint`), and steps sort
@@ -452,6 +528,14 @@ Anything outside those three is a real defect. Promoting this check into a
       sRGB edge drawn along the seams.
 - [ ] Rolls that keep the locked colors' lightness and chroma and vary only
       hue.
+- [x] `curve` editor: each curve param is one chip, a small drawing of the
+      curve, that opens to drag the curve and type its numbers.
+- [ ] `tone`: an algorithm whose selector is lightness itself, as in
+      Material 3's tonal palettes, so `blue(40)` and `red(40)` are equally
+      light and a tone difference carries a known contrast. Faithful HCT
+      (CIELAB L* for tone) rather than an OKLCH analog, because the contrast
+      guarantee is the reason to choose it; Google publishes the math as
+      `@material/material-color-utilities` under Apache 2.0.
 - [ ] Multi-file definitions (`shadows.dtg.yaml`, `type.dtg.yaml` as
       siblings, one resolver over all). Discovery exists; merging does not.
 - [ ] Designer tweaking in the browser: controls POST param changes, the

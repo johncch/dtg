@@ -1,5 +1,6 @@
 import { parseColor, type Color } from "./color-math.js";
 import type { Algorithm, ColorParam, ParamKind, Params } from "./contract.js";
+import type { CurveValue, Ease } from "./curve-math.js";
 
 /** A color param, and the constant it names when it names one rather than writing a color. */
 export type ParsedColorParam = ColorParam & { constant: string | null };
@@ -75,6 +76,8 @@ export function parseParams(
         return value.map((item, index) =>
           parseValue(kind.of, item, `${path}.${index}`),
         );
+      case "curve":
+        return parseCurve(kind, value, context);
       case "map":
         if (value == null || typeof value !== "object" || Array.isArray(value)) {
           throw new Error(`${context}: expected a map`);
@@ -100,4 +103,41 @@ export function parseParams(
     }
   }
   return { values, colors };
+}
+
+/** `{ from, to, easing }`, each field optional and defaulted, nothing else. */
+function parseCurve(kind: Extract<ParamKind, { kind: "curve" }>, value: unknown, context: string): CurveValue {
+  if (value == null || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${context}: expected a curve, { from, to, easing }`);
+  }
+  const written = value as Record<string, unknown>;
+  for (const key of Object.keys(written)) {
+    if (!["from", "to", "easing"].includes(key)) {
+      throw new Error(`${context}: unknown field "${key}" (a curve has from, to and easing)`);
+    }
+  }
+  const end = (field: "from" | "to"): number => {
+    const n = written[field] ?? kind.default[field];
+    if (typeof n !== "number" || !Number.isFinite(n)) {
+      throw new Error(`${context}.${field}: expected a number, got ${JSON.stringify(n)}`);
+    }
+    if (n < kind.min || n > kind.max) {
+      throw new Error(`${context}.${field}: expected ${kind.min}–${kind.max}, got ${n}`);
+    }
+    return n;
+  };
+  const easing = written.easing ?? kind.default.easing;
+  const sides = ["before the pivot", "after it"];
+  if (!Array.isArray(easing) || easing.length !== 2) {
+    throw new Error(`${context}.easing: expected two cubic-bezier lists, ${sides.join(" and ")}`);
+  }
+  for (const [side, ease] of easing.entries()) {
+    if (!Array.isArray(ease) || ease.length !== 4 || ease.some((n) => typeof n !== "number" || !Number.isFinite(n))) {
+      throw new Error(`${context}.easing, ${sides[side]}: expected four numbers, as in CSS cubic-bezier(), got ${JSON.stringify(ease)}`);
+    }
+    if (ease[0] < 0 || ease[0] > 1 || ease[2] < 0 || ease[2] > 1) {
+      throw new Error(`${context}.easing, ${sides[side]}: x values must be 0–1, as in CSS cubic-bezier(); got [${ease.join(", ")}]`);
+    }
+  }
+  return { from: end("from"), to: end("to"), easing: easing as [Ease, Ease] };
 }

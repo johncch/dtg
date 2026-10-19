@@ -13,20 +13,23 @@ export function NumberParam({
   target,
   range,
   shared,
+  defaulted = false,
 }: {
   name: string;
   value: number;
   target: EditTarget;
   range: Range | null;
   shared: boolean;
+  /** Nothing writes it; the value is the algorithm's default, and an edit writes it into the system. */
+  defaulted?: boolean;
 }) {
   const label = (
     <span>
-      <code>{value}</code>
-      {shared && (
+      <code className={defaulted ? "muted" : undefined}>{value}</code>
+      {(shared || defaulted) && (
         <>
           <br />
-          <span className="muted">shared</span>
+          <span className="muted">{shared ? "shared" : "default"}</span>
         </>
       )}
     </span>
