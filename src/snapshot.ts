@@ -1,7 +1,7 @@
 import { parseColor, type Color, type Gamut } from "./color-math.js";
 import type { SelectorShape } from "./contract.js";
 import { DEFAULT_BACKGROUNDS, type Background } from "./dev-settings.js";
-import type { Edit } from "./edit.js";
+import { anchorsOf, type Edit, type ParamAnchor } from "./edit.js";
 import type { Change } from "./working-copy.js";
 import {
   algorithmFor,
@@ -98,6 +98,8 @@ export type SnapshotSystem = {
   numberRanges: Record<string, { min: number; max: number }>;
   /** The options the algorithm declares for its choice params, by name, for a control to pick among. */
   choices: Record<string, string[]>;
+  /** The system's own params that carry a YAML anchor others share, or are an alias of one, by name. */
+  anchors: Record<string, ParamAnchor>;
   /** Which of `params` are colors, so the page knows what can be edited. */
   colorParams: ResolvedColorParam[];
   /** What a ref into this system is made of, so the page can draw a control for each part. */
@@ -183,6 +185,7 @@ export function buildSnapshot({
       curves: system.curves,
       numberRanges: numberRangesOf(system.algorithm),
       choices: choicesOf(system.algorithm),
+      anchors: anchorsOf(definition.text, system.system),
       colorParams: system.colorParams,
       selector: system.selector,
       steps: system.steps.map((step) => ({

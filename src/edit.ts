@@ -1,4 +1,4 @@
-import { isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
+import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
 import { INHERIT } from "./selector.js";
 
 /** One value written in a definition: an authored color, or the ref a role holds for a mode. */
@@ -97,6 +97,12 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       text = withConstantAdded(text, edit.target, edit.value);
       continue;
     }
+    const alias = aliasOnTheWay(text, edit.target);
+    if (alias) {
+      throw new Error(
+        `${describeTarget(edit.target)} is \`*${alias.name}\`, a YAML alias of the value anchored at ${alias.anchoredAt ?? `\`&${alias.name}\``} — edit it there, which changes every place it is used, or write a value of its own here`,
+      );
+    }
     const structure = structureSource(edit.value) != null ? structureAt(text, edit.target) : null;
     if (structure) {
       text = text.slice(0, structure.start) + structureSource(edit.value) + text.slice(structure.end);
@@ -139,6 +145,53 @@ export function readValue(yamlText: string, target: EditTarget): string | null {
 }
 
 type Located = Scalar & { range: NonNullable<Scalar["range"]> };
+
+/**
+ * An alias on the way to a target, and where its anchor is written. Writing
+ * through one would either change every place the anchor is used or nothing,
+ * and which is meant is not the editor's to guess.
+ */
+function aliasOnTheWay(yamlText: string, target: EditTarget): { name: string; anchoredAt: string | null } | null {
+  const doc = parseDocument(yamlText);
+  const keys = keysOf(target, doc);
+  for (let depth = 1; depth <= keys.length; depth++) {
+    const node = doc.getIn(keys.slice(0, depth), true);
+    if (isAlias(node)) return { name: node.source, anchoredAt: anchorPath(doc.contents, node.source) };
+    if (isSeq(node) && depth < keys.length) keys[depth] = Number(keys[depth]);
+  }
+  return null;
+}
+
+/** The dotted path of the value carrying `&name`, or null when no value in the document does. */
+function anchorPath(node: unknown, name: string, keys: string[] = []): string | null {
+  const entries: [string, unknown][] = isMap(node)
+    ? node.items.map((pair) => [isScalar(pair.key) ? String(pair.key.value) : "?", pair.value])
+    : isSeq(node)
+      ? node.items.map((item, index) => [String(index), item])
+      : [];
+  for (const [key, value] of entries) {
+    if ((value as Node | null)?.anchor === name) return [...keys, key].join(".");
+    const found = anchorPath(value, name, [...keys, key]);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** For a system's own params: which carry an anchor (`&name`) other values share, and which are aliases (`*name`) of one. */
+export type ParamAnchor = { name: string; role: "anchor" | "alias" };
+
+export function anchorsOf(yamlText: string, system: string): Record<string, ParamAnchor> {
+  const params = parseDocument(yamlText).getIn(["systems", ...system.split("."), "params"], true);
+  if (!isMap(params)) return {};
+  const found: Record<string, ParamAnchor> = {};
+  for (const pair of params.items) {
+    if (!isScalar(pair.key)) continue;
+    const key = String(pair.key.value);
+    if (isAlias(pair.value)) found[key] = { name: pair.value.source, role: "alias" };
+    else if ((pair.value as Node | null)?.anchor) found[key] = { name: (pair.value as Node).anchor!, role: "anchor" };
+  }
+  return found;
+}
 
 function writtenAt(yamlText: string, target: EditTarget): unknown {
   const doc = parseDocument(yamlText);

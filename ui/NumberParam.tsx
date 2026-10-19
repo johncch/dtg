@@ -12,29 +12,33 @@ export function NumberParam({
   value,
   target,
   range,
-  shared,
-  defaulted = false,
+  note = null,
+  dim = false,
+  readOnly = false,
 }: {
   name: string;
   value: number;
   target: EditTarget;
   range: Range | null;
-  shared: boolean;
-  /** Nothing writes it; the value is the algorithm's default, and an edit writes it into the system. */
-  defaulted?: boolean;
+  /** Where the value comes from, when that is not simply the system: "default", "shared", "shared as &name", "same as &name". */
+  note?: string | null;
+  /** Shown faded: nothing writes it, so it is the algorithm's default. */
+  dim?: boolean;
+  /** Shown but not editable here, such as a YAML alias whose value is written elsewhere. */
+  readOnly?: boolean;
 }) {
   const label = (
     <span>
-      <code className={defaulted ? "muted" : undefined}>{value}</code>
-      {(shared || defaulted) && (
+      <code className={dim ? "muted" : undefined}>{value}</code>
+      {note && (
         <>
           <br />
-          <span className="muted">{shared ? "shared" : "default"}</span>
+          <span className="muted">{note}</span>
         </>
       )}
     </span>
   );
-  if (STATIC) return <span className="chip">{label}</span>;
+  if (STATIC || readOnly) return <span className="chip">{label}</span>;
   return (
     <Popup title={`Edit ${name}`} className="chip chip-editable number-param" label={label} focus="field">
       {(panel) => <NumberEditor name={name} original={value} target={target} range={range} panel={panel} />}

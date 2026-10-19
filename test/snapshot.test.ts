@@ -72,6 +72,26 @@ systems:
     assert.deepEqual(snapshot.systems[0].choices, {});
   });
 
+  test("a system lists which of its params carry a YAML anchor and which are aliases of one", () => {
+    const text = `
+dtg: 1
+systems:
+  red: { algorithm: curve, params: { anchor: "#ef4444", at: &at 400 }, emit: [500] }
+  blue: { algorithm: curve, params: { anchor: "#3b82f6", at: *at }, emit: [500] }
+`;
+    const anchored = buildSnapshot({
+      resolved: resolveDefinition(text),
+      lineage: new Map(),
+      error: null,
+      stale: false,
+      gamut: "display-p3",
+      changes: [],
+      definition: { path: "colors.dtg.yaml", text },
+    });
+    assert.deepEqual(anchored.systems.find((s) => s.system === "red")!.anchors, { at: { name: "at", role: "anchor" } });
+    assert.deepEqual(anchored.systems.find((s) => s.system === "blue")!.anchors, { at: { name: "at", role: "alias" } });
+  });
+
   test("an overridden step keeps what the algorithm generated", () => {
     const sky = snapshot.systems.find((s) => s.system === "sky")!;
     assert.equal(sky.steps[0].generated, null);

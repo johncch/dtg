@@ -110,26 +110,38 @@ function ParamValue({ value, path, system }: { value: unknown; path: string; sys
   // Where the value comes from decides where an edit goes: a param the
   // system writes, or the algorithm's default, is written into the system; one
   // from the `defaults` block is shared, and editing it moves every system.
+  // A YAML anchor is shared with every alias of it, so editing it is a shared
+  // edit; an alias's value is written elsewhere and cannot be edited here.
   const top = path.split(".")[0];
   const defaulted = system.defaultedParams.includes(top);
   const shared = !defaulted && !system.ownParams.includes(top);
-  const source = defaulted ? "default" : shared ? "shared" : null;
+  const anchor = system.anchors[top];
+  const note = anchor
+    ? anchor.role === "anchor"
+      ? `shared as &${anchor.name}`
+      : `same as &${anchor.name}`
+    : defaulted
+      ? "default"
+      : shared
+        ? "shared"
+        : null;
+  const readOnly = anchor?.role === "alias";
   const target: EditTarget = shared
     ? { kind: "default", algorithm: system.algorithm, path }
     : { kind: "param", system: system.system, path };
   const curve = system.curves[path];
-  if (curve) return <CurveParam name={path} curve={curve} target={target} source={source} />;
+  if (curve) return <CurveParam name={path} curve={curve} target={target} note={note} dim={defaulted} readOnly={readOnly} />;
   const colorParam = colorParams.find((param) => param.path === path);
   if (colorParam) {
     return (
-      <ColorChip color={colorParam.color} label={String(value)} edit={target} named={colorParam.constant}>
-        {shared && <span className="muted">shared</span>}
+      <ColorChip color={colorParam.color} label={String(value)} edit={readOnly ? undefined : target} named={colorParam.constant}>
+        {note && <span className="muted">{note}</span>}
       </ColorChip>
     );
   }
   const options = system.choices[path];
   if (options && typeof value === "string") {
-    return <ChoiceParam name={path} value={value} options={options} target={target} source={source} />;
+    return <ChoiceParam name={path} value={value} options={options} target={target} note={note} dim={defaulted} readOnly={readOnly} />;
   }
   if (typeof value === "number") {
     return (
@@ -138,8 +150,9 @@ function ParamValue({ value, path, system }: { value: unknown; path: string; sys
         value={value}
         target={target}
         range={system.numberRanges[path] ?? null}
-        shared={target.kind === "default"}
-        defaulted={defaulted}
+        note={note}
+        dim={defaulted}
+        readOnly={readOnly}
       />
     );
   }

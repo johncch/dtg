@@ -14,27 +14,33 @@ export function CurveParam({
   name,
   curve,
   target,
-  source,
+  note,
+  dim = false,
+  readOnly = false,
 }: {
   name: string;
   curve: ResolvedCurve;
   target: EditTarget;
-  /** Where the value comes from when the system does not write it: the algorithm's default, or the shared `defaults` block. */
-  source: "default" | "shared" | null;
+  /** Where the value comes from, when that is not simply the system: "default", "shared", "shared as &name", "same as &name". */
+  note: string | null;
+  /** Shown faded: nothing writes it, so it is the algorithm's default. */
+  dim?: boolean;
+  /** Shown but not editable here, such as a YAML alias whose value is written elsewhere. */
+  readOnly?: boolean;
 }) {
   const range = displayRange(curve);
   const label = (
     <span>
       <CurveDrawing curve={curve.value} drawn={curve} range={range} width={72} height={32} />
-      {source && (
+      {note && (
         <>
           <br />
-          <span className="muted">{source}</span>
+          <span className="muted">{note}</span>
         </>
       )}
     </span>
   );
-  if (STATIC) return <span className="chip">{label}</span>;
+  if (STATIC || readOnly) return <span className="chip">{label}</span>;
   return (
     <Popup title={`Edit ${name}`} className="chip chip-editable curve-param" label={label} focus="panel">
       {(panel) => <CurveEditor name={name} original={curve} range={range} target={target} panel={panel} />}

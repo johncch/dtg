@@ -10,27 +10,33 @@ export function ChoiceParam({
   value,
   options,
   target,
-  source,
+  note,
+  dim = false,
+  readOnly = false,
 }: {
   name: string;
   value: string;
   options: string[];
   target: EditTarget;
-  /** Where the value comes from when the system does not write it: the algorithm's default, or the shared `defaults` block. */
-  source: "default" | "shared" | null;
+  /** Where the value comes from, when that is not simply the system: "default", "shared", "shared as &name", "same as &name". */
+  note: string | null;
+  /** Shown faded: nothing writes it, so it is the algorithm's default. */
+  dim?: boolean;
+  /** Shown but not editable here, such as a YAML alias whose value is written elsewhere. */
+  readOnly?: boolean;
 }) {
   const label = (
     <span>
-      <code className={source === "default" ? "muted" : undefined}>{value}</code>
-      {source && (
+      <code className={dim ? "muted" : undefined}>{value}</code>
+      {note && (
         <>
           <br />
-          <span className="muted">{source}</span>
+          <span className="muted">{note}</span>
         </>
       )}
     </span>
   );
-  if (STATIC) return <span className="chip">{label}</span>;
+  if (STATIC || readOnly) return <span className="chip">{label}</span>;
   return (
     <Popup title={`Edit ${name}`} className="chip chip-editable choice-param" label={label} focus="panel">
       {(panel) => <ChoiceEditor name={name} original={value} options={options} target={target} panel={panel} />}

@@ -139,6 +139,23 @@ palette:
     assert.equal(readValue(block, target), JSON.stringify({ from: 0.9, to: 0.3 }));
   });
 
+  test("an anchored value is edited in place, keeping its anchor, so every alias follows", () => {
+    const anchored = SRC.replace(`params: { base: "#fafdff", tint: "#001a28" }`, `params: { base: &paper "#fafdff", tint: "#001a28" }`)
+      .replace(`params: { base: "#03a2e8" }`, `params: { base: *paper }`);
+    const edited = applyEdits(anchored, [{ action: "set", target: { kind: "param", system: "sky", path: "base" }, value: "#ffffff" }]);
+    assert.match(edited, /base: &paper "#ffffff"/);
+    assert.match(edited, /base: \*paper/);
+  });
+
+  test("an edit through an alias is refused, naming where the anchor is written", () => {
+    const aliased = SRC.replace(`params: { base: "#fafdff", tint: "#001a28" }`, `params: { base: &paper "#fafdff", tint: "#001a28" }`)
+      .replace(`params: { base: "#03a2e8" }`, `params: { base: *paper }`);
+    assert.throws(
+      () => applyEdits(aliased, [{ action: "set", target: { kind: "param", system: "theme", path: "base" }, value: "#ffffff" }]),
+      /theme base is `\*paper`, a YAML alias of the value anchored at systems\.sky\.params\.base — edit it there/,
+    );
+  });
+
   test("a target with nowhere to be added is an error, not a new key", () => {
     assert.throws(
       () => applyEdits(SRC, [{ action: "set", target: { kind: "param", system: "nope", path: "glow" }, value: "#fff" }]),
