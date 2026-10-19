@@ -10,22 +10,22 @@ export function ChoiceParam({
   value,
   options,
   target,
-  defaulted,
+  source,
 }: {
   name: string;
   value: string;
   options: string[];
   target: EditTarget;
-  /** Nothing writes it; the value is the algorithm's default, and picking one writes it into the system. */
-  defaulted: boolean;
+  /** Where the value comes from when the system does not write it: the algorithm's default, or the shared `defaults` block. */
+  source: "default" | "shared" | null;
 }) {
   const label = (
     <span>
-      <code className={defaulted ? "muted" : undefined}>{value}</code>
-      {defaulted && (
+      <code className={source === "default" ? "muted" : undefined}>{value}</code>
+      {source && (
         <>
           <br />
-          <span className="muted">default</span>
+          <span className="muted">{source}</span>
         </>
       )}
     </span>

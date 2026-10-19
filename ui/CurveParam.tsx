@@ -14,21 +14,22 @@ export function CurveParam({
   name,
   curve,
   target,
-  defaulted,
+  source,
 }: {
   name: string;
   curve: ResolvedCurve;
   target: EditTarget;
-  defaulted: boolean;
+  /** Where the value comes from when the system does not write it: the algorithm's default, or the shared `defaults` block. */
+  source: "default" | "shared" | null;
 }) {
   const range = displayRange(curve);
   const label = (
     <span>
       <CurveDrawing curve={curve.value} drawn={curve} range={range} width={72} height={32} />
-      {defaulted && (
+      {source && (
         <>
           <br />
-          <span className="muted">default</span>
+          <span className="muted">{source}</span>
         </>
       )}
     </span>

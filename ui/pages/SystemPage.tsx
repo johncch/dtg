@@ -107,47 +107,31 @@ function Params({ system }: { system: SnapshotSystem }) {
 
 function ParamValue({ value, path, system }: { value: unknown; path: string; system: SnapshotSystem }) {
   const { colorParams } = system;
+  // Where the value comes from decides where an edit goes: a param the
+  // system writes, or the algorithm's default, is written into the system; one
+  // from the `defaults` block is shared, and editing it moves every system.
+  const top = path.split(".")[0];
+  const defaulted = system.defaultedParams.includes(top);
+  const shared = !defaulted && !system.ownParams.includes(top);
+  const source = defaulted ? "default" : shared ? "shared" : null;
+  const target: EditTarget = shared
+    ? { kind: "default", algorithm: system.algorithm, path }
+    : { kind: "param", system: system.system, path };
   const curve = system.curves[path];
-  if (curve) {
-    return (
-      <CurveParam
-        name={path}
-        curve={curve}
-        target={{ kind: "param", system: system.system, path }}
-        defaulted={system.defaultedParams.includes(path)}
-      />
-    );
-  }
+  if (curve) return <CurveParam name={path} curve={curve} target={target} source={source} />;
   const colorParam = colorParams.find((param) => param.path === path);
   if (colorParam) {
-    const target: EditTarget =
-      colorParam.from === "defaults"
-        ? { kind: "default", algorithm: system.algorithm, path }
-        : { kind: "param", system: system.system, path };
     return (
       <ColorChip color={colorParam.color} label={String(value)} edit={target} named={colorParam.constant}>
-        {colorParam.from === "defaults" && <span className="muted">shared</span>}
+        {shared && <span className="muted">shared</span>}
       </ColorChip>
     );
   }
-  const defaulted = system.defaultedParams.includes(path.split(".")[0]);
   const options = system.choices[path];
   if (options && typeof value === "string") {
-    return (
-      <ChoiceParam
-        name={path}
-        value={value}
-        options={options}
-        target={{ kind: "param", system: system.system, path }}
-        defaulted={defaulted}
-      />
-    );
+    return <ChoiceParam name={path} value={value} options={options} target={target} source={source} />;
   }
   if (typeof value === "number") {
-    const target: EditTarget =
-      defaulted || system.ownParams.includes(path.split(".")[0])
-        ? { kind: "param", system: system.system, path }
-        : { kind: "default", algorithm: system.algorithm, path };
     return (
       <NumberParam
         name={path}
