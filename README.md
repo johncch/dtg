@@ -74,6 +74,61 @@ The result is a two-tier model: systems and roles. Roles point directly
 into systems, and each reference carries the reasoning. A new need can be
 expressed as one new decision instead of a reclassification of the scale.
 
+## Starting from the colors you have
+
+Most palettes were picked, not derived. dtg does not ask you to invent a
+recipe before you start.
+
+**Bring the palette as it is.** Put your hexes in `palette`, name your
+roles, and point them at those colors. A definition with no systems is
+valid: you get roles, modes, CSS and DTCG output, and the browser on day
+one.
+
+```yaml
+palette:
+  gray:
+    50: "#f7f8f9"
+    100: "#eef0f2"
+    300: "#c9ced3"
+    500: "#8a929a"
+    900: "#1d2125"
+
+core:
+  surface:
+    canvas: [gray.50]
+    card: [gray.100]
+  separator: [gray.300]
+  label:
+    secondary: [gray.500]
+    primary: [gray.900]
+```
+
+**Promote ramps into systems.** Where a group of picks is really a ramp,
+replace it with a system and compare the two in `dtg dev`. Pin a step that
+must stay exact with `overrides`. The role names don't change, so neither
+does any component that uses them.
+
+```yaml
+systems:
+  gray:
+    algorithm: tint
+    params: { base: "#ffffff", tint: "#1d2125" }
+    overrides: { "7": "#eef0f2" }
+
+core:
+  surface:
+    canvas: [gray(3)]
+    card: [gray(7)]
+  separator: [gray(22)]
+  label:
+    secondary: [gray(52)]
+    primary: [gray(100)]
+```
+
+**Keep real picks as picks.** A brand color handed over by a designer
+belongs in `palette`. dtg only asks that roles point at it rather than
+repeat it.
+
 ## How this relates to DTCG and Style Dictionary
 
 DTCG and Style Dictionary store values and transform them between formats.
@@ -299,7 +354,7 @@ core: # any non-reserved top-level key is a section you name;
     re-runs the recipe rather than transforming the output.
 - One meaning each: **`.` navigates, parentheses hand off.** Inside them,
   spaces separate — never commas, which end an item in a `[ ]` list.
-- **A raw color is legal only inside `systems`.** A color literal is
+- **A raw color is legal only inside `palette` and `systems`.** A color literal is
   `#rgb`, `#rrggbb`, `oklch(L C H)`, `oklab(L a b)`, `color(srgb r g b)` or
   `color(display-p3 r g b)`, each with an optional `/ alpha`. A color keeps
   the space it was written in, so a wide-gamut anchor is not clipped to sRGB

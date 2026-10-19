@@ -1,7 +1,19 @@
 {
   "name": "@fifthrevision/dtg",
   "version": "0.3.0",
-  "description": "Design token generator: design decisions as a YAML definition, compiled deterministically into CSS, Figma payloads, and a browsable dev server.",
+  "description": "Store colors as algorithms, not hexes. Design tokens from a YAML definition of how your colors are made, compiled to CSS and DTCG.",
+  "license": "MIT",
+  "keywords": [
+    "design-tokens",
+    "design-system",
+    "dtcg",
+    "color",
+    "palette",
+    "oklch",
+    "css-variables",
+    "theming",
+    "dark-mode"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/johncch/dtg.git"
