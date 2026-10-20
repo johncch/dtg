@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { version } from "../package.json";
 import type { Snapshot, SnapshotSystem } from "../src/snapshot.js";
@@ -8,7 +9,7 @@ import { TryingProvider } from "./preview.js";
 import { ConstantsPage } from "./pages/ConstantsPage.js";
 import { DefinitionPage, fileName } from "./pages/DefinitionPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
-import { DomainPage, RolesPage } from "./pages/DomainPage.js";
+import { GroupPage, RolesPage } from "./pages/GroupPage.js";
 import { OverviewPage } from "./pages/OverviewPage.js";
 import { PalettePage, palettesOf } from "./pages/PalettePage.js";
 import { SystemPage } from "./pages/SystemPage.js";
@@ -64,7 +65,7 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
 }
 
 function Nav({ snapshot }: { snapshot: Snapshot }) {
-  const domains = [...new Set(snapshot.roles.map((role) => role.domain))];
+  const sections = [...new Set(snapshot.roles.map((role) => role.section))];
   return (
     <>
       <h1>
@@ -88,9 +89,18 @@ function Nav({ snapshot }: { snapshot: Snapshot }) {
         )}
         <h2>Systems</h2>
         <SystemLinks nodes={systemTree(snapshot.systems)} notes={snapshot.groupNotes.systems} />
-        <h2>Roles</h2>
-        {domains.length > 0 && <Link to={{ page: "roles" }}>all</Link>}
-        <DomainLinks nodes={domainTree(domains)} />
+        {sections.map((section) => (
+          <Fragment key={section}>
+            <h2>{section}</h2>
+            <Link to={{ page: "roles", section }}>all</Link>
+            <GroupLinks
+              notes={snapshot.groupNotes.roles}
+              nodes={groupTree([
+                ...new Set(snapshot.roles.filter((role) => role.section === section && role.group !== "").map((role) => role.group)),
+              ])}
+            />
+          </Fragment>
+        ))}
       </nav>
     </>
   );
@@ -133,39 +143,46 @@ function SystemLinks({ nodes, notes }: { nodes: SystemNode[]; notes: Record<stri
   );
 }
 
-/** Domains nest by their dotted names; a name that is a domain links to its page, one that only holds others is a label. */
-type DomainNode = { name: string; domain: string | null; children: DomainNode[] };
+/** Role groups nest by their dotted names; a name that holds roles links to its page, one that only holds groups is a label. */
+type GroupNode = { name: string; group: string | null; children: GroupNode[] };
 
-function domainTree(domains: string[]): DomainNode[] {
-  const roots: DomainNode[] = [];
-  for (const domain of domains) {
+function groupTree(groups: string[]): GroupNode[] {
+  const roots: GroupNode[] = [];
+  for (const group of groups) {
     let level = roots;
-    const names = domain.split(".");
+    const names = group.split(".");
     names.forEach((name, index) => {
       let node = level.find((candidate) => candidate.name === name);
-      if (!node) level.push((node = { name, domain: null, children: [] }));
-      if (index === names.length - 1) node.domain = domain;
+      if (!node) level.push((node = { name, group: null, children: [] }));
+      if (index === names.length - 1) node.group = group;
       level = node.children;
     });
   }
   return roots;
 }
 
-function DomainLinks({ nodes }: { nodes: DomainNode[] }) {
-  return nodes.map((node) => (
-    <div key={node.name}>
-      {node.domain ? (
-        <Link to={{ page: "domain", name: node.domain }}>{node.name}</Link>
-      ) : (
-        <div className="nav-group-name">{node.name}</div>
-      )}
-      {node.children.length > 0 && (
-        <div className="nav-group-items">
-          <DomainLinks nodes={node.children} />
-        </div>
-      )}
-    </div>
-  ));
+function GroupLinks({ nodes, notes, prefix = "" }: { nodes: GroupNode[]; notes: Record<string, string>; prefix?: string }) {
+  return nodes.map((node) => {
+    const path = prefix + node.name;
+    return (
+      <div key={node.name}>
+        {node.group ? (
+          <Link to={{ page: "group", name: node.group }} title={notes[path]}>
+            {node.name}
+          </Link>
+        ) : (
+          <div className="nav-group-name" title={notes[path]}>
+            {node.name}
+          </div>
+        )}
+        {node.children.length > 0 && (
+          <div className="nav-group-items">
+            <GroupLinks nodes={node.children} notes={notes} prefix={`${path}.`} />
+          </div>
+        )}
+      </div>
+    );
+  });
 }
 
 function Banner({ snapshot }: { snapshot: Snapshot }) {
@@ -215,16 +232,19 @@ function Page({ route, snapshot }: { route: Route; snapshot: Snapshot }) {
       <NotFound what={`palette "${route.name}" — no group of constants has that path`} />
     );
   }
-  if (route.page === "domain") {
-    return snapshot.roles.some((role) => role.domain === route.name) ? (
-      <DomainPage snapshot={snapshot} domain={route.name} />
+  if (route.page === "group") {
+    return snapshot.roles.some((role) => role.group === route.name) ? (
+      <GroupPage snapshot={snapshot} group={route.name} />
     ) : (
-      <NotFound what={`domain "${route.name}"`} />
+      <NotFound what={`group of roles "${route.name}"`} />
     );
   }
   if (route.page === "system") {
     const system = snapshot.systems.find((candidate) => candidate.system === route.name);
     return system ? <SystemPage system={system} /> : <NotFound what={`system "${route.name}"`} />;
   }
-  return <RolesPage snapshot={snapshot} />;
+  if (route.page === "roles" && route.section != null && !snapshot.roles.some((role) => role.section === route.section)) {
+    return <NotFound what={`section "${route.section}"`} />;
+  }
+  return <RolesPage key={route.page === "roles" ? (route.section ?? "") : ""} snapshot={snapshot} section={route.page === "roles" ? route.section : undefined} />;
 }

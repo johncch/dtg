@@ -45,7 +45,7 @@ export type Snapshot = {
   systems: SnapshotSystem[];
   constants: SnapshotConstant[];
   roles: SnapshotRole[];
-  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role domains. */
+  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role groups. */
   groupNotes: { systems: Record<string, string>; palette: Record<string, string>; roles: Record<string, string> };
 };
 
@@ -64,7 +64,8 @@ export type SnapshotBackground = {
 };
 
 export type SnapshotUse = {
-  domain: string;
+  section: string;
+  group: string;
   role: string;
   mode: string;
   translucent: boolean;
@@ -120,7 +121,7 @@ export type SnapshotConstant = {
 
 export type SnapshotRole = {
   section: string;
-  domain: string;
+  group: string;
   role: string;
   /** The role's hand-written description, or null. */
   note: string | null;
@@ -211,7 +212,7 @@ export function buildSnapshot({
     groupNotes: resolved.groupDescriptions,
     roles: resolved.roles.map((role) => ({
       section: role.section,
-      domain: role.domain,
+      group: role.group,
       role: role.role,
       note: role.description ?? null,
       perMode: role.perMode.map((entry, index) => ({

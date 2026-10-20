@@ -139,7 +139,7 @@ from and how they remain coherent as the system changes.
 
 ## Principles
 
-1. **Open vocabulary, fixed contract.** Domains, roles, systems, algorithm
+1. **Open vocabulary, fixed contract.** Collections, groups, roles, systems, algorithm
    params, and selectors can grow with the project. The plumbing stays
    stable so the tooling can remain generic.
 2. **Deterministic generation.** The same definition produces the same
@@ -267,7 +267,7 @@ Precedence: CLI flags, then `dtg.config.yaml`, then convention defaults.
 ## The definition file
 
 A new project can start around fifteen lines and grow one decision at a
-time. The example below shows the full shape, but each section is optional.
+time. The example below shows the full shape, but each part is optional.
 
 ```yaml
 dtg: 1 # grammar version
@@ -301,8 +301,8 @@ defaults: # shared params, per algorithm
     hueShift: 15
     midpoint: 0.4
 
-core: # any non-reserved top-level key is a section you name;
-  surface: #   each section becomes a design-tool collection
+core: # any non-reserved top-level key is a collection you name;
+  surface: #   a group: part of every role's name below it
     canvas: [sky(3), night(0)] # one ref per mode
     card: [sky(0), night(4)]
     floating: [surface.card, night(6)] # roles can point at roles
@@ -347,7 +347,7 @@ core: # any non-reserved top-level key is a section you name;
     spaces (`sky(3)` is 3% ink,
     `sky(3 tint)` is that ink uncomposited, `theme(600)` is a stop name,
     `warm-wash.red(6)` is a tint in a group, 6% red over its base)
-  - `domain.role` — another decision in the same mode
+  - `group.role` — another decision in the same mode (just `role` for one in no group)
   - `transparent(paper 70)` — a constant at an opacity. Constants only:
     they have no recipe, so this is a plain function of a color and an
     amount. A system's uncomposited form is a selector instead, because it
@@ -362,7 +362,7 @@ core: # any non-reserved top-level key is a section you name;
 - A **role** is a list of refs, one per mode, or `{ refs, alias?, omit?,
   description? }` when it needs more. This is the complete role grammar.
 - **`description`** is your own note, as text, on a system, a role, or a
-  group in `palette`, `systems` or a section. `dtg dev` shows it beside what
+  group in `palette`, `systems` or a collection. `dtg dev` shows it beside what
   it describes, and DTCG carries it as `$description`. It is a reserved key
   in those places, so nothing can be named `description`.
 - **`modes`** is a list of names, or a map when a mode needs more:
@@ -376,17 +376,24 @@ core: # any non-reserved top-level key is a section you name;
   through to the DTCG output untouched. It is prose for whoever replays the
   system into a design tool — "renamed `shadow.2` to `shadow.3`, rename in
   Figma rather than recreate" — and the resolver never interprets it.
-- **Sections are yours.** Top-level keys other than
-  `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` are sections: arbitrary
-  names, each emitted as a design-tool collection. CSS names never include the section. Role
-  paths (`domain.role`) must be unique across sections so refs stay
-  unambiguous.
+- **Collections are yours.** Top-level keys other than
+  `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` are collections:
+  arbitrary names, each emitted as a design-tool collection. Inside one,
+  roles may sit in groups, which nest; a role in no group is fine.
+- **A top-level block is a container, never a name.** `palette`, `systems`
+  and every collection hold things; they never appear in refs or in emitted
+  names, and everything below them does. So `hues.green` in the palette
+  emits `--color-hues-green`, `warm.sky(3)` emits `--color-warm-sky-3`, and
+  `surface.canvas` in the `core` collection emits `--surface-canvas`. Only
+  Figma has containers, so only Figma sees the collection: `core`, holding
+  `surface/canvas`. Because refs leave the collection out, a role's path
+  (`group.role`) must be unique across collections.
 - **`alias`** on any emitting key (a constant group, a system, the systems
-  block itself, a section, a domain, or a role) replaces its public name. A string for all
+  block itself, a collection, a group, or a role) replaces its public name. A string for all
   targets, or per-target: `alias: { css: light, figma: Light }`. Internal
   names are for pointing, public names are for emitting, refs always use
   internal names.
-- **`omit: true`** on a domain or role drops that segment from public
+- **`omit: true`** on a group or role drops that segment from public
   names, so `label.primary` with omit emits `--label` beside
   `--label-secondary`. The resolver rejects roles with both segments
   omitted, and any public-name collision aliasing or omission would create.

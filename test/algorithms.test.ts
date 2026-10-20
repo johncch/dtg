@@ -8,6 +8,8 @@ import {
   convert,
   formatColor,
   inGamut,
+  luminanceOf,
+  toneOf,
   hexToOklab,
   isOpaque,
   oklabToOklch,
@@ -308,5 +310,48 @@ systems:
     assert.equal(system.curves.hue.swatches.length, 121);
     assert.deepEqual([system.curves.hue.swatches[0].value, system.curves.hue.swatches[120].value], [-180, 180]);
     assert.ok(near(system.curves.lightness.pivot.value, lch(parseColor("#3b82f6", "blue"))[0]));
+  });
+});
+
+describe("tone", () => {
+  const tone = algorithmFor("tone")!;
+  const at = (params: object, selector: string) => step(tone, params, selector).color;
+  const contrastWithWhite = (c: Color) => 1.05 / (luminanceOf(toOklab(c)) + 0.05);
+
+  test("every hue's tone 40 is equally light, and so equally readable on white", () => {
+    for (const anchor of ["#ef4444", "#3b82f6", "#eab308", "#22c55e"]) {
+      const c = at({ anchor }, "40");
+      assert.ok(Math.abs(toneOf(toOklab(c)) - 40) < 0.01, `${anchor} tone ${toneOf(toOklab(c))}`);
+      assert.ok(Math.abs(contrastWithWhite(c) - 6.46) < 0.02, `${anchor} contrast ${contrastWithWhite(c)}`);
+    }
+  });
+
+  test("tone 0 is black and tone 100 is white", () => {
+    assert.equal(css({ color: at({ anchor: "#3b82f6" }, "0") }), "#000000");
+    assert.equal(css({ color: at({ anchor: "#3b82f6" }, "100") }), "#ffffff");
+  });
+
+  test("with chroma left out, the palette passes through the anchor at the anchor's own tone", () => {
+    const anchorTone = toneOf(toOklab(parseColor("#3b82f6", "blue")));
+    const [L, a, b] = toOklab(at({ anchor: "#3b82f6" }, String(anchorTone)));
+    const [L0, a0, b0] = toOklab(parseColor("#3b82f6", "blue"));
+    assert.ok(Math.hypot(L - L0, a - a0, b - b0) < 0.001);
+  });
+
+  test("a chroma the gamut cannot hold gets the most it can, in gamut", () => {
+    for (const t of ["10", "50", "90"]) {
+      assert.ok(inGamut(toOklab(at({ anchor: "#3b82f6", chroma: 0.4 }, t)), "srgb", 1e-5), t);
+    }
+  });
+
+  test("hue turns away from the anchor's", () => {
+    const [, , anchorHue] = oklabToOklch(toOklab(parseColor("#3b82f6", "blue")));
+    const [, , h] = oklabToOklch(toOklab(at({ anchor: "#3b82f6", chroma: 0.05, hue: 60 }, "50")));
+    assert.ok(Math.abs(((h - anchorHue + 540) % 360) - 180 - 60) < 0.01);
+  });
+
+  test("chroma is optional; a written one is used", () => {
+    const [, low] = oklabToOklch(toOklab(at({ anchor: "#3b82f6", chroma: 0.03 }, "50")));
+    assert.ok(Math.abs(low - 0.03) < 1e-4);
   });
 });

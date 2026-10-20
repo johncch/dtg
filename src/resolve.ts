@@ -13,6 +13,7 @@ import {
   parseCall,
   parseSelector,
   publicStepOf,
+  rolePath,
 } from "./selector.js";
 import {
   needsMapping,
@@ -25,6 +26,7 @@ import { tint } from "./algorithms/tint.js";
 import { scale } from "./algorithms/scale.js";
 import { overlay } from "./algorithms/overlay.js";
 import { curve } from "./algorithms/curve.js";
+import { tone } from "./algorithms/tone.js";
 
 const CURVE_SAMPLES = 41;
 const CURVE_SWATCHES = 121;
@@ -81,7 +83,7 @@ function curvesOf(
   );
 }
 
-const builtinAlgorithms: Algorithm[] = [tint, scale, overlay, curve];
+const builtinAlgorithms: Algorithm[] = [tint, scale, overlay, curve, tone];
 
 function registryOf(extra: Algorithm[]): Map<string, Algorithm> {
   return new Map(
@@ -177,7 +179,7 @@ function compareSteps(a: OrderedStep, b: OrderedStep): number {
 
 export type Lineage = Map<
   string,
-  { domain: string; role: string; mode: string; translucent: boolean }[]
+  { section: string; group: string; role: string; mode: string; translucent: boolean }[]
 >;
 
 export function buildLineage(resolved: ResolvedDefinition): Lineage {
@@ -192,7 +194,8 @@ export function buildLineage(resolved: ResolvedDefinition): Lineage {
           : formatRef(target.system, target.selector);
       const uses = lineage.get(key) ?? [];
       uses.push({
-        domain: role.domain,
+        section: role.section,
+        group: role.group,
         role: role.role,
         mode: resolved.modes[i] ?? String(i),
         translucent: !isOpaque(entry.color),
@@ -311,7 +314,7 @@ export type RefTarget =
   | { kind: "step"; system: string; selector: string }
   /** A declared constant; `alpha` present means it was taken through transparent(). */
   | { kind: "constant"; name: string; alpha?: number }
-  | { kind: "role"; domain: string; role: string };
+  | { kind: "role"; group: string; role: string };
 
 export type ResolvedRef = {
   ref: string;
@@ -327,8 +330,8 @@ export type ResolvedRole = {
    * segments, `label.primary` is two.
    */
   segments: PathSegment[];
-  /** Everything but the last segment, dotted. Derived; `segments` is the truth. */
-  domain: string;
+  /** Everything but the last segment, dotted; empty for a role written straight in its section. Derived; `segments` is the truth. */
+  group: string;
   /** The last segment. Derived. */
   role: string;
   omit: boolean;
@@ -367,7 +370,7 @@ export type ResolvedDefinition = {
   statics: ResolvedStatic[];
   sections: ResolvedSection[];
   roles: ResolvedRole[];
-  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role domains. */
+  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role groups. */
   groupDescriptions: { systems: Record<string, string>; palette: Record<string, string>; roles: Record<string, string> };
   warnings: string[];
   /** Index-parallel to the `probes` asked for. */
@@ -489,7 +492,7 @@ export function resolveDefinition(
   }
   if (doc.emit !== undefined) {
     errors.push(
-      "the `emit:` block was replaced by inline `alias`/`omit` keys on systems, sections, domains, and roles",
+      "the `emit:` block was replaced by inline `alias`/`omit` keys on systems, sections, groups, and roles",
     );
   }
 
@@ -814,7 +817,7 @@ export function resolveDefinition(
       Array.isArray(sectionRaw)
     ) {
       errors.push(
-        `section "${sectionName}" must be a map of domains (top-level keys other than ${TOP_LEVEL_RESERVED.join("/")} are sections)`,
+        `section "${sectionName}" must be a map of groups and roles (top-level keys other than ${TOP_LEVEL_RESERVED.join("/")} are sections)`,
       );
       continue;
     }
@@ -865,8 +868,8 @@ export function resolveDefinition(
             omit: block.omit === true,
           };
           if (!("refs" in block)) {
-            const domainDescription = descriptionOf(block.description, context);
-            if (domainDescription) groupDescriptions.roles[path] = domainDescription;
+            const groupDescription = descriptionOf(block.description, context);
+            if (groupDescription) groupDescriptions.roles[path] = groupDescription;
             walkRoles(block, segments);
             continue;
           }
@@ -989,7 +992,7 @@ export function resolveDefinition(
       segments: raw.segments,
       // Derived from segments, for callers that want "the last bit" and
       // "everything above it" — the dev server and the lineage index.
-      domain: raw.segments.slice(0, -1).map((seg) => seg.name).join("."),
+      group: raw.segments.slice(0, -1).map((seg) => seg.name).join("."),
       role: raw.segments[raw.segments.length - 1].name,
       omit: raw.segments[raw.segments.length - 1].omit === true,
       description: raw.description,
@@ -1069,7 +1072,7 @@ export function resolveDefinition(
       );
       return undefined;
     }
-    if (ref.includes(".") && roleIndex.has(ref)) {
+    if (roleIndex.has(ref)) {
       const targetRole = resolveRole(ref, stack);
       const entry = targetRole?.perMode[modeIndex];
       if (!entry) return undefined;
@@ -1078,7 +1081,7 @@ export function resolveDefinition(
         ref,
         target: {
           kind: "role",
-          domain: ref.slice(0, dot),
+          group: dot < 0 ? "" : ref.slice(0, dot),
           role: ref.slice(dot + 1),
         },
         color: entry.color,
@@ -1105,7 +1108,7 @@ export function resolveDefinition(
       return undefined;
     }
     errors.push(
-      `${context}: unrecognized ref "${ref}" — expected system(selector), domain.role, a declared constant, or transparent(...)`,
+      `${context}: unrecognized ref "${ref}" — expected system(selector), group.role, a declared constant, or transparent(...)`,
     );
     return undefined;
   }
@@ -1132,7 +1135,7 @@ export function resolveDefinition(
           : "";
       const name =
         scope + publicRoleName(role, target, target === "css" ? "-" : "/");
-      const path = `${role.domain}.${role.role}`;
+      const path = rolePath(role);
       const prior = seen.get(name);
       if (prior) {
         errors.push(

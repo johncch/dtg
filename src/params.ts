@@ -98,6 +98,8 @@ export function parseParams(
       values[key] = parseValue(kind, value, key);
     } else if ("default" in kind && kind.default !== undefined) {
       values[key] = kind.default;
+    } else if (kind.kind === "number" && kind.optional) {
+      continue;
     } else {
       throw new Error(`${algorithm.name}: missing param "${key}"`);
     }

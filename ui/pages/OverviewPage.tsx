@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { Fragment, type CSSProperties } from "react";
 import type { Snapshot, SnapshotConstant } from "../../src/snapshot.js";
 import { ColorTip } from "../ColorTip.js";
 import { paintCss } from "../paint.js";
@@ -7,7 +7,7 @@ import { Strip } from "../Strip.js";
 import { constantAnchor } from "./ConstantsPage.js";
 
 export function OverviewPage({ snapshot }: { snapshot: Snapshot }) {
-  const domains = [...new Set(snapshot.roles.map((role) => role.domain))];
+  const sections = [...new Set(snapshot.roles.map((role) => role.section))];
   return (
     <>
       <h1>Colors</h1>
@@ -60,19 +60,30 @@ export function OverviewPage({ snapshot }: { snapshot: Snapshot }) {
           ))}
         </>
       )}
-      <h2>Role domains</h2>
-      <ul className="plain">
-        {domains.map((domain) => (
-          <li key={domain}>
-            <Link to={{ page: "domain", name: domain }}>
-              <code>{domain}</code>
-            </Link>{" "}
-            <span className="muted">
-              {snapshot.roles.filter((role) => role.domain === domain).length} roles
-            </span>
-          </li>
-        ))}
-      </ul>
+      {sections.map((section) => {
+        const roles = snapshot.roles.filter((role) => role.section === section);
+        const groups = [...new Set(roles.map((role) => role.group).filter((group) => group !== ""))];
+        return (
+          <Fragment key={section}>
+            <h2>
+              <Link to={{ page: "roles", section }}>{section}</Link>{" "}
+              <span className="muted">{roles.length} roles</span>
+            </h2>
+            {groups.length > 0 && (
+              <ul className="plain">
+                {groups.map((group) => (
+                  <li key={group}>
+                    <Link to={{ page: "group", name: group }}>
+                      <code>{group}</code>
+                    </Link>{" "}
+                    <span className="muted">{roles.filter((role) => role.group === group).length} roles</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Fragment>
+        );
+      })}
     </>
   );
 }

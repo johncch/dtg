@@ -6,6 +6,7 @@ import {
   publicSystemName,
   resolveDefinition,
 } from "../dist/resolve.js";
+import { emitCss, emitDtcg } from "../dist/emit.js";
 
 const BASE = `
 dtg: 1
@@ -269,6 +270,29 @@ roles:
       () => resolveDefinition(definition("10 tint", "#ff0000")),
       /overrides pin flattened steps only/,
     );
+  });
+});
+
+describe("roles written straight in a collection", () => {
+  const SRC = `
+dtg: 1
+palette:
+  ink: "#202020"
+  paper: "#ffffff"
+scheme:
+  primary: [ink]
+  on-primary: [paper]
+  echo: [primary]
+`;
+  test("have no group, can be referenced by name, and emit by name", () => {
+    const resolved = resolveDefinition(SRC);
+    const echo = resolved.roles.find((role) => role.role === "echo")!;
+    assert.equal(echo.group, "");
+    assert.deepEqual(echo.perMode[0].target, { kind: "role", group: "", role: "primary" });
+    const css = emitCss(resolved, "plain");
+    assert.match(css, /--primary: var\(--color-ink\);/);
+    assert.match(css, /--echo: var\(--primary\);/);
+    assert.match(JSON.stringify(emitDtcg(resolved)), /"\{scheme\.primary\}"/);
   });
 });
 

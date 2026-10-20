@@ -4,8 +4,12 @@ import type { CurveValue, Pivot } from "./curve-math.js";
 /** What a param is. dtg validates against it and parses it before any hook runs. */
 export type ParamKind =
   | { kind: "color" }
-  /** `min` and `max` bound the value; dtg rejects one outside them, and the app offers a slider between them. */
-  | { kind: "number"; default?: number; min?: number; max?: number }
+  /**
+   * `min` and `max` bound the value; dtg rejects one outside them, and the app
+   * offers a slider between them. An `optional` number with no default may be
+   * left out, and the algorithm decides what that means.
+   */
+  | { kind: "number"; default?: number; min?: number; max?: number; optional?: boolean }
   | { kind: "choice"; options: string[]; default?: string }
   | { kind: "list"; of: ParamKind; length?: number; default?: unknown[] }
   | { kind: "map"; of: ParamKind }

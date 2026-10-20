@@ -50,7 +50,7 @@ describe("snapshot", () => {
       ["3", "8"],
     );
     assert.deepEqual(sky.steps[0].usedBy, [
-      { domain: "surface", role: "canvas", mode: "light", translucent: false },
+      { section: "roles", group: "surface", role: "canvas", mode: "light", translucent: false },
     ]);
   });
 
@@ -144,10 +144,10 @@ systems:
       [["paper", "paper", 2]],
     );
     const tint = snapshot.roles.find((r) => r.role === "tint")!;
-    assert.equal(tint.domain, "surface");
+    assert.equal(tint.group, "surface");
     assert.deepEqual(tint.perMode[1].target, {
       kind: "role",
-      domain: "surface",
+      group: "surface",
       role: "canvas",
     });
   });

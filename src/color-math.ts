@@ -571,3 +571,42 @@ export function formatAuthored(lab: Oklab, alpha = 1): string {
   const body = `${short(L, 4)} ${short(C, 4)} ${short(C < NO_HUE_BELOW_CHROMA ? 0 : H, 2)}`;
   return alpha >= 1 ? `oklch(${body})` : `oklch(${body} / ${short(alpha, 4)})`;
 }
+
+// ---- tone: CIELAB L*, which is a function of luminance alone ---------------
+
+/** Relative luminance (CIE Y, white = 1): what contrast ratios are computed from. */
+export function luminanceOf(lab: Oklab): number {
+  const [r, g, b] = oklabToLinearRgb(lab);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** The luminance a tone (CIELAB L*, 0–100) stands for. */
+export function luminanceOfTone(tone: number): number {
+  return tone > 8 ? ((tone + 16) / 116) ** 3 : tone / (24389 / 27);
+}
+
+/** A color's tone (CIELAB L*, 0–100). */
+export function toneOf(lab: Oklab): number {
+  const y = luminanceOf(lab);
+  return y > 216 / 24389 ? 116 * Math.cbrt(y) - 16 : y * (24389 / 27);
+}
+
+/**
+ * The color at a tone, holding OKLCH hue and as much of `chroma` as `gamut`
+ * allows there. A tone fixes a luminance; this finds the OKLab lightness at
+ * which the color has it.
+ */
+export function colorAtTone(tone: number, chroma: number, hue: number, gamut: Gamut): Oklab {
+  if (tone <= 0) return [0, 0, 0];
+  if (tone >= 100) return [1, 0, 0];
+  const target = luminanceOfTone(tone);
+  const at = (L: number) => oklchToOklab([L, Math.min(chroma, maxChroma(L, hue, gamut)), hue]);
+  let lo = 0;
+  let hi = 1;
+  for (let i = 0; i < 50; i++) {
+    const mid = (lo + hi) / 2;
+    if (luminanceOf(at(mid)) < target) lo = mid;
+    else hi = mid;
+  }
+  return at((lo + hi) / 2);
+}
