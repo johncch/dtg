@@ -33,7 +33,7 @@ export function TryingProvider({
   base,
   children,
 }: {
-  /** The working copy as the server last sent it. */
+  /** The working copy as the server last sent it, drawn. */
   base: Snapshot;
   children: (shown: Snapshot) => ReactNode;
 }) {
@@ -70,6 +70,15 @@ export function TryingProvider({
   const trying = useMemo<Trying>(() => {
     const commitStep = (edits: Edit[]) => {
       wanted.current = null;
+      // A step that leaves the definition unresolvable is refused here,
+      // whole, rather than kept as a change nobody can see.
+      try {
+        previewOf(latestBase.current, edits);
+      } catch (e) {
+        setTried(null);
+        setRefusal((e as Error).message);
+        return;
+      }
       setRefusal(null);
       fetch("/api/edits", {
         method: "POST",

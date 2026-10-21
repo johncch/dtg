@@ -496,9 +496,11 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `algorithms/` — the three built-ins.
 - `color-math.ts` — hex parsing, compositing, and the OKLCH and OKLAB math.
 - `emit.ts` — the CSS and DTCG emitters.
-- `dev-server.ts`, `watch.ts` — the HTTP and SSE server and definition file
-  watching. The server holds no markup: it serves one HTML shell, the built
-  browser bundle, and `/api/snapshot`.
+- `dev-server.ts`, `dev-state.ts`, `watch.ts` — the HTTP and SSE server and
+  definition file watching. The server holds no markup and draws nothing: it
+  serves one HTML shell, the built browser bundle, and `/api/state`, the
+  working copy with the settings around it. It resolves only to write
+  outputs and to refuse a definition that is broken at startup.
 - `app-shell.ts`, `site.ts` — the app's one HTML page, and `dtg docs`, which
   writes that page, the bundle and the snapshot as files. The page names its
   mode: `served` by dev, or `static`, where the app reads `snapshot.json`
@@ -528,12 +530,12 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   steps, which is what one undo takes back: randomizing a palette set is
   one step of many edits. What counts as a change follows a constant
   through renames, so renaming one back is no change at all.
-- `snapshot.ts` — the definition as plain JSON for the browser. Anything that
-  needs an algorithm or an alias is worked out here; colors travel as exact
-  values and the browser formats them.
+- `snapshot.ts` — the resolved definition as plain data for the pages to
+  draw. `dtg dev`'s page builds it itself; `dtg docs` writes it as
+  `snapshot.json`.
 - `ui/` (outside `src/`) — the browsing UI, a React app bundled by Vite into
-  `dist/ui/`. It imports `color-math.ts` directly, so the pages and the
-  emitters run the same arithmetic.
+  `dist/ui/`. It runs the resolver, the edits and the color math itself
+  (`ui/engine.ts`), so the pages and the emitters run the same code.
 
 Errors accumulate rather than throwing on the first problem, so one resolve
 reports everything wrong with a definition. Keep that.
