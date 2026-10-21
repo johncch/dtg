@@ -8,6 +8,9 @@ import { changesOf, workingText } from "../src/working-copy.js";
 /** A working copy that resolved, kept to draw from while a later one does not. */
 export type Resolved = { resolved: ResolvedDefinition; lineage: Lineage };
 
+/** What the page shows, and the definition it was resolved from, which CSS for a host is emitted from. */
+export type Drawn = { snapshot: Snapshot; resolved: ResolvedDefinition };
+
 /**
  * The app as `dtg dev`'s state draws it. When the working copy does not
  * resolve, the last copy that did is drawn with the error over it; with none
@@ -46,9 +49,9 @@ export function drawState(state: DevState, lastGood: Resolved | null): { snapsho
  * `base` was drawn from. Nothing is kept. Throws with the reason when an edit
  * cannot be made or the result does not resolve.
  */
-export function previewOf(base: Snapshot, edits: Edit[]): Snapshot {
+export function previewOf(base: Snapshot, edits: Edit[]): Drawn {
   const resolved = resolveDefinition(applyEdits(base.definition.text, edits), [], base.gamut);
-  return buildSnapshot({
+  const snapshot = buildSnapshot({
     resolved,
     lineage: buildLineage(resolved),
     error: null,
@@ -61,6 +64,7 @@ export function previewOf(base: Snapshot, edits: Edit[]): Snapshot {
     configPath: base.configPath,
     backgrounds: base.backgrounds.map(({ name, written }) => ({ name, color: written })),
   });
+  return { snapshot, resolved };
 }
 
 /** The color `ref` comes to in the definition `text`, without anything demanding it. */

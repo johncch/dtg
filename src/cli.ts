@@ -43,7 +43,7 @@ if (command === "init") {
   try {
     const config = loadConfig({ definition: flagValue("--definition") });
     const editable = args.includes("--editable");
-    console.log(`${writeSite(config.definition, config.gamut, out, "dtg.config.yaml", editable)}\n  → ${out}/index.html`);
+    console.log(`${writeSite(config.definition, config.gamut, out, "dtg.config.yaml", config.cssModes, editable)}\n  → ${out}/index.html`);
   } catch (e) {
     fail((e as Error).message);
   }
@@ -69,6 +69,7 @@ if (command === "init") {
       config.definition,
       Number(flagValue("--port") ?? "4401"),
       config.gamut,
+      config.cssModes,
       args.includes("--build") ? config : null,
     );
   } else {

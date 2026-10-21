@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Edit } from "../src/edit.js";
-import type { Snapshot } from "../src/snapshot.js";
-import { previewOf } from "./engine.js";
+import { previewOf, type Drawn } from "./engine.js";
 import { useStore } from "./store.js";
 
 type Trying = {
@@ -35,11 +34,11 @@ export function TryingProvider({
   children,
 }: {
   /** The working copy, drawn. */
-  base: Snapshot;
-  children: (shown: Snapshot) => ReactNode;
+  base: Drawn;
+  children: (shown: Drawn) => ReactNode;
 }) {
   const store = useStore();
-  const [tried, setTried] = useState<Snapshot | null>(null);
+  const [tried, setTried] = useState<Drawn | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const wanted = useRef<Edit | null>(null);
   const frame = useRef<number | null>(null);
@@ -61,7 +60,7 @@ export function TryingProvider({
       const edit = wanted.current;
       if (edit == null) return;
       try {
-        setTried(previewOf(latestBase.current, [edit]));
+        setTried(previewOf(latestBase.current.snapshot, [edit]));
         setRefusal(null);
       } catch (e) {
         setRefusal((e as Error).message);
@@ -75,7 +74,7 @@ export function TryingProvider({
       // A step that leaves the definition unresolvable is refused here,
       // whole, rather than kept as a change nobody can see.
       try {
-        previewOf(latestBase.current, edits);
+        previewOf(latestBase.current.snapshot, edits);
       } catch (e) {
         setTried(null);
         setRefusal((e as Error).message);

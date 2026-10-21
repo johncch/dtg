@@ -613,15 +613,16 @@ Anything outside those three is a real defect. Promoting this check into a
       tone, which needs a curve's pivot to be optional.
 - [ ] Multi-file definitions (`shadows.dtg.yaml`, `type.dtg.yaml` as
       siblings, one resolver over all). Discovery exists; merging does not.
-- [ ] Designer tweaking in the browser: controls POST param changes, the
-      server rewrites the definition (comment-preserving, via the yaml
-      document API), the watcher re-resolves, the page reloads. The file
-      stays the single source of truth; the browser is just another editor
-      of it.
-- [ ] Studio preview: apply resolved variables onto the document root so real
-      components render under a proposed palette, plus auto-generated
-      specimens (nested surfaces, labels at small sizes on every surface, 1px
-      separators, states) for the portable case.
+- [x] Designer tweaking in the browser: every param, ref and palette color
+      has a control. The page resolves edits itself; `dtg dev` keeps the
+      working copy and writes the file on save, one-line splices that keep
+      comments. `dtg docs --editable` keeps edits in the page alone.
+- [x] Live CSS for a host page: embedded in an iframe, the browser posts the
+      CSS for what it shows to the page around it, so real components render
+      under a proposed palette as it is edited.
+- [ ] Specimens: auto-generated nested surfaces, labels at small sizes on
+      every surface, 1px separators and states, for the portable case with
+      no host page.
 - [ ] Figma sync. `emit` already writes the payload as DTCG (collections
       via `$extensions`, modes, values, aliases by path, no file IDs).
       Delivery paths, ranked: (1) an

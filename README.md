@@ -194,6 +194,26 @@ a reload starts over from the published definition. Pages are addressed in
 the fragment (`#/system/theme`), so deep links work on a host that knows
 nothing of the app.
 
+Embedded in an iframe, the browser — `dtg docs` or `dtg dev` — sends the
+page around it the CSS for whatever it shows, edits being tried included,
+each time it changes. A site whose components read the colors as CSS
+variables can re-skin live while someone edits:
+
+```js
+const frame = document.querySelector("iframe#dtg");
+const style = document.head.appendChild(document.createElement("style"));
+addEventListener("message", (event) => {
+  if (event.source === frame.contentWindow && event.data?.type === "dtg:css") {
+    style.textContent = event.data.css;
+  }
+});
+frame.contentWindow.postMessage({ type: "dtg:css?" }, "*"); // in case it loaded first
+```
+
+The CSS is always the plain format, with modes rendered as `dtg.config.yaml`
+says, so it overrides the same variables the site's own stylesheet sets.
+Nothing is written anywhere; a reload brings back the built colors.
+
 `dtg dev --build` writes the same outputs `dtg build` does, once at startup and
 again whenever the definition file changes — a save from the app or an edit
 by hand. They follow the file, never the unsaved edits on top of it. It is a

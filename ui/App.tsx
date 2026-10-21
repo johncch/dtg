@@ -4,6 +4,7 @@ import { version } from "../package.json";
 import type { Snapshot, SnapshotSystem } from "../src/snapshot.js";
 import { Backgrounds } from "./Backgrounds.js";
 import { Changes } from "./Changes.js";
+import { LiveCss } from "./LiveCss.js";
 import { ProjectGamutProvider } from "./gamut.js";
 import { TryingProvider } from "./preview.js";
 import { ConstantsPage } from "./pages/ConstantsPage.js";
@@ -32,11 +33,16 @@ export function App() {
       </main>
     );
   }
-  const { snapshot } = state;
+  const { drawn, cssModes } = state;
   return (
     <StoreProvider value={store}>
-      <TryingProvider base={snapshot}>
-        {(shown) => <Shell snapshot={shown} working={snapshot} route={route} />}
+      <TryingProvider base={drawn}>
+        {(shown) => (
+          <>
+            <LiveCss resolved={shown.resolved} modes={cssModes} />
+            <Shell snapshot={shown.snapshot} working={drawn.snapshot} route={route} />
+          </>
+        )}
       </TryingProvider>
     </StoreProvider>
   );
