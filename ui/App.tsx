@@ -241,7 +241,7 @@ function Page({ route, snapshot }: { route: Route; snapshot: Snapshot }) {
   }
   if (route.page === "system") {
     const system = snapshot.systems.find((candidate) => candidate.system === route.name);
-    return system ? <SystemPage system={system} /> : <NotFound what={`system "${route.name}"`} />;
+    return system ? <SystemPage system={system} snapshot={snapshot} /> : <NotFound what={`system "${route.name}"`} />;
   }
   if (route.page === "roles" && route.section != null && !snapshot.roles.some((role) => role.section === route.section)) {
     return <NotFound what={`section "${route.section}"`} />;

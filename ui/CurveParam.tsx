@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import type { Color } from "../src/color-math.js";
 import { curveAt, type CurveValue, type Ease } from "../src/curve-math.js";
 import type { EditTarget } from "../src/edit.js";
-import type { ResolvedCurve } from "../src/resolve.js";
+import { curveDrawing, type CurveDrawing as Drawing, type ResolvedCurve } from "../src/resolve.js";
+import type { SnapshotSystem } from "../src/snapshot.js";
 import { STATIC } from "./mode.js";
 import { paintCss } from "./paint.js";
 import { Popup, type PopupPanel } from "./Popup.js";
@@ -9,10 +11,14 @@ import { useTrying } from "./preview.js";
 
 type Range = { min: number; max: number };
 
+type Drawn = Pick<ResolvedCurve, "pivot" | "span" | "marks" | "unit"> & Drawing;
+
 /** A `curve` param as one chip: a small drawing of the curve; clicking it opens the curve to drag and its numbers to type. */
 export function CurveParam({
   name,
   curve,
+  system,
+  constants,
   target,
   note,
   dim = false,
@@ -20,6 +26,9 @@ export function CurveParam({
 }: {
   name: string;
   curve: ResolvedCurve;
+  /** The system the curve belongs to, which the drawing is worked out from. */
+  system: SnapshotSystem;
+  constants: ReadonlyMap<string, Color>;
   target: EditTarget;
   /** Where the value comes from, when that is not simply the system: "default", "shared", "shared as &name", "same as &name". */
   note: string | null;
@@ -29,9 +38,11 @@ export function CurveParam({
   readOnly?: boolean;
 }) {
   const range = displayRange(curve);
+  const { samples, swatches } = useMemo(() => curveDrawing(system, constants, name), [system, constants, name]);
+  const drawn = { ...curve, samples, swatches };
   const label = (
     <span>
-      <CurveDrawing curve={curve.value} drawn={curve} range={range} width={72} height={32} />
+      <CurveDrawing curve={curve.value} drawn={drawn} range={range} width={72} height={32} />
       {note && (
         <>
           <br />
@@ -43,7 +54,7 @@ export function CurveParam({
   if (STATIC || readOnly) return <span className="chip">{label}</span>;
   return (
     <Popup title={`Edit ${name}`} className="chip chip-editable curve-param" label={label} focus="panel">
-      {(panel) => <CurveEditor name={name} original={curve} range={range} target={target} panel={panel} />}
+      {(panel) => <CurveEditor name={name} original={curve} drawn={drawn} range={range} target={target} panel={panel} />}
     </Popup>
   );
 }
@@ -60,12 +71,14 @@ const round = (n: number) => Number(n.toFixed(Math.abs(n) >= 10 ? 1 : 3));
 function CurveEditor({
   name,
   original,
+  drawn,
   range,
   target,
   panel,
 }: {
   name: string;
   original: ResolvedCurve;
+  drawn: Drawn;
   range: Range;
   target: EditTarget;
   panel: PopupPanel;
@@ -109,7 +122,7 @@ function CurveEditor({
         {panel.close}
       </div>
       {original.label && <p className="curve-label">{original.label}</p>}
-      <CurveDrawing curve={value} drawn={original} range={range} width={300} height={198} bounds={original} onChange={setValue} />
+      <CurveDrawing curve={value} drawn={drawn} range={range} width={300} height={198} bounds={original} onChange={setValue} />
       <div className="curve-fields">
         <label>
           from
@@ -195,7 +208,7 @@ function CurveDrawing({
 }: {
   curve: CurveValue;
   /** What the resolver says about the curve: its pivot and span, the colors along it, and what its values look like. */
-  drawn: Pick<ResolvedCurve, "pivot" | "span" | "samples" | "marks" | "swatches" | "unit">;
+  drawn: Drawn;
   range: Range;
   width: number;
   height: number;
@@ -339,7 +352,7 @@ function Bands({
   top,
   bottom,
 }: {
-  swatches: ResolvedCurve["swatches"];
+  swatches: Drawing["swatches"];
   range: Range;
   y: (value: number) => number;
   left: number;

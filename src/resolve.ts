@@ -41,29 +41,12 @@ function curvesOf(
   return Object.fromEntries(
     Object.entries(algorithm.params).flatMap(([name, kind]) => {
       if (kind.kind !== "curve" || !pivots[name]) return [];
-      const field = shape.fields.find((candidate) => candidate.name === kind.along);
-      if (!field || field.kind !== "number") {
-        throw new Error(`${algorithm.name} param "${name}" runs along "${kind.along}", which is not a number field of its selector`);
-      }
-      const span = { min: field.min, max: field.max };
-      const samples =
-        shape.fields.length === 1
-          ? Array.from({ length: CURVE_SAMPLES }, (_, i) => {
-              const at = span.min + (i / (CURVE_SAMPLES - 1)) * (span.max - span.min);
-              return { at, color: algorithm.resolve({ form: null, [kind.along]: at }, params) };
-            })
-          : [];
+      const span = spanOf(algorithm, shape, name, kind.along);
       const marks = steps.flatMap((step) => {
         const { values } = parseSelector(algorithm.name, shape, step.selector);
         const at = values[kind.along];
         return values.form == null && typeof at === "number" ? [{ at, color: step.color, step: step.publicStep }] : [];
       });
-      const swatches = algorithm.curveSwatch
-        ? Array.from({ length: CURVE_SWATCHES }, (_, i) => {
-            const value = kind.min + (i / (CURVE_SWATCHES - 1)) * (kind.max - kind.min);
-            return { value, color: algorithm.curveSwatch!(params, name, value) };
-          })
-        : [];
       const curve: ResolvedCurve = {
         value: params[name] as CurveValue,
         pivot: pivots[name],
@@ -72,15 +55,61 @@ function curvesOf(
         default: kind.default,
         along: kind.along,
         span,
-        samples,
         marks,
         label: kind.label ?? null,
         unit: kind.unit ?? null,
-        swatches,
       };
       return [[name, curve]];
     }),
   );
+}
+
+function spanOf(algorithm: Algorithm, shape: SelectorShape, name: string, along: string): Span {
+  const field = shape.fields.find((candidate) => candidate.name === along);
+  if (!field || field.kind !== "number") {
+    throw new Error(`${algorithm.name} param "${name}" runs along "${along}", which is not a number field of its selector`);
+  }
+  return { min: field.min, max: field.max };
+}
+
+export type CurveDrawing = {
+  /** The system's color at evenly spaced points across the span; empty when the selector has fields besides `along`. */
+  samples: { at: number; color: Color }[];
+  /** What values across the curve's `min`–`max` look like, from the algorithm's `curveSwatch`; empty without one. */
+  swatches: { value: number; color: Color }[];
+};
+
+/**
+ * What the editor draws for one curve param, worked out only when a page
+ * shows it: it runs the algorithm a couple of hundred times, far more than
+ * resolving the system does. `params` are as a system has them written,
+ * defaults filled in; `constants` are the palette colors they may name.
+ */
+export function curveDrawing(
+  system: { algorithm: string; params: Record<string, unknown>; selector: SelectorShape },
+  constants: ReadonlyMap<string, Color>,
+  name: string,
+): CurveDrawing {
+  const algorithm = algorithmFor(system.algorithm);
+  const kind = algorithm?.params[name];
+  if (!algorithm || kind?.kind !== "curve") return { samples: [], swatches: [] };
+  const params = parseParams(algorithm, system.params, constants).values;
+  const shape = system.selector;
+  const span = spanOf(algorithm, shape, name, kind.along);
+  const samples =
+    shape.fields.length === 1
+      ? Array.from({ length: CURVE_SAMPLES }, (_, i) => {
+          const at = span.min + (i / (CURVE_SAMPLES - 1)) * (span.max - span.min);
+          return { at, color: algorithm.resolve({ form: null, [kind.along]: at }, params) };
+        })
+      : [];
+  const swatches = algorithm.curveSwatch
+    ? Array.from({ length: CURVE_SWATCHES }, (_, i) => {
+        const value = kind.min + (i / (CURVE_SWATCHES - 1)) * (kind.max - kind.min);
+        return { value, color: algorithm.curveSwatch!(params, name, value) };
+      })
+    : [];
+  return { samples, swatches };
 }
 
 const builtinAlgorithms: Algorithm[] = [tint, scale, overlay, curve, tone];
@@ -237,15 +266,11 @@ export type ResolvedCurve = {
   default: CurveValue;
   along: string;
   span: Span;
-  /** The system's color at evenly spaced points across the span; empty when the selector has fields besides `along`. */
-  samples: { at: number; color: Color }[];
   /** Each emitted step whose selector is a plain point along the curve. */
   marks: { at: number; color: Color; step: string }[];
   /** What the curve's values measure, and the unit written after them; null when the algorithm says nothing. */
   label: string | null;
   unit: string | null;
-  /** What values across `min`–`max` look like, from the algorithm's `curveSwatch`; empty without one. Only the editor uses these. */
-  swatches: { value: number; color: Color }[];
 };
 
 export type ResolvedSystem = {

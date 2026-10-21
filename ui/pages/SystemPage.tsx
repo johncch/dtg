@@ -1,6 +1,8 @@
 import type { EditTarget } from "../../src/edit.js";
+import { useMemo } from "react";
+import type { Color } from "../../src/color-math.js";
 import { formatRef } from "../../src/selector.js";
-import type { SnapshotStep, SnapshotSystem } from "../../src/snapshot.js";
+import type { Snapshot, SnapshotStep, SnapshotSystem } from "../../src/snapshot.js";
 import { ColorChip } from "../ColorChip.js";
 import { ChoiceParam } from "../ChoiceParam.js";
 import { CurveParam } from "../CurveParam.js";
@@ -11,8 +13,12 @@ import { useScrollToHash } from "../router.js";
 import { stepAnchor, stepDeltaE, Strip } from "../Strip.js";
 import { UsedBy } from "../UsedBy.js";
 
-export function SystemPage({ system }: { system: SnapshotSystem }) {
+export function SystemPage({ system, snapshot }: { system: SnapshotSystem; snapshot: Snapshot }) {
   const hash = useScrollToHash(system.system);
+  const constants = useMemo(
+    () => new Map(snapshot.constants.map((constant) => [constant.path, constant.color])),
+    [snapshot.constants],
+  );
 
   return (
     <>
@@ -24,9 +30,8 @@ export function SystemPage({ system }: { system: SnapshotSystem }) {
       </h1>
       {system.note && <p className="note">{system.note}</p>}
       <p className="desc">{system.description}</p>
-      <Params system={system} />
-      {/* The preview asks the server to resolve a step; a static copy has none. */}
-      {!STATIC && <Probe key={system.system} system={system} />}
+      <Params system={system} constants={constants} />
+      {!STATIC && <Probe key={system.system} system={system} definition={snapshot.definition.text} gamut={snapshot.gamut} />}
       <section className="box">
         <h2 className="box-title">Steps</h2>
         <div className="steps-body">
@@ -88,7 +93,7 @@ function StepValue({ step }: { step: SnapshotStep }) {
   );
 }
 
-function Params({ system }: { system: SnapshotSystem }) {
+function Params({ system, constants }: { system: SnapshotSystem; constants: ReadonlyMap<string, Color> }) {
   const entries = Object.entries(system.params);
   if (entries.length === 0) return null;
   return (
@@ -97,7 +102,7 @@ function Params({ system }: { system: SnapshotSystem }) {
         <div className="param" key={key}>
           {key}
           <div className="param-value">
-            <ParamValue value={value} path={key} system={system} />
+            <ParamValue value={value} path={key} system={system} constants={constants} />
           </div>
         </div>
       ))}
@@ -105,7 +110,17 @@ function Params({ system }: { system: SnapshotSystem }) {
   );
 }
 
-function ParamValue({ value, path, system }: { value: unknown; path: string; system: SnapshotSystem }) {
+function ParamValue({
+  value,
+  path,
+  system,
+  constants,
+}: {
+  value: unknown;
+  path: string;
+  system: SnapshotSystem;
+  constants: ReadonlyMap<string, Color>;
+}) {
   const { colorParams } = system;
   // Where the value comes from decides where an edit goes: a param the
   // system writes, or the algorithm's default, is written into the system; one
@@ -130,7 +145,20 @@ function ParamValue({ value, path, system }: { value: unknown; path: string; sys
     ? { kind: "default", algorithm: system.algorithm, path }
     : { kind: "param", system: system.system, path };
   const curve = system.curves[path];
-  if (curve) return <CurveParam name={path} curve={curve} target={target} note={note} dim={defaulted} readOnly={readOnly} />;
+  if (curve) {
+    return (
+      <CurveParam
+        name={path}
+        curve={curve}
+        system={system}
+        constants={constants}
+        target={target}
+        note={note}
+        dim={defaulted}
+        readOnly={readOnly}
+      />
+    );
+  }
   const colorParam = colorParams.find((param) => param.path === path);
   if (colorParam) {
     return (
@@ -161,7 +189,7 @@ function ParamValue({ value, path, system }: { value: unknown; path: string; sys
     return (
       <span className="cell">
         {value.map((item, index) => (
-          <ParamValue key={index} value={item} path={`${path}.${index}`} system={system} />
+          <ParamValue key={index} value={item} path={`${path}.${index}`} system={system} constants={constants} />
         ))}
       </span>
     );
@@ -176,7 +204,7 @@ function ParamValue({ value, path, system }: { value: unknown; path: string; sys
         {entries.map(([key, item]) => (
           <span key={key}>
             <span className="muted">{key}</span>{" "}
-            <ParamValue value={item} path={`${path}.${key}`} system={system} />
+            <ParamValue value={item} path={`${path}.${key}`} system={system} constants={constants} />
           </span>
         ))}
       </span>

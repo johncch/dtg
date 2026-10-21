@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { parseParams } from "../dist/params.js";
-import { algorithmFor, resolveDefinition } from "../dist/resolve.js";
+import { algorithmFor, curveDrawing, resolveDefinition } from "../dist/resolve.js";
 import { step } from "./step.ts";
 import {
   type Color,
@@ -301,15 +301,17 @@ systems:
     assert.deepEqual(system.curves.hue.value, { from: 0, to: 10, easing: [[0.33, 0.33, 0.67, 0.67], [0.33, 0.33, 0.67, 0.67]] });
     assert.deepEqual(system.curves.hue.pivot, { at: 500, value: 0 });
     assert.deepEqual(system.curves.hue.span, { min: 0, max: 1000 });
-    assert.equal(system.curves.lightness.samples.length, 41);
-    assert.equal(css({ color: system.curves.lightness.samples[20].color }), "#3b82f6");
     assert.deepEqual(system.curves.lightness.marks.map((mark) => [mark.at, mark.step]), [[500, "500"]]);
     assert.equal(system.curves.hue.label, "degrees from the anchor's hue");
     assert.equal(system.curves.hue.unit, "°");
     assert.equal(system.curves.lightness.unit, null);
-    assert.equal(system.curves.hue.swatches.length, 121);
-    assert.deepEqual([system.curves.hue.swatches[0].value, system.curves.hue.swatches[120].value], [-180, 180]);
     assert.ok(near(system.curves.lightness.pivot.value, lch(parseColor("#3b82f6", "blue"))[0]));
+    const lightness = curveDrawing(system, new Map(), "lightness");
+    assert.equal(lightness.samples.length, 41);
+    assert.equal(css({ color: lightness.samples[20].color }), "#3b82f6");
+    const hue = curveDrawing(system, new Map(), "hue");
+    assert.equal(hue.swatches.length, 121);
+    assert.deepEqual([hue.swatches[0].value, hue.swatches[120].value], [-180, 180]);
   });
 });
 

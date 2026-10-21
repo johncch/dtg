@@ -180,8 +180,8 @@ function anchorPath(node: unknown, name: string, keys: string[] = []): string | 
 /** For a system's own params: which carry an anchor (`&name`) other values share, and which are aliases (`*name`) of one. */
 export type ParamAnchor = { name: string; role: "anchor" | "alias" };
 
-export function anchorsOf(yamlText: string, system: string): Record<string, ParamAnchor> {
-  const params = parseDocument(yamlText).getIn(["systems", ...system.split("."), "params"], true);
+export function anchorsOf(doc: Document, system: string): Record<string, ParamAnchor> {
+  const params = doc.getIn(["systems", ...system.split("."), "params"], true);
   if (!isMap(params)) return {};
   const found: Record<string, ParamAnchor> = {};
   for (const pair of params.items) {

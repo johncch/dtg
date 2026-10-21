@@ -16,7 +16,7 @@ import {
   type Background,
 } from "./dev-settings.js";
 import { writeOutputs } from "./outputs.js";
-import { applyEdits, describeTarget, type Edit } from "./edit.js";
+import { describeTarget, type Edit } from "./edit.js";
 import {
   buildLineage,
   resolveDefinition,
@@ -219,39 +219,6 @@ export function startDevServer(
 
     if (url.pathname === "/api/snapshot") {
       sendJson(200, snapshotOf(state));
-      return;
-    }
-
-    if (url.pathname === "/api/preview" && req.method === "POST") {
-      readJson(req).then((body) => {
-        try {
-          const tried = applyEdits(
-            workingText(state.copy).text,
-            (body as { edits: Edit[] }).edits,
-          );
-          const resolved = resolveDefinition(tried, [], gamut);
-          sendJson(
-            200,
-            snapshotOf({ ...state, resolved, lineage: buildLineage(resolved), error: null }),
-          );
-        } catch (e) {
-          sendJson(422, { error: (e as Error).message });
-        }
-      });
-      return;
-    }
-
-    if (url.pathname === "/api/probe" && req.method === "POST") {
-      readJson(req).then((body) => {
-        const { ref } = body as { ref: string };
-        try {
-          const [probe] = resolveDefinition(workingText(state.copy).text, [], gamut, [ref]).probed;
-          if ("error" in probe) sendJson(422, { error: probe.error });
-          else sendJson(200, { color: probe.color });
-        } catch (e) {
-          sendJson(422, { error: (e as Error).message });
-        }
-      });
       return;
     }
 

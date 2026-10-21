@@ -1,6 +1,7 @@
 import { parseColor, type Color, type Gamut } from "./color-math.js";
 import type { SelectorShape } from "./contract.js";
 import { DEFAULT_BACKGROUNDS, type Background } from "./dev-settings.js";
+import { parseDocument } from "yaml";
 import { anchorsOf, type Edit, type ParamAnchor } from "./edit.js";
 import type { Change } from "./working-copy.js";
 import {
@@ -157,6 +158,7 @@ export function buildSnapshot({
   configPath?: string;
   backgrounds?: Background[];
 }): Snapshot {
+  const document = parseDocument(definition.text);
   return {
     error,
     stale,
@@ -186,7 +188,7 @@ export function buildSnapshot({
       curves: system.curves,
       numberRanges: numberRangesOf(system.algorithm),
       choices: choicesOf(system.algorithm),
-      anchors: anchorsOf(definition.text, system.system),
+      anchors: anchorsOf(document, system.system),
       colorParams: system.colorParams,
       selector: system.selector,
       steps: system.steps.map((step) => ({
