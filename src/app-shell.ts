@@ -8,17 +8,18 @@ export type AppMode = "served" | "static";
 /**
  * The app's only HTML; the bundle reads the address and draws the page. A
  * static copy points at its files relatively, so it works under any folder,
- * and says it is static so the app reads its snapshot from a file and offers
- * no editing.
+ * and says it is static so the app reads its state from a file and saves
+ * nothing. `editable` lets a static copy's visitors edit anyway, in the page
+ * alone.
  */
-export function appShell(title: string, mode: AppMode): string {
+export function appShell(title: string, mode: AppMode, editable = false): string {
   const ui = mode === "static" ? "ui/" : "/ui/";
   return `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="dtg-mode" content="${mode}">
+<meta name="dtg-mode" content="${mode}">${editable ? '\n<meta name="dtg-editable" content="true">' : ""}
 <title>${title.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</title>
 <link rel="icon" type="image/png" href="${ui}favicon.png">
 <link rel="stylesheet" href="${ui}dtg-ui.css">

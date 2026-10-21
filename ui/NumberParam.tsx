@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { EditTarget } from "../src/edit.js";
-import { STATIC } from "./mode.js";
+import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { useTrying } from "./preview.js";
 
@@ -38,7 +38,7 @@ export function NumberParam({
       )}
     </span>
   );
-  if (STATIC || readOnly) return <span className="chip">{label}</span>;
+  if (!EDITABLE || readOnly) return <span className="chip">{label}</span>;
   return (
     <Popup title={`Edit ${name}`} className="chip chip-editable number-param" label={label} focus="field">
       {(panel) => <NumberEditor name={name} original={value} target={target} range={range} panel={panel} />}

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { Edit } from "../src/edit.js";
 import type { Snapshot } from "../src/snapshot.js";
 import { previewOf } from "./engine.js";
+import { useStore } from "./store.js";
 
 type Trying = {
   /** Draw the app as if `edit` had been made, or pass null to stop. Nothing is kept. */
@@ -33,10 +34,11 @@ export function TryingProvider({
   base,
   children,
 }: {
-  /** The working copy as the server last sent it, drawn. */
+  /** The working copy, drawn. */
   base: Snapshot;
   children: (shown: Snapshot) => ReactNode;
 }) {
+  const store = useStore();
   const [tried, setTried] = useState<Snapshot | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const wanted = useRef<Edit | null>(null);
@@ -80,16 +82,7 @@ export function TryingProvider({
         return;
       }
       setRefusal(null);
-      fetch("/api/edits", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ edits }),
-      }).then(
-        (response) => {
-          if (!response.ok) setTried(null);
-        },
-        () => setTried(null),
-      );
+      store.commit(edits).catch(() => setTried(null));
     };
     return {
       preview(edit) {
@@ -103,7 +96,7 @@ export function TryingProvider({
       commitStep,
       refusal,
     };
-  }, [schedule, refusal]);
+  }, [schedule, refusal, store]);
 
   return <TryingContext.Provider value={trying}>{children(tried ?? base)}</TryingContext.Provider>;
 }

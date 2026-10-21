@@ -7,7 +7,6 @@ import { ColorChip } from "../ColorChip.js";
 import { ChoiceParam } from "../ChoiceParam.js";
 import { CurveParam } from "../CurveParam.js";
 import { NumberParam } from "../NumberParam.js";
-import { STATIC } from "../mode.js";
 import { Probe } from "../Probe.js";
 import { useScrollToHash } from "../router.js";
 import { stepAnchor, stepDeltaE, Strip } from "../Strip.js";
@@ -31,7 +30,7 @@ export function SystemPage({ system, snapshot }: { system: SnapshotSystem; snaps
       {system.note && <p className="note">{system.note}</p>}
       <p className="desc">{system.description}</p>
       <Params system={system} constants={constants} />
-      {!STATIC && <Probe key={system.system} system={system} definition={snapshot.definition.text} gamut={snapshot.gamut} />}
+      <Probe key={system.system} system={system} definition={snapshot.definition.text} gamut={snapshot.gamut} />
       <section className="box">
         <h2 className="box-title">Steps</h2>
         <div className="steps-body">

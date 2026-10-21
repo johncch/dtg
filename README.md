@@ -182,16 +182,17 @@ dtg dev  [--port <n>]                              # browse and edit: ramps, del
 dtg build [--watch] [--css <path>]                 # generate the CSS
           [--css-format <plain|tailwind>]          # default plain
           [--dtcg <path>]                          # DTCG; written only when asked
-dtg docs --out <dir>                               # a read-only copy of the browser, to publish
+dtg docs --out <dir> [--editable]                  # a copy of the browser, to publish
 ```
 
-`dtg docs` writes the browser as plain files: `index.html`, `snapshot.json`
+`dtg docs` writes the browser as plain files: `index.html`, `state.json`
 and `ui/`. Any static host serves it, from any folder — a site's `public/`
-directory, or GitHub Pages. It is read-only: everything you can look at in
-`dtg dev` is there, but nothing edits, and the step preview, which asks the
-dev server to resolve a selector, is left out. Pages are addressed in the
-fragment (`#/system/theme`), so deep links work on a host that knows nothing
-of the app.
+directory, or GitHub Pages. Everything you can look at in `dtg dev` is
+there. It is read-only unless you pass `--editable`: then visitors can edit
+the colors, undo and redo, but only in their own page; nothing is saved, and
+a reload starts over from the published definition. Pages are addressed in
+the fragment (`#/system/theme`), so deep links work on a host that knows
+nothing of the app.
 
 `dtg dev --build` writes the same outputs `dtg build` does, once at startup and
 again whenever the definition file changes — a save from the app or an edit

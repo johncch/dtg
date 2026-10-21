@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Edit, EditTarget } from "../src/edit.js";
 import type { Snapshot } from "../src/snapshot.js";
 import type { Change } from "../src/working-copy.js";
+import { useStore } from "./store.js";
 
 function nameOf(target: EditTarget, modes: string[]): string {
   switch (target.kind) {
@@ -45,16 +46,12 @@ export function Changes({ working }: { working: Snapshot }) {
     return `${name}: ${change.from ?? "added"} → ${change.to}`;
   };
   const [failure, setFailure] = useState<Failure>(null);
+  const store = useStore();
 
   const run = (step: Step) => {
     setFailure(null);
-    fetch(`/api/${step}`, { method: "POST" })
-      .then(async (response) => {
-        if (response.ok) return;
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        setFailure({ step, message: body.error ?? `the server answered ${response.status}` });
-      })
-      .catch((error: Error) => setFailure({ step, message: error.message }));
+    const command = step === "save" ? store.save : store[step];
+    command?.().catch((error: Error) => setFailure({ step, message: error.message }));
   };
 
   // In a text field the shortcut belongs to the field's own typing history,
@@ -105,9 +102,13 @@ export function Changes({ working }: { working: Snapshot }) {
           <button className="btn" title="Drop every unsaved change. Redo brings them back." onClick={() => run("discard")}>
             discard
           </button>
-          <button className="btn changes-save" onClick={() => run("save")}>
-            save
-          </button>
+          {store.save ? (
+            <button className="btn changes-save" onClick={() => run("save")}>
+              save
+            </button>
+          ) : (
+            <span className="muted">Edits here aren't saved.</span>
+          )}
         </div>
       )}
       {failure && (

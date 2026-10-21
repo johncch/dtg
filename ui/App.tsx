@@ -15,12 +15,13 @@ import { PalettePage, palettesOf } from "./pages/PalettePage.js";
 import { SystemPage } from "./pages/SystemPage.js";
 import { Link, useRoute, type Route } from "./router.js";
 import { useSnapshot } from "./snapshot.js";
-import { STATIC } from "./mode.js";
+import { StoreProvider } from "./store.js";
+import { EDITABLE, SAVABLE } from "./mode.js";
 import { PaletteColorsProvider } from "./palette-colors.js";
 import { UnsavedChangesProvider } from "./working.js";
 
 export function App() {
-  const state = useSnapshot();
+  const { state, store } = useSnapshot();
   const route = useRoute();
 
   if (state.status === "loading") return <main />;
@@ -33,9 +34,11 @@ export function App() {
   }
   const { snapshot } = state;
   return (
-    <TryingProvider base={snapshot}>
-      {(shown) => <Shell snapshot={shown} working={snapshot} route={route} />}
-    </TryingProvider>
+    <StoreProvider value={store}>
+      <TryingProvider base={snapshot}>
+        {(shown) => <Shell snapshot={shown} working={snapshot} route={route} />}
+      </TryingProvider>
+    </StoreProvider>
   );
 }
 
@@ -49,7 +52,7 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
             <aside>
               <Nav snapshot={snapshot} />
               <Backgrounds backgrounds={snapshot.backgrounds} />
-              {!STATIC && <Changes working={working} />}
+              {EDITABLE && <Changes working={working} />}
             </aside>
             <main>
               <div className="page">
@@ -75,7 +78,7 @@ function Nav({ snapshot }: { snapshot: Snapshot }) {
       </h1>
       <nav>
         <Link to={{ page: "definition" }}>{fileName(snapshot.definition.path)}</Link>
-        {!STATIC && <Link to={{ page: "settings" }}>settings</Link>}
+        {SAVABLE && <Link to={{ page: "settings" }}>settings</Link>}
         {snapshot.constants.length > 0 && (
           <>
             <h2>Palette</h2>
@@ -210,7 +213,7 @@ function Page({ route, snapshot }: { route: Route; snapshot: Snapshot }) {
   if (route.page === "unknown") return <NotFound what={route.path} />;
   if (route.page === "overview") return <OverviewPage snapshot={snapshot} />;
   if (route.page === "definition") return <DefinitionPage definition={snapshot.definition} />;
-  if (route.page === "settings" && !STATIC) return <SettingsPage configPath={snapshot.configPath} backgrounds={snapshot.backgrounds} />;
+  if (route.page === "settings" && SAVABLE) return <SettingsPage configPath={snapshot.configPath} backgrounds={snapshot.backgrounds} />;
   if (route.page === "constants") {
     return snapshot.constants.length > 0 ? (
       <ConstantsPage constants={snapshot.constants} />

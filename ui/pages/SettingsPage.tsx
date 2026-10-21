@@ -8,6 +8,7 @@ import { paintCss } from "../paint.js";
 import { lchOf } from "../picker/ColorEditor.js";
 import { Picker } from "../picker/Picker.js";
 import { Popup } from "../Popup.js";
+import { useStore } from "../store.js";
 
 const NEW_BACKGROUND_COLOR = "#ffffff";
 
@@ -26,21 +27,12 @@ export function SettingsPage({
 }) {
   const [draftName, setDraftName] = useState("");
   const [failure, setFailure] = useState<string | null>(null);
+  const store = useStore();
   const written: Background[] = backgrounds.map(({ name, written }) => ({ name, color: written }));
 
   const write = (next: Background[]) => {
     setFailure(null);
-    fetch("/api/backgrounds", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ backgrounds: next }),
-    })
-      .then(async (response) => {
-        if (response.ok) return;
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        setFailure(body.error ?? `the server answered ${response.status}`);
-      })
-      .catch((error: Error) => setFailure(error.message));
+    store.setBackgrounds?.(next).catch((error: Error) => setFailure(error.message));
   };
 
   const add = () => {

@@ -502,10 +502,11 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   working copy with the settings around it. It resolves only to write
   outputs and to refuse a definition that is broken at startup.
 - `app-shell.ts`, `site.ts` — the app's one HTML page, and `dtg docs`, which
-  writes that page, the bundle and the snapshot as files. The page names its
-  mode: `served` by dev, or `static`, where the app reads `snapshot.json`
+  writes that page, the bundle and the definition as files. The page names its
+  mode: `served` by dev, or `static`, where the app reads `state.json`
   beside it, addresses pages in the fragment so any host at any folder can
-  serve it, and offers no editing.
+  serve it, and saves nothing. A static page built with `--editable` keeps
+  its visitors' edits in the page alone (`ui/store.ts`).
 - `edit.ts` — writing one value into the definition's text: an authored
   color, or the ref a role holds for a mode. An edit is a `set`, which needs
   a value to write over, or for a constant also an `add`, `rename` or
@@ -531,8 +532,7 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   one step of many edits. What counts as a change follows a constant
   through renames, so renaming one back is no change at all.
 - `snapshot.ts` — the resolved definition as plain data for the pages to
-  draw. `dtg dev`'s page builds it itself; `dtg docs` writes it as
-  `snapshot.json`.
+  draw, built in the page from the working copy.
 - `ui/` (outside `src/`) — the browsing UI, a React app bundled by Vite into
   `dist/ui/`. It runs the resolver, the edits and the color math itself
   (`ui/engine.ts`), so the pages and the emitters run the same code.

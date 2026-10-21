@@ -5,7 +5,7 @@ import { isOpaque } from "../../src/color-math.js";
 import { ColorTip } from "../ColorTip.js";
 import { paintCss } from "../paint.js";
 import { Popup } from "../Popup.js";
-import { STATIC } from "../mode.js";
+import { EDITABLE } from "../mode.js";
 import { RefEditor } from "../RefEditor.js";
 import { Link, useScrollToHash } from "../router.js";
 import { INHERIT, rolePath } from "../../src/selector.js";
@@ -117,7 +117,7 @@ function RoleRow({
         const trail = refTrail(snapshot, entry, index);
         const trailText = <code>{trail.join(" → ")}</code>;
         const inheritedNote = entry.inherited && <span className="muted">inherited from {parent}</span>;
-        if (STATIC) {
+        if (!EDITABLE) {
           return (
             <td key={index}>
               <ColorTip

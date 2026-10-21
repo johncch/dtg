@@ -4,7 +4,7 @@ import { curveAt, type CurveValue, type Ease } from "../src/curve-math.js";
 import type { EditTarget } from "../src/edit.js";
 import { curveDrawing, type CurveDrawing as Drawing, type ResolvedCurve } from "../src/resolve.js";
 import type { SnapshotSystem } from "../src/snapshot.js";
-import { STATIC } from "./mode.js";
+import { EDITABLE } from "./mode.js";
 import { paintCss } from "./paint.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { useTrying } from "./preview.js";
@@ -51,7 +51,7 @@ export function CurveParam({
       )}
     </span>
   );
-  if (STATIC || readOnly) return <span className="chip">{label}</span>;
+  if (!EDITABLE || readOnly) return <span className="chip">{label}</span>;
   return (
     <Popup title={`Edit ${name}`} className="chip chip-editable curve-param" label={label} focus="panel">
       {(panel) => <CurveEditor name={name} original={curve} drawn={drawn} range={range} target={target} panel={panel} />}
