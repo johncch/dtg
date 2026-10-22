@@ -23,6 +23,14 @@
   "bin": {
     "dtg": "./dist/cli.js"
   },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./cli": "./dist/cli.js",
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist",
     "THIRD_PARTY_NOTICES.md"
