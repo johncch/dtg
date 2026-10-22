@@ -24,7 +24,7 @@ export function appShell(title: string, mode: AppMode, editable = false): string
 <link rel="icon" type="image/png" href="${ui}favicon.png">
 <link rel="stylesheet" href="${ui}dtg-ui.css">
 </head>
-<body>
+<body class="mosaic-base">
 <div id="app"></div>
 <script type="module" src="${ui}dtg-ui.js"></script>
 </body>

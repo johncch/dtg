@@ -20,6 +20,10 @@ Working notes:
   server, and reload the browser; edits to `ui/` rebuild the bundle and reload.
   Extra flags pass through to `dtg dev`. `pnpm watch` is the two watchers
   without the server, for running `dist/cli.js` from another project.
+- `ui/mosaic/` is a copy of Mosaic's `dist/base.css` (tokens and element
+  defaults). Refresh it by running
+  `pnpm build:base` in `~/Projects/mosaic` and copying; never edit it in
+  place. `ui/app.css` maps its own names onto Mosaic's at the top.
 - The browsing UI is a React app in `ui/`, bundled by Vite into `dist/ui/`.
   The dev server serves one HTML shell for every page address plus
   `/api/state` (`src/dev-state.ts`): the working copy and settings, not

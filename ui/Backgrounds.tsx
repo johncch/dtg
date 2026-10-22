@@ -25,7 +25,9 @@ export function Backgrounds({ backgrounds }: { backgrounds: SnapshotBackground[]
   useEffect(() => {
     document.body.style.background = css;
     document.body.style.setProperty("--page-bg", css);
+    document.body.style.setProperty("--surface-canvas", css);
     document.body.classList.toggle("on-dark", dark);
+    document.documentElement.classList.toggle("dark", dark);
   }, [css, dark]);
 
   useEffect(() => {

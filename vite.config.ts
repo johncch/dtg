@@ -14,7 +14,7 @@ export default defineConfig({
       output: {
         entryFileNames: "dtg-ui.js",
         chunkFileNames: "[name]-[hash].js",
-        assetFileNames: "dtg-ui[extname]",
+        assetFileNames: (asset: { names: string[] }) => (asset.names[0]?.endsWith(".css") ? "dtg-ui[extname]" : "[name][extname]"),
       },
     },
   },
