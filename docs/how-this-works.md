@@ -619,7 +619,9 @@ Anything outside those three is a real defect. Promoting this check into a
       comments. `dtg docs --editable` keeps edits in the page alone.
 - [x] Live CSS for a host page: embedded in an iframe, the browser posts the
       CSS for what it shows to the page around it, so real components render
-      under a proposed palette as it is edited.
+      under a proposed palette as it is edited. The host can post back a
+      `dtg:background` color so a docked panel is drawn on the page's own
+      background.
 - [ ] Specimens: auto-generated nested surfaces, labels at small sizes on
       every surface, 1px separators and states, for the portable case with
       no host page.
