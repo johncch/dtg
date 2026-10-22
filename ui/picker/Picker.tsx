@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerE
 import {
   formatIn,
   maxChroma,
+  NO_HUE_BELOW_CHROMA,
   oklabToLinear,
   oklabToOklch,
   oklchToOklab,
@@ -247,7 +248,7 @@ const P3_ONLY = "The selected color is outside Display P3. The value shown is th
 
 /** A gray read back from an RGB-based notation has lost its hue; keep the bar where it was. */
 function keepingHue(next: Oklch, current: Oklch): Oklch {
-  return next[1] < 5e-5 ? [next[0], 0, current[2]] : next;
+  return next[1] < NO_HUE_BELOW_CHROMA ? [next[0], 0, current[2]] : next;
 }
 
 /** The color as numbers: a notation to read it in, then that notation's boxes. */

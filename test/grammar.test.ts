@@ -1,11 +1,12 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { formatColor, isOpaque } from "../dist/color-math.js";
+import { formatColor, isOpaque, parseColor } from "../dist/color-math.js";
 import {
   publicPath,
   publicSystemName,
   resolveDefinition,
 } from "../dist/resolve.js";
+import { emitCss, emitDtcg } from "../dist/emit.js";
 
 const BASE = `
 dtg: 1
@@ -240,7 +241,7 @@ s:
     );
   });
 
-  test("overrides remain six-digit hexes on flattened steps", () => {
+  test("overrides pin flattened steps with any opaque color", () => {
     const definition = (selector: string, override: string) => `
 dtg: 1
 systems:
@@ -251,22 +252,47 @@ systems:
 roles:
   surface: { shade: sky(${selector}) }
 `;
+    const pinned = (override: string, gamut: "srgb" | "display-p3") =>
+      formatColor(resolveDefinition(definition("10", override)).roles[0].perMode[0].color, gamut);
+    assert.equal(pinned("#ff0000", "srgb"), "#ff0000");
+    assert.equal(pinned("color(srgb 1 0 0)", "srgb"), "#ff0000");
+    assert.equal(pinned("color(display-p3 0.2 0.52 1)", "display-p3"), "color(display-p3 0.2 0.52 1)");
+    assert.equal(pinned("oklch(70% 0.1 40)", "srgb"), formatColor(parseColor("oklch(70% 0.1 40)", "x"), "srgb"));
     assert.throws(
-      () => resolveDefinition(definition("10", "color(srgb 1 0 0)")),
-      /expected a 6-digit hex color/,
+      () => resolveDefinition(definition("10", "oklch(70% 0.1 40 / 0.5)")),
+      /must be opaque/,
+    );
+    assert.throws(
+      () => resolveDefinition(definition("10", "not a color")),
+      /override "sky\(10\)"/,
     );
     assert.throws(
       () => resolveDefinition(definition("10 tint", "#ff0000")),
       /overrides pin flattened steps only/,
     );
-    assert.equal(
-      formatColor(
-        resolveDefinition(definition("10", "#ff0000")).roles[0].perMode[0]
-          .color,
-        "srgb",
-      ),
-      "#ff0000",
-    );
+  });
+});
+
+describe("roles written straight in a collection", () => {
+  const SRC = `
+dtg: 1
+palette:
+  ink: "#202020"
+  paper: "#ffffff"
+scheme:
+  primary: [ink]
+  on-primary: [paper]
+  echo: [primary]
+`;
+  test("have no group, can be referenced by name, and emit by name", () => {
+    const resolved = resolveDefinition(SRC);
+    const echo = resolved.roles.find((role) => role.role === "echo")!;
+    assert.equal(echo.group, "");
+    assert.deepEqual(echo.perMode[0].target, { kind: "role", group: "", role: "primary" });
+    const css = emitCss(resolved, "plain");
+    assert.match(css, /--primary: var\(--color-ink\);/);
+    assert.match(css, /--echo: var\(--primary\);/);
+    assert.match(JSON.stringify(emitDtcg(resolved)), /"\{scheme\.primary\}"/);
   });
 });
 

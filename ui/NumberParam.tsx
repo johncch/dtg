@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { EditTarget } from "../src/edit.js";
-import { STATIC } from "./mode.js";
+import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { useTrying } from "./preview.js";
 
@@ -12,26 +12,33 @@ export function NumberParam({
   value,
   target,
   range,
-  shared,
+  note = null,
+  dim = false,
+  readOnly = false,
 }: {
   name: string;
   value: number;
   target: EditTarget;
   range: Range | null;
-  shared: boolean;
+  /** Where the value comes from, when that is not simply the system: "default", "shared", "shared as &name", "same as &name". */
+  note?: string | null;
+  /** Shown faded: nothing writes it, so it is the algorithm's default. */
+  dim?: boolean;
+  /** Shown but not editable here, such as a YAML alias whose value is written elsewhere. */
+  readOnly?: boolean;
 }) {
   const label = (
     <span>
-      <code>{value}</code>
-      {shared && (
+      <code className={dim ? "muted" : undefined}>{value}</code>
+      {note && (
         <>
           <br />
-          <span className="muted">shared</span>
+          <span className="muted">{note}</span>
         </>
       )}
     </span>
   );
-  if (STATIC) return <span className="chip">{label}</span>;
+  if (!EDITABLE || readOnly) return <span className="chip">{label}</span>;
   return (
     <Popup title={`Edit ${name}`} className="chip chip-editable number-param" label={label} focus="field">
       {(panel) => <NumberEditor name={name} original={value} target={target} range={range} panel={panel} />}

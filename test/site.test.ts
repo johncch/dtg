@@ -15,5 +15,11 @@ describe("the app's page", () => {
     assert.ok(html.includes('src="ui/dtg-ui.js"'));
     assert.ok(html.includes('href="ui/dtg-ui.css"'));
     assert.ok(!html.includes('"/ui/'));
+    assert.ok(!html.includes("dtg-editable"));
+  });
+
+  test("an editable static copy says so", () => {
+    const html = appShell("dtg", "static", true);
+    assert.ok(html.includes('<meta name="dtg-editable" content="true">'));
   });
 });

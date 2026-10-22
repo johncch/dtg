@@ -42,7 +42,8 @@ if (command === "init") {
   const out = flagValue("--out") ?? fail("docs: name the folder to write with --out <dir>");
   try {
     const config = loadConfig({ definition: flagValue("--definition") });
-    console.log(`${writeSite(config.definition, config.gamut, out, "dtg.config.yaml")}\n  → ${out}/index.html`);
+    const editable = args.includes("--editable");
+    console.log(`${writeSite(config.definition, config.gamut, out, "dtg.config.yaml", config.cssModes, editable)}\n  → ${out}/index.html`);
   } catch (e) {
     fail((e as Error).message);
   }
@@ -68,6 +69,7 @@ if (command === "init") {
       config.definition,
       Number(flagValue("--port") ?? "4401"),
       config.gamut,
+      config.cssModes,
       args.includes("--build") ? config : null,
     );
   } else {
@@ -112,7 +114,7 @@ commands
   init      write a placeholder dtg.config.yaml in this folder
   dev       browse and edit the definition in a browser
   build     write the configured outputs
-  docs      write a read-only copy of the browser as static files, to publish
+  docs      write a copy of the browser as static files, to publish
 
 dev
   --port <n>                  port to serve on (default 4401)
@@ -124,9 +126,11 @@ build
                               the definition file
 
 docs
-  --out <dir>                 the folder to write: index.html, snapshot.json
+  --out <dir>                 the folder to write: index.html, state.json
                               and ui/. Serve it from any static host, at any
                               path; it reads nothing at runtime but its own files
+  --editable                  let visitors edit the colors in their page; edits
+                              are never saved, and a reload starts over
 
 dev, build and docs
   --definition <file>         the definition to read (default: \`definitions\`

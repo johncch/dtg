@@ -1,4 +1,4 @@
-import { isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
+import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
 import { INHERIT } from "./selector.js";
 
 /** One value written in a definition: an authored color, or the ref a role holds for a mode. */
@@ -61,14 +61,17 @@ export function describeTarget(target: EditTarget): string {
   }
 }
 
+/** Unquoted, `#` starts a comment and flow punctuation ends the value; this is what can go without quotes. */
+function plainSafe(value: string): boolean {
+  return /^[A-Za-z][\w().%/ -]*$/.test(value) && !value.endsWith(" ");
+}
+
 /** A value as YAML source, in the quoting the value it replaces was written in where that is safe. */
 function sourceFor(value: string, replaced: Scalar): string {
   if (replaced.type === Scalar.QUOTE_SINGLE && !value.includes("'")) return `'${value}'`;
   // A number written bare stays a number; quoting it would make it a string.
   if (replaced.type === Scalar.PLAIN && typeof replaced.value === "number" && /^-?\d+(\.\d+)?$/.test(value)) return value;
-  // Unquoted, `#` starts a comment and flow punctuation ends the value.
-  const plainSafe = /^[A-Za-z][\w().%/ -]*$/.test(value) && !value.endsWith(" ");
-  if (replaced.type === Scalar.PLAIN && plainSafe) return value;
+  if (replaced.type === Scalar.PLAIN && plainSafe(value)) return value;
   return JSON.stringify(value);
 }
 
@@ -94,11 +97,26 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       text = withConstantAdded(text, edit.target, edit.value);
       continue;
     }
+    const alias = aliasOnTheWay(text, edit.target);
+    if (alias) {
+      throw new Error(
+        `${describeTarget(edit.target)} is \`*${alias.name}\`, a YAML alias of the value anchored at ${alias.anchoredAt ?? `\`&${alias.name}\``} — edit it there, which changes every place it is used, or write a value of its own here`,
+      );
+    }
+    const structure = structureSource(edit.value) != null ? structureAt(text, edit.target) : null;
+    if (structure) {
+      text = text.slice(0, structure.start) + structureSource(edit.value) + text.slice(structure.end);
+      continue;
+    }
     const node = nodeAt(text, edit.target);
     if (node) {
       const [start, end] = node.range;
       const source = edit.value === INHERIT && edit.target.kind === "ref" ? INHERIT : sourceFor(edit.value, node);
       text = text.slice(0, start) + source + text.slice(end);
+      continue;
+    }
+    if (edit.target.kind === "param" && !edit.target.path.includes(".")) {
+      text = withParamAdded(text, edit.target, edit.value);
       continue;
     }
     const lastRef = lastRefBefore(text, edit.target);
@@ -120,6 +138,7 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
  * holds its place or the list stops short of it.
  */
 export function readValue(yamlText: string, target: EditTarget): string | null {
+  if (structureAt(yamlText, target)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
   const node = nodeAt(yamlText, target);
   if (node) return node.value == null ? INHERIT : String(node.value);
   return lastRefBefore(yamlText, target) ? INHERIT : null;
@@ -127,14 +146,89 @@ export function readValue(yamlText: string, target: EditTarget): string | null {
 
 type Located = Scalar & { range: NonNullable<Scalar["range"]> };
 
-function nodeAt(yamlText: string, target: EditTarget): Located | null {
+/**
+ * An alias on the way to a target, and where its anchor is written. Writing
+ * through one would either change every place the anchor is used or nothing,
+ * and which is meant is not the editor's to guess.
+ */
+function aliasOnTheWay(yamlText: string, target: EditTarget): { name: string; anchoredAt: string | null } | null {
+  const doc = parseDocument(yamlText);
+  const keys = keysOf(target, doc);
+  for (let depth = 1; depth <= keys.length; depth++) {
+    const node = doc.getIn(keys.slice(0, depth), true);
+    if (isAlias(node)) return { name: node.source, anchoredAt: anchorPath(doc.contents, node.source) };
+    if (isSeq(node) && depth < keys.length) keys[depth] = Number(keys[depth]);
+  }
+  return null;
+}
+
+/** The dotted path of the value carrying `&name`, or null when no value in the document does. */
+function anchorPath(node: unknown, name: string, keys: string[] = []): string | null {
+  const entries: [string, unknown][] = isMap(node)
+    ? node.items.map((pair) => [isScalar(pair.key) ? String(pair.key.value) : "?", pair.value])
+    : isSeq(node)
+      ? node.items.map((item, index) => [String(index), item])
+      : [];
+  for (const [key, value] of entries) {
+    if ((value as Node | null)?.anchor === name) return [...keys, key].join(".");
+    const found = anchorPath(value, name, [...keys, key]);
+    if (found) return found;
+  }
+  return null;
+}
+
+/** For a system's own params: which carry an anchor (`&name`) other values share, and which are aliases (`*name`) of one. */
+export type ParamAnchor = { name: string; role: "anchor" | "alias" };
+
+export function anchorsOf(doc: Document, system: string): Record<string, ParamAnchor> {
+  const params = doc.getIn(["systems", ...system.split("."), "params"], true);
+  if (!isMap(params)) return {};
+  const found: Record<string, ParamAnchor> = {};
+  for (const pair of params.items) {
+    if (!isScalar(pair.key)) continue;
+    const key = String(pair.key.value);
+    if (isAlias(pair.value)) found[key] = { name: pair.value.source, role: "alias" };
+    else if ((pair.value as Node | null)?.anchor) found[key] = { name: (pair.value as Node).anchor!, role: "anchor" };
+  }
+  return found;
+}
+
+function writtenAt(yamlText: string, target: EditTarget): unknown {
   const doc = parseDocument(yamlText);
   const keys = keysOf(target, doc);
   // `toward.0` names a list item; the document wants that index as a number.
   keys.forEach((key, depth) => {
     if (isSeq(doc.getIn(keys.slice(0, depth), true))) keys[depth] = Number(key);
   });
-  const node = doc.getIn(keys, true);
+  return doc.getIn(keys, true);
+}
+
+/** A list or map written at a param, as the span its contents occupy. */
+function structureAt(yamlText: string, target: EditTarget): { start: number; end: number } | null {
+  if (target.kind !== "param" && target.kind !== "default") return null;
+  const node = writtenAt(yamlText, target);
+  if (!(isSeq(node) || isMap(node)) || !node.range) return null;
+  return { start: node.range[0], end: node.flow ? node.range[1] : lastWrittenEnd(node) };
+}
+
+/**
+ * A list or map value, given as JSON — `[[0.3, 0.1, 0.6, 1], [0, 0, 1, 1]]`,
+ * `{"from": 0.97, "to": 0.25}` — as flow YAML; null when the value is neither.
+ */
+function structureSource(value: string): string | null {
+  if (!value.startsWith("[") && !value.startsWith("{")) return null;
+  const flow = (item: unknown): string => {
+    if (Array.isArray(item)) return `[${item.map(flow).join(", ")}]`;
+    if (item != null && typeof item === "object") {
+      return `{ ${Object.entries(item).map(([key, inner]) => `${keySource(key)}: ${flow(inner)}`).join(", ")} }`;
+    }
+    return typeof item === "number" ? String(item) : JSON.stringify(item);
+  };
+  return flow(JSON.parse(value));
+}
+
+function nodeAt(yamlText: string, target: EditTarget): Located | null {
+  const node = writtenAt(yamlText, target);
   if (!isScalar(node) || !node.range) return null;
   // A `~` holds a mode's place in a ref list and can be written over.
   // Anywhere else an empty value is nothing to edit.
@@ -180,22 +274,39 @@ function withRefsAdded(text: string, last: LastRef, sources: string[]): string {
   return text.slice(0, lineEnd) + added + text.slice(lineEnd);
 }
 
-/**
- * A new constant at the end of its group, or of `palette` for one in no
- * group. In a block map it goes on its own line, past everything the last
- * entry holds, at the indent the group's entries are written at.
- */
+/** A new constant at the end of its group, or of `palette` for one in no group. */
 function withConstantAdded(text: string, target: ConstantTarget, value: string): string {
   const keys = ["palette", ...target.path.split(".")];
-  const name = keys.at(-1)!;
-  const set = parseDocument(text).getIn(keys.slice(0, -1), true);
+  return withEntryAdded(text, keys.slice(0, -1), keys.at(-1)!, JSON.stringify(value), target, "and is not a color");
+}
+
+/** A param the system does not write yet, added to its `params` block: the algorithm's default stops applying. */
+function withParamAdded(text: string, target: Extract<EditTarget, { kind: "param" }>, value: string): string {
+  const source = /^-?\d+(\.\d+)?$/.test(value) || plainSafe(value) ? value : (structureSource(value) ?? JSON.stringify(value));
+  return withEntryAdded(text, ["systems", ...target.system.split("."), "params"], target.path, source, target, "but not as a value");
+}
+
+/**
+ * A new entry at the end of a map. In a block map it goes on its own line,
+ * past everything the last entry holds, at the indent the map's entries are
+ * written at.
+ */
+function withEntryAdded(
+  text: string,
+  mapKeys: string[],
+  name: string,
+  valueSource: string,
+  target: EditTarget,
+  alreadyWritten: string,
+): string {
+  const set = parseDocument(text).getIn(mapKeys, true);
   if (!isMap(set) || !set.range) {
     throw new Error(`nothing written for ${describeTarget(target)} to be added to`);
   }
-  if (set.items.some((item) => isScalar(item.key) && item.key.value === keys.at(-1))) {
-    throw new Error(`${describeTarget(target)} is already written, and is not a color`);
+  if (set.items.some((item) => isScalar(item.key) && item.key.value === name)) {
+    throw new Error(`${describeTarget(target)} is already written, ${alreadyWritten}`);
   }
-  const entry = `${keySource(name)}: ${JSON.stringify(value)}`;
+  const entry = `${keySource(name)}: ${valueSource}`;
   if (set.flow) {
     const brace = text.lastIndexOf("}", set.range[1]);
     const end = set.range[0] + text.slice(set.range[0], brace).trimEnd().length;

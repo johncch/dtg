@@ -1,12 +1,5 @@
 import type { Algorithm } from "../contract.js";
-import {
-  baseHueOf,
-  channelsIn,
-  colorFromRgb,
-  oklchInterpolate,
-  widestGamut,
-  type Color,
-} from "../color-math.js";
+import { blendOklch, hueOf, type Color } from "../color-math.js";
 
 type OklchScaleParams = {
   base: Color;
@@ -50,13 +43,10 @@ export const scale: Algorithm = {
     const fromEnd = stop < 500 ? stop / 500 : (1000 - stop) / 500;
     const baseFraction = fromEnd ** (Math.log(midpoint) / Math.log(0.5));
     const [light, dark] = toward;
-    const gamut = widestGamut([base, light, dark]);
-    const baseChannels = channelsIn(base, gamut);
-    const baseHue = baseHueOf(baseChannels);
-    const rgb =
-      stop < 500
-        ? oklchInterpolate(channelsIn(light, gamut), baseChannels, baseFraction, baseHue, hueShift)
-        : oklchInterpolate(baseChannels, channelsIn(dark, gamut), 1 - baseFraction, baseHue, hueShift);
-    return colorFromRgb(rgb, gamut);
+    const end = stop < 500 ? light : dark;
+    const heldHue = hueOf(base) ?? hueOf(end) ?? 0;
+    return stop < 500
+      ? blendOklch(light, base, baseFraction, heldHue, hueShift)
+      : blendOklch(base, dark, 1 - baseFraction, heldHue, hueShift);
   },
 };

@@ -1,11 +1,5 @@
 import type { Algorithm } from "../contract.js";
-import {
-  alphaComposite,
-  channelsIn,
-  colorFromRgb,
-  widestGamut,
-  type Color,
-} from "../color-math.js";
+import { composite, type Color } from "../color-math.js";
 
 /**
  * A tint composited over a base; the selector is the tint's alpha as a
@@ -31,10 +25,6 @@ export const tint: Algorithm = {
     const { base, tint } = params as { base: Color; tint: Color };
     const alpha = (selector.percent as number) / 100;
     if (selector.form === "tint") return { ...tint, alpha };
-    const gamut = widestGamut([tint, base]);
-    return colorFromRgb(
-      alphaComposite(channelsIn(tint, gamut), channelsIn(base, gamut), alpha),
-      gamut,
-    );
+    return composite(tint, base, alpha, "srgb");
   },
 };

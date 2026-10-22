@@ -1,0 +1,146 @@
+# Material 3's color scheme, built with dtg's `tone` algorithm.
+#
+# One source color lends its hue to five tonal palettes, as Material's
+# default ("tonal spot") scheme does: primary, secondary and tertiary at
+# decreasing chroma, tertiary turned 60° away, and two near-gray neutrals.
+# Error is its own red, whatever the source. Every role then points at a
+# tone, and a tone is lightness itself: every palette's 40 is equally light,
+# so on-primary (100) over primary (40) is about 6.5:1 for any source color.
+# The source is one line in `defaults`: point it at any color in the
+# `material` palette and the whole scheme follows, contrast intact. In
+# `dtg dev`, any palette's anchor chip opens a picker listing them.
+#
+# It is Material-style, not Material-exact. Material builds its palettes in
+# HCT; `tone` keeps HCT's tone (CIELAB L*) exactly and holds hue and chroma
+# in OKLCH. Against Material's own scheme for the same source, every role in
+# both modes lands within 0.01 for purple, blue and teal and 0.012 for green
+# (OKLab ΔE, where about 0.02 is just noticeable side by side). Yellow and
+# red reach about 0.02 at their worst: the chromas here were tuned on purple,
+# and Material's fixed chroma means a little more or less in OKLCH per hue.
+# Left out: Material's fixed and inverse roles, shadow, scrim, surface tint.
+# Roles emit under Material's own token names (--md-sys-color-primary, …).
+#
+#   npx dtg dev --definition examples/material.dtg.yaml
+
+dtg: 1
+
+modes: [light, dark]
+
+palette:
+  material:
+    emit: false
+    purple: "#6750a4"
+    blue: "#3b82f6"
+    green: "#16a34a"
+    yellow: "#eab308"
+    red: "#dc2626"
+    teal: "#0d9488"
+    error: "#ba1a1a"
+
+defaults:
+  tone:
+    anchor: material.purple # the source color
+
+systems:
+  primary:
+    algorithm: tone
+    params: { chroma: 0.094 }
+  secondary:
+    algorithm: tone
+    params: { chroma: 0.035 }
+  tertiary:
+    algorithm: tone
+    params: { chroma: 0.06, hue: 60 }
+  neutral:
+    algorithm: tone
+    params: { chroma: 0.012 }
+  neutral-variant:
+    algorithm: tone
+    params: { chroma: 0.016 }
+  error:
+    algorithm: tone
+    params: { anchor: material.error, chroma: 0.202 }
+
+scheme:
+  # Material's own token names: `md-sys-color` emits as part of every name,
+  # so roles come out as --md-sys-color-primary and so on. Each family is a
+  # group for browsing, left out of names with `omit: true`.
+  md-sys-color:
+    description: >-
+      Material's color roles. Each family below comes as a set: the color
+      itself for emphasized elements, `on-` for text and icons drawn on it, a
+      `container` for quieter fills, and `on-container` for content on those.
+      The tones are chosen so every `on-` pair stays readable in both modes.
+    primary:
+      omit: true
+      description: >-
+        The main brand color, for the most prominent components: filled
+        buttons, floating action buttons, active states, focus. Primary
+        containers are for tonal buttons and highlighted cards that should
+        stand out without shouting.
+      primary: [primary(40), primary(80)]
+      on-primary: [primary(100), primary(20)]
+      primary-container: [primary(90), primary(30)]
+      on-primary-container: [primary(30), primary(90)]
+
+    secondary:
+      omit: true
+      description: >-
+        A quieter companion to primary, at lower chroma, for less prominent
+        components: filter chips, tonal buttons, selected list items. It
+        carries the brand's hue without competing with primary.
+      secondary: [secondary(40), secondary(80)]
+      on-secondary: [secondary(100), secondary(20)]
+      secondary-container: [secondary(90), secondary(30)]
+      on-secondary-container: [secondary(30), secondary(90)]
+
+    tertiary:
+      omit: true
+      description: >-
+        A contrasting accent, turned 60° from the source hue, to balance
+        primary and secondary and draw attention to specific elements: an
+        input field's highlight, a badge, a special card.
+      tertiary: [tertiary(40), tertiary(80)]
+      on-tertiary: [tertiary(100), tertiary(20)]
+      tertiary-container: [tertiary(90), tertiary(30)]
+      on-tertiary-container: [tertiary(30), tertiary(90)]
+
+    error:
+      omit: true
+      description: >-
+        Errors and destructive actions. Its own red, the same whatever the
+        source color, so an error always reads as one.
+      error: [error(40), error(80)]
+      on-error: [error(100), error(20)]
+      error-container: [error(90), error(30)]
+      on-error-container: [error(30), error(90)]
+
+    surface:
+      omit: true
+      description: >-
+        Backgrounds and the containers placed on them. The container steps,
+        from lowest to highest, are for nesting and emphasis: a card on the
+        page, a sheet on the card. Dim and bright are the darkest and lightest
+        the surface can go. On-surface is body text; on-surface-variant is
+        secondary text and icons, and surface-variant is for lower-emphasis
+        areas.
+      surface: [neutral(98), neutral(6)]
+      surface-dim: [neutral(87), neutral(6)]
+      surface-bright: [neutral(98), neutral(24)]
+      surface-container-lowest: [neutral(100), neutral(4)]
+      surface-container-low: [neutral(96), neutral(10)]
+      surface-container: [neutral(94), neutral(12)]
+      surface-container-high: [neutral(92), neutral(17)]
+      surface-container-highest: [neutral(90), neutral(22)]
+      on-surface: [neutral(10), neutral(90)]
+      surface-variant: [neutral-variant(90), neutral-variant(30)]
+      on-surface-variant: [neutral-variant(30), neutral-variant(80)]
+
+    outline:
+      omit: true
+      description: >-
+        Borders and dividers. Outline marks boundaries that matter, like a
+        text field's edge; outline-variant is for decorative ones, like a
+        divider between list items.
+      outline: [neutral-variant(50), neutral-variant(60)]
+      outline-variant: [neutral-variant(80), neutral-variant(30)]

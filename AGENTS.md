@@ -22,8 +22,9 @@ Working notes:
   without the server, for running `dist/cli.js` from another project.
 - The browsing UI is a React app in `ui/`, bundled by Vite into `dist/ui/`.
   The dev server serves one HTML shell for every page address plus
-  `/api/snapshot` (`src/snapshot.ts`), the definition as JSON; the app routes
-  and draws client-side and imports `src/color-math.ts` directly. It has its
+  `/api/state` (`src/dev-state.ts`): the working copy and settings, not
+  resolved. The app resolves it in the page (`ui/engine.ts`, which imports
+  the resolver and `src/snapshot.ts`), routes, and draws. It has its
   own `ui/tsconfig.json`; `pnpm build` type-checks it. React and Vite are
   devDependencies — the bundle is what ships.
 - Conventions the tool promises (see README): a `dtg.config.yaml` project config at

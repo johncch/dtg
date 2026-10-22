@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Edit } from "../src/edit.js";
-import type { Snapshot } from "../src/snapshot.js";
+import { previewOf, type Drawn } from "./engine.js";
+import { useStore } from "./store.js";
 
 type Trying = {
   /** Draw the app as if `edit` had been made, or pass null to stop. Nothing is kept. */
@@ -20,10 +21,9 @@ export function useTrying(): Trying {
 }
 
 /**
- * Holds the snapshot of the definition-with-an-edit-being-tried. The server
- * does the resolving, since the algorithms live there; a drag asks far faster
- * than it answers, so only the latest ask is ever sent and an answer that is
- * no longer the latest is dropped.
+ * Holds the snapshot of the definition-with-an-edit-being-tried, resolved in
+ * the page. A drag asks far more often than the screen redraws, so asks
+ * within one frame collapse into the latest.
  *
  * Committing keeps the tried picture on screen until the working copy that
  * contains the edit arrives, so the page does not flash back to the old color
@@ -33,61 +33,55 @@ export function TryingProvider({
   base,
   children,
 }: {
-  /** The working copy as the server last sent it. */
-  base: Snapshot;
-  children: (shown: Snapshot) => ReactNode;
+  /** The working copy, drawn. */
+  base: Drawn;
+  children: (shown: Drawn) => ReactNode;
 }) {
-  const [tried, setTried] = useState<Snapshot | null>(null);
+  const store = useStore();
+  const [tried, setTried] = useState<Drawn | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
   const wanted = useRef<Edit | null>(null);
-  const inFlight = useRef(false);
+  const frame = useRef<number | null>(null);
+  const latestBase = useRef(base);
 
   useEffect(() => {
+    latestBase.current = base;
     if (wanted.current == null) setTried(null);
   }, [base]);
 
-  const send = useCallback(() => {
-    const edit = wanted.current;
-    if (edit == null || inFlight.current) return;
-    inFlight.current = true;
-    fetch("/api/preview", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ edits: [edit] }),
-    })
-      .then(async (response): Promise<Snapshot | string> => {
-        if (response.ok) return (await response.json()) as Snapshot;
-        const body = (await response.json().catch(() => ({}))) as { error?: string };
-        return body.error ?? `the server answered ${response.status}`;
-      })
-      .catch((error: Error) => error.message)
-      .then((answer) => {
-        inFlight.current = false;
-        if (wanted.current !== edit) {
-          send();
-        } else if (typeof answer === "string") {
-          setRefusal(answer);
-        } else {
-          setTried(answer);
-          setRefusal(null);
-        }
-      });
+  useEffect(() => () => {
+    if (frame.current != null) cancelAnimationFrame(frame.current);
+  }, []);
+
+  const schedule = useCallback(() => {
+    if (frame.current != null) return;
+    frame.current = requestAnimationFrame(() => {
+      frame.current = null;
+      const edit = wanted.current;
+      if (edit == null) return;
+      try {
+        setTried(previewOf(latestBase.current.snapshot, [edit]));
+        setRefusal(null);
+      } catch (e) {
+        setRefusal((e as Error).message);
+      }
+    });
   }, []);
 
   const trying = useMemo<Trying>(() => {
     const commitStep = (edits: Edit[]) => {
       wanted.current = null;
+      // A step that leaves the definition unresolvable is refused here,
+      // whole, rather than kept as a change nobody can see.
+      try {
+        previewOf(latestBase.current.snapshot, edits);
+      } catch (e) {
+        setTried(null);
+        setRefusal((e as Error).message);
+        return;
+      }
       setRefusal(null);
-      fetch("/api/edits", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ edits }),
-      }).then(
-        (response) => {
-          if (!response.ok) setTried(null);
-        },
-        () => setTried(null),
-      );
+      store.commit(edits).catch(() => setTried(null));
     };
     return {
       preview(edit) {
@@ -95,13 +89,13 @@ export function TryingProvider({
         if (edit == null) {
           setTried(null);
           setRefusal(null);
-        } else send();
+        } else schedule();
       },
       commit: (edit) => commitStep([edit]),
       commitStep,
       refusal,
     };
-  }, [send, refusal]);
+  }, [schedule, refusal, store]);
 
   return <TryingContext.Provider value={trying}>{children(tried ?? base)}</TryingContext.Provider>;
 }

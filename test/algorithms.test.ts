@@ -1,14 +1,20 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { parseParams } from "../dist/params.js";
-import { algorithmFor } from "../dist/resolve.js";
+import { algorithmFor, curveDrawing, resolveDefinition } from "../dist/resolve.js";
 import { step } from "./step.ts";
 import {
   type Color,
+  convert,
   formatColor,
+  inGamut,
+  luminanceOf,
+  toneOf,
   hexToOklab,
   isOpaque,
   oklabToOklch,
+  parseColor,
+  toOklab,
 } from "../dist/color-math.js";
 
 const css = (v: { color: Color }) => formatColor(v.color, "srgb");
@@ -149,5 +155,205 @@ describe("a bounded number param", () => {
     const theme = { base: "#03a2e8", toward: ["#fafdff", "#001a28"] };
     assert.throws(() => parseParams(scale, { ...theme, hueShift: 120 }), /param 'hueShift': expected 0–100, got 120/);
     assert.doesNotThrow(() => parseParams(scale, { ...theme, hueShift: 100 }));
+  });
+});
+
+describe("color spaces: how a color is written never reaches the math", () => {
+  const scale = algorithmFor("scale")!;
+  const distance = (a: Color, b: Color) => {
+    const [x, y] = [toOklab(a), toOklab(b)];
+    return Math.hypot(x[0] - y[0], x[1] - y[1], x[2] - y[2]);
+  };
+  const GREEN_500 = "oklch(72.3% 0.219 149.579)";
+
+  test("the same blue written as hex and as display-p3 gives the same scale", () => {
+    const p3 = convert(parseColor("#3b82f6", "blue"), "display-p3").coords;
+    const asP3 = `color(display-p3 ${p3.map((c) => c.toFixed(12)).join(" ")})`;
+    const ends = { toward: ["#ffffff", "#000000"], hueShift: 0, midpoint: 0.5 };
+    for (const stop of ["100", "250", "750", "900"]) {
+      const fromHex = step(scale, { ...ends, base: "#3b82f6" }, stop).color;
+      const fromP3 = step(scale, { ...ends, base: asP3 }, stop).color;
+      assert.ok(distance(fromHex, fromP3) < 1e-6, `stop ${stop} differs by ${distance(fromHex, fromP3)}`);
+    }
+  });
+
+  test("an oklch base outside sRGB is not clipped next to 500", () => {
+    const params = { base: GREEN_500, toward: ["#ffffff", "#000000"], hueShift: 0, midpoint: 0.5 };
+    const at500 = step(scale, params, "500").color;
+    for (const stop of ["499", "501"]) {
+      const d = distance(step(scale, params, stop).color, at500);
+      assert.ok(d < 0.002, `stop ${stop} is ${d} from the base`);
+    }
+  });
+
+  test("a full tint toward a color outside sRGB is that color", () => {
+    const full = step(tint, { base: "#ffffff", tint: GREEN_500 }, "100").color;
+    assert.ok(distance(full, parseColor(GREEN_500, "green")) < 1e-6);
+  });
+
+  test("a gray base takes its hue from the end it blends toward", () => {
+    const hue = (c: Color) => oklabToOklch(toOklab(c))[2];
+    const params = { base: "#808080", toward: ["#ffffff", "#1d3a8a"], hueShift: 0, midpoint: 0.5 };
+    const blue = hue(parseColor("#1d3a8a", "blue"));
+    assert.ok(Math.abs(hue(step(scale, params, "750").color) - blue) < 2);
+  });
+});
+
+describe("curve", () => {
+  const curve = algorithmFor("curve")!;
+  const BLUE = { anchor: "#3b82f6" };
+  const lch = (c: Color) => oklabToOklch(toOklab(c));
+  const near = (a: number, b: number, tolerance = 1e-6) => Math.abs(a - b) < tolerance;
+
+  test("the anchor sits exactly at `at`", () => {
+    assert.equal(css(step(curve, BLUE, "500")), "#3b82f6");
+    assert.equal(css(step(curve, { ...BLUE, at: 400 }, "400")), "#3b82f6");
+  });
+
+  test("with straight easings, lightness runs evenly from each end to the anchor", () => {
+    const params = { ...BLUE, lightness: { from: 0.95, to: 0.2 } };
+    const [anchorL] = lch(parseColor("#3b82f6", "blue"));
+    const L = (stop: string) => lch(step(curve, params, stop).color)[0];
+    assert.ok(near(L("0"), 0.95));
+    assert.ok(near(L("1000"), 0.2));
+    assert.ok(near(L("250"), (0.95 + anchorL) / 2, 1e-4));
+    assert.ok(near(L("750"), (anchorL + 0.2) / 2, 1e-4));
+  });
+
+  test("steps stay inside the gamut while chroma is at most 1", () => {
+    for (const gamut of ["srgb", "display-p3"] as const) {
+      const params = { ...BLUE, gamut, chroma: { from: 1, to: 1 } };
+      for (let stop = 0; stop <= 1000; stop += 50) {
+        if (stop === 500) continue;
+        assert.ok(inGamut(toOklab(step(curve, params, String(stop)).color), gamut, 1e-5), `${gamut} stop ${stop}`);
+      }
+    }
+  });
+
+  test("hue is degrees from the anchor's hue", () => {
+    const [, , anchorHue] = lch(parseColor("#3b82f6", "blue"));
+    const params = { ...BLUE, hue: { from: -20, to: 15 } };
+    assert.ok(near(lch(step(curve, params, "0").color)[2], anchorHue - 20, 1e-3));
+    assert.ok(near(lch(step(curve, params, "1000").color)[2], anchorHue + 15, 1e-3));
+  });
+
+  test("an easing bends one side only", () => {
+    const L = (params: object, stop: string) => lch(step(curve, params, stop).color)[0];
+    const eased = { ...BLUE, lightness: { easing: [[0.8, 0, 1, 0.2], [0.33, 0.33, 0.67, 0.67]] } };
+    assert.ok(L(eased, "250") > L(BLUE, "250") + 0.05, "the light side lags toward its end");
+    assert.ok(near(L(eased, "750"), L(BLUE, "750")));
+  });
+
+  test("steps next to the anchor are next to it in color", () => {
+    const anchor = toOklab(step(curve, BLUE, "500").color);
+    for (const stop of ["499", "501"]) {
+      const [L, a, b] = toOklab(step(curve, BLUE, stop).color);
+      assert.ok(Math.hypot(L - anchor[0], a - anchor[1], b - anchor[2]) < 0.005, stop);
+    }
+  });
+
+  test("a curve takes only from, to and easing, within bounds, with x values 0–1", () => {
+    assert.throws(() => step(curve, { ...BLUE, lightness: { from: 0.9, start: 1 } }, "500"), /unknown field "start"/);
+    assert.throws(() => step(curve, { ...BLUE, lightness: { from: 1.2 } }, "500"), /lightness'\.from: expected 0–1, got 1\.2/);
+    assert.throws(
+      () => step(curve, { ...BLUE, chroma: { easing: [[0, 0, 1, 1], [1.2, 0, 1, 1]] } }, "500"),
+      /chroma'\.easing, after it: x values must be 0–1/,
+    );
+  });
+
+  test("a stop outside 0–1000 is refused", () => {
+    assert.throws(() => step(curve, BLUE, "1200"), /stop must be a number 0–1000/);
+  });
+
+  test("a swatch is the anchor with one channel moved", () => {
+    const params = parseParams(curve, BLUE).values;
+    const anchor = lch(parseColor("#3b82f6", "blue"));
+    assert.equal(css({ color: curve.curveSwatch!(params, "hue", 0) }), "#3b82f6");
+    const turned = lch(curve.curveSwatch!(params, "hue", 40));
+    assert.ok(near(turned[2], anchor[2] + 40, 1e-3) && near(turned[0], anchor[0]));
+    assert.ok(near(lch(curve.curveSwatch!(params, "lightness", 0.3))[0], 0.3));
+  });
+
+  test("a curve param must run along a number field of its selector", () => {
+    const wrong = { ...curve, name: "wrong", params: { ...curve.params, hue: { ...curve.params.hue, along: "nope" } } };
+    assert.throws(
+      () => resolveDefinition(`
+dtg: 1
+systems:
+  blue: { algorithm: wrong, params: { anchor: "#3b82f6" }, emit: [500] }
+`, [wrong as typeof curve]),
+      /wrong param "hue" runs along "nope", which is not a number field of its selector/,
+    );
+  });
+
+  test("a system reports each curve filled in, with where it passes through the anchor", () => {
+    const [system] = resolveDefinition(`
+dtg: 1
+systems:
+  blue:
+    algorithm: curve
+    params: { anchor: "#3b82f6", hue: { to: 10 } }
+    emit: [500]
+`).systems;
+    assert.deepEqual(Object.keys(system.params), Object.keys(curve.params));
+    assert.deepEqual(system.ownParams, ["anchor", "hue"]);
+    assert.ok(system.defaultedParams.includes("lightness") && !system.defaultedParams.includes("hue"));
+    assert.deepEqual(system.curves.hue.value, { from: 0, to: 10, easing: [[0.33, 0.33, 0.67, 0.67], [0.33, 0.33, 0.67, 0.67]] });
+    assert.deepEqual(system.curves.hue.pivot, { at: 500, value: 0 });
+    assert.deepEqual(system.curves.hue.span, { min: 0, max: 1000 });
+    assert.deepEqual(system.curves.lightness.marks.map((mark) => [mark.at, mark.step]), [[500, "500"]]);
+    assert.equal(system.curves.hue.label, "degrees from the anchor's hue");
+    assert.equal(system.curves.hue.unit, "°");
+    assert.equal(system.curves.lightness.unit, null);
+    assert.ok(near(system.curves.lightness.pivot.value, lch(parseColor("#3b82f6", "blue"))[0]));
+    const lightness = curveDrawing(system, new Map(), "lightness");
+    assert.equal(lightness.samples.length, 41);
+    assert.equal(css({ color: lightness.samples[20].color }), "#3b82f6");
+    const hue = curveDrawing(system, new Map(), "hue");
+    assert.equal(hue.swatches.length, 121);
+    assert.deepEqual([hue.swatches[0].value, hue.swatches[120].value], [-180, 180]);
+  });
+});
+
+describe("tone", () => {
+  const tone = algorithmFor("tone")!;
+  const at = (params: object, selector: string) => step(tone, params, selector).color;
+  const contrastWithWhite = (c: Color) => 1.05 / (luminanceOf(toOklab(c)) + 0.05);
+
+  test("every hue's tone 40 is equally light, and so equally readable on white", () => {
+    for (const anchor of ["#ef4444", "#3b82f6", "#eab308", "#22c55e"]) {
+      const c = at({ anchor }, "40");
+      assert.ok(Math.abs(toneOf(toOklab(c)) - 40) < 0.01, `${anchor} tone ${toneOf(toOklab(c))}`);
+      assert.ok(Math.abs(contrastWithWhite(c) - 6.46) < 0.02, `${anchor} contrast ${contrastWithWhite(c)}`);
+    }
+  });
+
+  test("tone 0 is black and tone 100 is white", () => {
+    assert.equal(css({ color: at({ anchor: "#3b82f6" }, "0") }), "#000000");
+    assert.equal(css({ color: at({ anchor: "#3b82f6" }, "100") }), "#ffffff");
+  });
+
+  test("with chroma left out, the palette passes through the anchor at the anchor's own tone", () => {
+    const anchorTone = toneOf(toOklab(parseColor("#3b82f6", "blue")));
+    const [L, a, b] = toOklab(at({ anchor: "#3b82f6" }, String(anchorTone)));
+    const [L0, a0, b0] = toOklab(parseColor("#3b82f6", "blue"));
+    assert.ok(Math.hypot(L - L0, a - a0, b - b0) < 0.001);
+  });
+
+  test("a chroma the gamut cannot hold gets the most it can, in gamut", () => {
+    for (const t of ["10", "50", "90"]) {
+      assert.ok(inGamut(toOklab(at({ anchor: "#3b82f6", chroma: 0.4 }, t)), "srgb", 1e-5), t);
+    }
+  });
+
+  test("hue turns away from the anchor's", () => {
+    const [, , anchorHue] = oklabToOklch(toOklab(parseColor("#3b82f6", "blue")));
+    const [, , h] = oklabToOklch(toOklab(at({ anchor: "#3b82f6", chroma: 0.05, hue: 60 }, "50")));
+    assert.ok(Math.abs(((h - anchorHue + 540) % 360) - 180 - 60) < 0.01);
+  });
+
+  test("chroma is optional; a written one is used", () => {
+    const [, low] = oklabToOklch(toOklab(at({ anchor: "#3b82f6", chroma: 0.03 }, "50")));
+    assert.ok(Math.abs(low - 0.03) < 1e-4);
   });
 });

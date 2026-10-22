@@ -22,7 +22,7 @@ import {
   type ResolvedStep,
   type ResolvedSystem,
 } from "./resolve.js";
-import { formatRef } from "./selector.js";
+import { formatRef, rolePath } from "./selector.js";
 
 /**
  * `plain` emits primitives into `:root`, usable by any stylesheet.
@@ -76,10 +76,10 @@ function parentModeIndex(
 
 function findRole(
   resolved: ResolvedDefinition,
-  target: { domain: string; role: string },
+  target: { group: string; role: string },
 ): ResolvedRole | undefined {
   return resolved.roles.find(
-    (r) => r.domain === target.domain && r.role === target.role,
+    (r) => r.group === target.group && r.role === target.role,
   );
 }
 
@@ -304,12 +304,12 @@ export function emitScss(resolved: ResolvedDefinition): string {
   for (const [i, mode] of resolved.modes.entries()) {
     lines.push("");
     if (resolved.modes.length > 1) lines.push(`// ${mode}`);
-    let domain: string | null = null;
+    let group: string | null = null;
     for (const role of resolved.roles) {
       if (leftOut(resolved, role, i, "flat")) continue;
-      if (role.domain !== domain) {
-        domain = role.domain;
-        lines.push(`// ${domain}`);
+      if (role.group !== group) {
+        group = role.group;
+        if (group) lines.push(`// ${group}`);
       }
       const name = roleVarName(role, mode, "flat", resolved.modes.length);
       lines.push(`$${name}: ${formatColor(role.perMode[i].color, "srgb")};`);
@@ -543,14 +543,14 @@ export function emitDtcg(
     const section = (out[role.section] ??= {}) as Record<string, unknown>;
     // Roles nest as deep as the definition nests them, so the group tree is
     // built from the path rather than assumed to be two levels.
-    const rolePath = role.segments.map((seg) => seg.name).join(".");
-    placeAt(section, rolePath, {
+    const path = role.segments.map((seg) => seg.name).join(".");
+    placeAt(section, path, {
       $type: "color",
       $value: dtcgRef(resolved, role.perMode[0], colorSpace),
       ...(role.description ? { $description: role.description } : {}),
       $extensions: {
         [DTCG_NS]: {
-          id: rolePath,
+          id: path,
           name: publicRoleName(role, "figma", "/"),
           modes: Object.fromEntries(
             resolved.modes.map((m, i) => [m, dtcgRef(resolved, role.perMode[i], colorSpace)]),
@@ -638,7 +638,7 @@ function stepIdentity(
   const uses = lineage.get(formatRef(system.system, step.selector)) ?? [];
   if (uses.length === 0) return formatRef(system.system, step.selector);
   return uses
-    .map((u) => `${u.domain}.${u.role}[${u.mode}]`)
+    .map((u) => `${rolePath(u)}[${u.mode}]`)
     .join(", ");
 }
 
@@ -650,9 +650,9 @@ function dtcgRef(
   const target = entry.target;
   if (target.kind === "role") {
     const role = resolved.roles.find(
-      (r) => r.domain === target.domain && r.role === target.role,
+      (r) => r.group === target.group && r.role === target.role,
     );
-    if (role) return `{${role.section}.${role.domain}.${role.role}}`;
+    if (role) return `{${role.section}.${rolePath(role)}}`;
   }
   if (target.kind === "constant" && isOpaque(entry.color)) {
     return `{systems.static.${target.name}}`;

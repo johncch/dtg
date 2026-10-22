@@ -1,7 +1,8 @@
 import { parseColor, type Color, type Gamut } from "./color-math.js";
 import type { SelectorShape } from "./contract.js";
 import { DEFAULT_BACKGROUNDS, type Background } from "./dev-settings.js";
-import type { Edit } from "./edit.js";
+import { parseDocument } from "yaml";
+import { anchorsOf, type Edit, type ParamAnchor } from "./edit.js";
 import type { Change } from "./working-copy.js";
 import {
   algorithmFor,
@@ -10,6 +11,7 @@ import {
   type Lineage,
   type RefTarget,
   type ResolvedColorParam,
+  type ResolvedCurve,
   type ResolvedDefinition,
 } from "./resolve.js";
 import { formatRef } from "./selector.js";
@@ -44,7 +46,7 @@ export type Snapshot = {
   systems: SnapshotSystem[];
   constants: SnapshotConstant[];
   roles: SnapshotRole[];
-  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role domains. */
+  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role groups. */
   groupNotes: { systems: Record<string, string>; palette: Record<string, string>; roles: Record<string, string> };
 };
 
@@ -63,7 +65,8 @@ export type SnapshotBackground = {
 };
 
 export type SnapshotUse = {
-  domain: string;
+  section: string;
+  group: string;
   role: string;
   mode: string;
   translucent: boolean;
@@ -87,10 +90,18 @@ export type SnapshotSystem = {
   params: Record<string, unknown>;
   /** The system's hand-written description, or null; `description` is the algorithm's. */
   note: string | null;
-  /** The top-level params the system wrote itself; the rest came from `defaults`. */
+  /** The top-level params the system wrote itself. */
   ownParams: string[];
+  /** The params nothing writes; their value in `params` is the algorithm's default, and setting one writes it into the system. */
+  defaultedParams: string[];
+  /** Each `curve` param, every field filled in, with its pivot and bounds, for the page to draw and edit. */
+  curves: Record<string, ResolvedCurve>;
   /** The bounds the algorithm declares for its number params, by name, for a slider to run between. */
   numberRanges: Record<string, { min: number; max: number }>;
+  /** The options the algorithm declares for its choice params, by name, for a control to pick among. */
+  choices: Record<string, string[]>;
+  /** The system's own params that carry a YAML anchor others share, or are an alias of one, by name. */
+  anchors: Record<string, ParamAnchor>;
   /** Which of `params` are colors, so the page knows what can be edited. */
   colorParams: ResolvedColorParam[];
   /** What a ref into this system is made of, so the page can draw a control for each part. */
@@ -111,7 +122,7 @@ export type SnapshotConstant = {
 
 export type SnapshotRole = {
   section: string;
-  domain: string;
+  group: string;
   role: string;
   /** The role's hand-written description, or null. */
   note: string | null;
@@ -147,6 +158,7 @@ export function buildSnapshot({
   configPath?: string;
   backgrounds?: Background[];
 }): Snapshot {
+  const document = parseDocument(definition.text);
   return {
     error,
     stale,
@@ -172,7 +184,11 @@ export function buildSnapshot({
       params: system.params,
       note: system.description ?? null,
       ownParams: system.ownParams,
+      defaultedParams: system.defaultedParams,
+      curves: system.curves,
       numberRanges: numberRangesOf(system.algorithm),
+      choices: choicesOf(system.algorithm),
+      anchors: anchorsOf(document, system.system),
       colorParams: system.colorParams,
       selector: system.selector,
       steps: system.steps.map((step) => ({
@@ -198,7 +214,7 @@ export function buildSnapshot({
     groupNotes: resolved.groupDescriptions,
     roles: resolved.roles.map((role) => ({
       section: role.section,
-      domain: role.domain,
+      group: role.group,
       role: role.role,
       note: role.description ?? null,
       perMode: role.perMode.map((entry, index) => ({
@@ -209,6 +225,13 @@ export function buildSnapshot({
       })),
     })),
   };
+}
+
+function choicesOf(algorithm: string): Record<string, string[]> {
+  const params = algorithmFor(algorithm)?.params ?? {};
+  return Object.fromEntries(
+    Object.entries(params).flatMap(([name, kind]) => (kind.kind === "choice" ? [[name, kind.options]] : [])),
+  );
 }
 
 function numberRangesOf(algorithm: string): Record<string, { min: number; max: number }> {

@@ -6,8 +6,9 @@ export type Route =
   | { page: "definition" }
   | { page: "settings" }
   | { page: "system"; name: string }
-  | { page: "domain"; name: string }
-  | { page: "roles" }
+  | { page: "group"; name: string }
+  /** Every role, or a section's. */
+  | { page: "roles"; section?: string }
   | { page: "constants" }
   | { page: "palette"; name: string }
   | { page: "unknown"; path: string };
@@ -18,8 +19,8 @@ function parse(pathname: string): Route {
   const name = decodeURIComponent(rest.join("/"));
   if (kind == null) return { page: "overview" };
   if (kind === "system" && name) return { page: "system", name };
-  if (kind === "domain" && name) return { page: "domain", name };
-  if (kind === "roles" && !name) return { page: "roles" };
+  if (kind === "group" && name) return { page: "group", name };
+  if (kind === "roles") return name ? { page: "roles", section: name } : { page: "roles" };
   if (kind === "settings" && !name) return { page: "settings" };
   if (kind === "definition" && !name) return { page: "definition" };
   if (kind === "constants" && !name) return { page: "constants" };
@@ -32,9 +33,11 @@ export function hrefFor(route: Exclude<Route, { page: "unknown" }>): string {
     case "overview":
       return "/";
     case "system":
-    case "domain":
+    case "group":
     case "palette":
       return `/${route.page}/${encodeURIComponent(route.name)}`;
+    case "roles":
+      return route.section ? `/roles/${encodeURIComponent(route.section)}` : "/roles";
     default:
       return `/${route.page}`;
   }
@@ -111,6 +114,8 @@ export function Link({
   ref?: Ref<HTMLAnchorElement>;
 }) {
   const href = addressOf(to, hash);
+  const current = useRoute();
+  const active = current.page !== "unknown" && hrefFor(current) === hrefFor(to);
   const follow = (event: MouseEvent<HTMLAnchorElement>) => {
     onClick?.(event);
     if (event.defaultPrevented) return;
@@ -120,5 +125,5 @@ export function Link({
     dispatchEvent(new Event(NAVIGATED));
     if (!hash) scrollTo(0, 0);
   };
-  return <a {...anchor} ref={ref} href={href} onClick={follow} />;
+  return <a {...anchor} ref={ref} href={href} aria-current={active ? "page" : undefined} onClick={follow} />;
 }

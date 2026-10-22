@@ -663,10 +663,10 @@
           "colorSpace": "srgb",
           "components": [
             1,
-            0.439641,
-            0.439537
+            0.351285,
+            0.36124
           ],
-          "hex": "#ff7070"
+          "hex": "#ff5a5c"
         },
         "$extensions": {
           "com.fifthrevision.dtg": {
@@ -684,11 +684,11 @@
         "$value": {
           "colorSpace": "srgb",
           "components": [
-            0.028044,
-            0.534105,
+            0.131811,
+            0.531448,
             1
           ],
-          "hex": "#0788ff"
+          "hex": "#2288ff"
         },
         "$extensions": {
           "com.fifthrevision.dtg": {

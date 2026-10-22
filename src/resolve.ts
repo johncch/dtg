@@ -6,16 +6,16 @@ import {
   type SelectorShape,
 } from "./contract.js";
 import { parseParams, type ParsedColorParam } from "./params.js";
+import type { CurveValue, Pivot, Span } from "./curve-math.js";
 import {
   formatRef,
   orderOf,
   parseCall,
   parseSelector,
   publicStepOf,
+  rolePath,
 } from "./selector.js";
 import {
-  assertHex,
-  colorFromHex,
   needsMapping,
   parseColor,
   isOpaque,
@@ -25,8 +25,94 @@ import {
 import { tint } from "./algorithms/tint.js";
 import { scale } from "./algorithms/scale.js";
 import { overlay } from "./algorithms/overlay.js";
+import { curve } from "./algorithms/curve.js";
+import { tone } from "./algorithms/tone.js";
 
-const builtinAlgorithms: Algorithm[] = [tint, scale, overlay];
+const CURVE_SAMPLES = 41;
+const CURVE_SWATCHES = 121;
+
+function curvesOf(
+  algorithm: Algorithm,
+  params: Params,
+  shape: SelectorShape,
+  steps: ResolvedStep[],
+): Record<string, ResolvedCurve> {
+  const pivots = algorithm.curvePivots?.(params) ?? {};
+  return Object.fromEntries(
+    Object.entries(algorithm.params).flatMap(([name, kind]) => {
+      if (kind.kind !== "curve" || !pivots[name]) return [];
+      const span = spanOf(algorithm, shape, name, kind.along);
+      const marks = steps.flatMap((step) => {
+        const { values } = parseSelector(algorithm.name, shape, step.selector);
+        const at = values[kind.along];
+        return values.form == null && typeof at === "number" ? [{ at, color: step.color, step: step.publicStep }] : [];
+      });
+      const curve: ResolvedCurve = {
+        value: params[name] as CurveValue,
+        pivot: pivots[name],
+        min: kind.min,
+        max: kind.max,
+        default: kind.default,
+        along: kind.along,
+        span,
+        marks,
+        label: kind.label ?? null,
+        unit: kind.unit ?? null,
+      };
+      return [[name, curve]];
+    }),
+  );
+}
+
+function spanOf(algorithm: Algorithm, shape: SelectorShape, name: string, along: string): Span {
+  const field = shape.fields.find((candidate) => candidate.name === along);
+  if (!field || field.kind !== "number") {
+    throw new Error(`${algorithm.name} param "${name}" runs along "${along}", which is not a number field of its selector`);
+  }
+  return { min: field.min, max: field.max };
+}
+
+export type CurveDrawing = {
+  /** The system's color at evenly spaced points across the span; empty when the selector has fields besides `along`. */
+  samples: { at: number; color: Color }[];
+  /** What values across the curve's `min`–`max` look like, from the algorithm's `curveSwatch`; empty without one. */
+  swatches: { value: number; color: Color }[];
+};
+
+/**
+ * What the editor draws for one curve param, worked out only when a page
+ * shows it: it runs the algorithm a couple of hundred times, far more than
+ * resolving the system does. `params` are as a system has them written,
+ * defaults filled in; `constants` are the palette colors they may name.
+ */
+export function curveDrawing(
+  system: { algorithm: string; params: Record<string, unknown>; selector: SelectorShape },
+  constants: ReadonlyMap<string, Color>,
+  name: string,
+): CurveDrawing {
+  const algorithm = algorithmFor(system.algorithm);
+  const kind = algorithm?.params[name];
+  if (!algorithm || kind?.kind !== "curve") return { samples: [], swatches: [] };
+  const params = parseParams(algorithm, system.params, constants).values;
+  const shape = system.selector;
+  const span = spanOf(algorithm, shape, name, kind.along);
+  const samples =
+    shape.fields.length === 1
+      ? Array.from({ length: CURVE_SAMPLES }, (_, i) => {
+          const at = span.min + (i / (CURVE_SAMPLES - 1)) * (span.max - span.min);
+          return { at, color: algorithm.resolve({ form: null, [kind.along]: at }, params) };
+        })
+      : [];
+  const swatches = algorithm.curveSwatch
+    ? Array.from({ length: CURVE_SWATCHES }, (_, i) => {
+        const value = kind.min + (i / (CURVE_SWATCHES - 1)) * (kind.max - kind.min);
+        return { value, color: algorithm.curveSwatch!(params, name, value) };
+      })
+    : [];
+  return { samples, swatches };
+}
+
+const builtinAlgorithms: Algorithm[] = [tint, scale, overlay, curve, tone];
 
 function registryOf(extra: Algorithm[]): Map<string, Algorithm> {
   return new Map(
@@ -122,7 +208,7 @@ function compareSteps(a: OrderedStep, b: OrderedStep): number {
 
 export type Lineage = Map<
   string,
-  { domain: string; role: string; mode: string; translucent: boolean }[]
+  { section: string; group: string; role: string; mode: string; translucent: boolean }[]
 >;
 
 export function buildLineage(resolved: ResolvedDefinition): Lineage {
@@ -137,7 +223,8 @@ export function buildLineage(resolved: ResolvedDefinition): Lineage {
           : formatRef(target.system, target.selector);
       const uses = lineage.get(key) ?? [];
       uses.push({
-        domain: role.domain,
+        section: role.section,
+        group: role.group,
         role: role.role,
         mode: resolved.modes[i] ?? String(i),
         translucent: !isOpaque(entry.color),
@@ -165,6 +252,27 @@ export type ResolvedStep = {
  */
 export type ResolvedColorParam = ParsedColorParam & { from: "system" | "defaults" };
 
+/**
+ * A `curve` param as a page draws it: its value with every field filled in,
+ * where it passes through what the algorithm holds fixed, and — because it
+ * runs along a selector field — the colors along it and where the system's
+ * steps sit on it.
+ */
+export type ResolvedCurve = {
+  value: CurveValue;
+  pivot: Pivot;
+  min: number;
+  max: number;
+  default: CurveValue;
+  along: string;
+  span: Span;
+  /** Each emitted step whose selector is a plain point along the curve. */
+  marks: { at: number; color: Color; step: string }[];
+  /** What the curve's values measure, and the unit written after them; null when the algorithm says nothing. */
+  label: string | null;
+  unit: string | null;
+};
+
 export type ResolvedSystem = {
   /** Internal dotted path — the stable identity refs point at. */
   system: string;
@@ -172,9 +280,14 @@ export type ResolvedSystem = {
   alias?: AliasValue;
   algorithm: string;
   algorithmDescription: string;
+  /** Every param the algorithm declares, as written, or as the algorithm's default where nothing is written. */
   params: Record<string, unknown>;
-  /** The top-level params the system wrote itself; the rest of `params` came from `defaults`. */
+  /** The top-level params the system wrote itself. */
   ownParams: string[];
+  /** The params nothing writes, neither the system nor `defaults`; their value in `params` is the algorithm's default. */
+  defaultedParams: string[];
+  /** Each `curve` param, every field filled in, with where it passes through what the algorithm holds fixed. */
+  curves: Record<string, ResolvedCurve>;
   colorParams: ResolvedColorParam[];
   /** What a ref into this system is made of. */
   selector: SelectorShape;
@@ -226,7 +339,7 @@ export type RefTarget =
   | { kind: "step"; system: string; selector: string }
   /** A declared constant; `alpha` present means it was taken through transparent(). */
   | { kind: "constant"; name: string; alpha?: number }
-  | { kind: "role"; domain: string; role: string };
+  | { kind: "role"; group: string; role: string };
 
 export type ResolvedRef = {
   ref: string;
@@ -242,8 +355,8 @@ export type ResolvedRole = {
    * segments, `label.primary` is two.
    */
   segments: PathSegment[];
-  /** Everything but the last segment, dotted. Derived; `segments` is the truth. */
-  domain: string;
+  /** Everything but the last segment, dotted; empty for a role written straight in its section. Derived; `segments` is the truth. */
+  group: string;
   /** The last segment. Derived. */
   role: string;
   omit: boolean;
@@ -282,7 +395,7 @@ export type ResolvedDefinition = {
   statics: ResolvedStatic[];
   sections: ResolvedSection[];
   roles: ResolvedRole[];
-  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role domains. */
+  /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role groups. */
   groupDescriptions: { systems: Record<string, string>; palette: Record<string, string>; roles: Record<string, string> };
   warnings: string[];
   /** Index-parallel to the `probes` asked for. */
@@ -404,7 +517,7 @@ export function resolveDefinition(
   }
   if (doc.emit !== undefined) {
     errors.push(
-      "the `emit:` block was replaced by inline `alias`/`omit` keys on systems, sections, domains, and roles",
+      "the `emit:` block was replaced by inline `alias`/`omit` keys on systems, sections, groups, and roles",
     );
   }
 
@@ -466,7 +579,7 @@ export function resolveDefinition(
     /** Top-level param keys the system wrote itself; the rest came from `defaults`. */
     ownParams: Set<string>;
     selectorShape: SelectorShape;
-    overrides: Record<string, string>;
+    overrides: Record<string, unknown>;
     alias?: AliasValue;
     /** The selectors the system publishes whether or not a ref asks for them. */
     emit: string[];
@@ -641,7 +754,7 @@ export function resolveDefinition(
         colorParams: parsed.colors,
         ownParams: new Set(Object.keys(paramsBlock ?? {})),
         selectorShape,
-        overrides: (block.overrides ?? {}) as Record<string, string>,
+        overrides: (block.overrides ?? {}) as Record<string, unknown>,
         alias,
         emit,
         segments: named,
@@ -687,7 +800,12 @@ export function resolveDefinition(
               `override "${key}": overrides pin flattened steps only; "${selector}" is translucent`,
             );
           }
-          overrideColor = colorFromHex(assertHex(override, `override "${key}"`));
+          overrideColor = parseColor(override, `override "${key}"`);
+          if (!isOpaque(overrideColor)) {
+            throw new Error(
+              `override "${key}": an override stands in for a flattened step, so it must be opaque; got ${JSON.stringify(override)}`,
+            );
+          }
         }
         step = {
           selector,
@@ -724,7 +842,7 @@ export function resolveDefinition(
       Array.isArray(sectionRaw)
     ) {
       errors.push(
-        `section "${sectionName}" must be a map of domains (top-level keys other than ${TOP_LEVEL_RESERVED.join("/")} are sections)`,
+        `section "${sectionName}" must be a map of groups and roles (top-level keys other than ${TOP_LEVEL_RESERVED.join("/")} are sections)`,
       );
       continue;
     }
@@ -775,8 +893,8 @@ export function resolveDefinition(
             omit: block.omit === true,
           };
           if (!("refs" in block)) {
-            const domainDescription = descriptionOf(block.description, context);
-            if (domainDescription) groupDescriptions.roles[path] = domainDescription;
+            const groupDescription = descriptionOf(block.description, context);
+            if (groupDescription) groupDescriptions.roles[path] = groupDescription;
             walkRoles(block, segments);
             continue;
           }
@@ -899,7 +1017,7 @@ export function resolveDefinition(
       segments: raw.segments,
       // Derived from segments, for callers that want "the last bit" and
       // "everything above it" — the dev server and the lineage index.
-      domain: raw.segments.slice(0, -1).map((seg) => seg.name).join("."),
+      group: raw.segments.slice(0, -1).map((seg) => seg.name).join("."),
       role: raw.segments[raw.segments.length - 1].name,
       omit: raw.segments[raw.segments.length - 1].omit === true,
       description: raw.description,
@@ -979,7 +1097,7 @@ export function resolveDefinition(
       );
       return undefined;
     }
-    if (ref.includes(".") && roleIndex.has(ref)) {
+    if (roleIndex.has(ref)) {
       const targetRole = resolveRole(ref, stack);
       const entry = targetRole?.perMode[modeIndex];
       if (!entry) return undefined;
@@ -988,7 +1106,7 @@ export function resolveDefinition(
         ref,
         target: {
           kind: "role",
-          domain: ref.slice(0, dot),
+          group: dot < 0 ? "" : ref.slice(0, dot),
           role: ref.slice(dot + 1),
         },
         color: entry.color,
@@ -1015,7 +1133,7 @@ export function resolveDefinition(
       return undefined;
     }
     errors.push(
-      `${context}: unrecognized ref "${ref}" — expected system(selector), domain.role, a declared constant, or transparent(...)`,
+      `${context}: unrecognized ref "${ref}" — expected system(selector), group.role, a declared constant, or transparent(...)`,
     );
     return undefined;
   }
@@ -1042,7 +1160,7 @@ export function resolveDefinition(
           : "";
       const name =
         scope + publicRoleName(role, target, target === "css" ? "-" : "/");
-      const path = `${role.domain}.${role.role}`;
+      const path = rolePath(role);
       const prior = seen.get(name);
       if (prior) {
         errors.push(
@@ -1084,11 +1202,13 @@ export function resolveDefinition(
       algorithmDescription: sys.algo.description,
       // In the order the algorithm declares them, not the order `defaults` and the system's own block merged in.
       params: Object.fromEntries(
-        Object.keys(sys.algo.params)
-          .filter((key) => key in sys.writtenParams)
-          .map((key) => [key, sys.writtenParams[key]]),
+        Object.entries(sys.algo.params)
+          .filter(([key, kind]) => key in sys.writtenParams || ("default" in kind && kind.default !== undefined))
+          .map(([key, kind]) => [key, key in sys.writtenParams ? sys.writtenParams[key] : "default" in kind ? kind.default : undefined]),
       ),
       ownParams: [...sys.ownParams],
+      defaultedParams: Object.keys(sys.algo.params).filter((key) => !(key in sys.writtenParams)),
+      curves: curvesOf(sys.algo, sys.params, sys.selectorShape, steps),
       colorParams,
       selector: sys.selectorShape,
       steps,

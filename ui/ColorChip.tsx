@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { formatColor, isOpaque, type Color } from "../src/color-math.js";
 import type { EditTarget } from "../src/edit.js";
 import { ColorTip } from "./ColorTip.js";
-import { STATIC } from "./mode.js";
+import { EDITABLE } from "./mode.js";
 import { paintCss } from "./paint.js";
 import { ColorEditor } from "./picker/ColorEditor.js";
 import { Popup } from "./Popup.js";
@@ -32,7 +32,7 @@ export function ColorChip({
   /** Shown under the value and part of the same hover target, e.g. the ref a role points at. */
   children?: ReactNode;
 }) {
-  const className = ["chip", size === "small" && "chip-small", edit && !STATIC && "chip-editable"].filter(Boolean).join(" ");
+  const className = ["chip", size === "small" && "chip-small", edit && EDITABLE && "chip-editable"].filter(Boolean).join(" ");
   const content = (
     <>
       <span className={isOpaque(color) ? "swatch" : "swatch swatch-alpha"}>
@@ -49,7 +49,7 @@ export function ColorChip({
       )}
     </>
   );
-  if (edit && !STATIC) {
+  if (edit && EDITABLE) {
     return (
       <EditableChip color={color} target={edit} named={named} className={className}>
         {content}

@@ -5,20 +5,20 @@ import { isOpaque } from "../../src/color-math.js";
 import { ColorTip } from "../ColorTip.js";
 import { paintCss } from "../paint.js";
 import { Popup } from "../Popup.js";
-import { STATIC } from "../mode.js";
+import { EDITABLE } from "../mode.js";
 import { RefEditor } from "../RefEditor.js";
 import { Link, useScrollToHash } from "../router.js";
-import { INHERIT } from "../../src/selector.js";
+import { INHERIT, rolePath } from "../../src/selector.js";
 import { stepAnchor } from "../Strip.js";
 import { constantAnchor } from "./ConstantsPage.js";
 
-export function DomainPage({ snapshot, domain }: { snapshot: Snapshot; domain: string }) {
-  const hash = useScrollToHash(domain);
-  const roles = snapshot.roles.filter((role) => role.domain === domain);
+export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: string }) {
+  const hash = useScrollToHash(group);
+  const roles = snapshot.roles.filter((role) => role.group === group);
   return (
     <>
-      <h1>{domain}</h1>
-      {snapshot.groupNotes.roles[domain] && <p className="note">{snapshot.groupNotes.roles[domain]}</p>}
+      <h1>{group}</h1>
+      {snapshot.groupNotes.roles[group] && <p className="note">{snapshot.groupNotes.roles[group]}</p>}
       <p className="sub">{roles.length} roles</p>
       <table>
         <thead>
@@ -39,14 +39,21 @@ export function DomainPage({ snapshot, domain }: { snapshot: Snapshot; domain: s
   );
 }
 
-/** Every role in the definition, grouped by domain, in one table so the mode columns line up. */
-export function RolesPage({ snapshot }: { snapshot: Snapshot }) {
-  const domains = [...new Set(snapshot.roles.map((role) => role.domain))];
+/**
+ * Every role in a section, or in the whole definition, by group, in one table
+ * so the mode columns line up. Roles written straight in a section have no
+ * group and no heading row.
+ */
+export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?: string }) {
+  const hash = useScrollToHash(section ?? "roles");
+  const shown = section ? snapshot.roles.filter((role) => role.section === section) : snapshot.roles;
+  const groups = [...new Set(shown.map((role) => role.group))];
+  const named = groups.filter((group) => group !== "").length;
   return (
     <>
-      <h1>Roles</h1>
+      <h1>{section ?? "All roles"}</h1>
       <p className="sub">
-        {snapshot.roles.length} roles in {domains.length} domains
+        {shown.length} roles{named > 0 ? ` in ${named} ${named === 1 ? "group" : "groups"}` : ""}
       </p>
       <table>
         <thead>
@@ -58,17 +65,26 @@ export function RolesPage({ snapshot }: { snapshot: Snapshot }) {
           </tr>
         </thead>
         <tbody>
-          {domains.map((domain) => (
-            <Fragment key={domain}>
-              <tr className="domain-row">
-                <td colSpan={snapshot.modes.length + 1}>
-                  <Link to={{ page: "domain", name: domain }}>{domain}</Link>
-                </td>
-              </tr>
-              {snapshot.roles
-                .filter((role) => role.domain === domain)
+          {groups.map((group) => (
+            <Fragment key={group}>
+              {group !== "" && (
+                <tr className="group-row">
+                  <td colSpan={snapshot.modes.length + 1}>
+                    <Link to={{ page: "group", name: group }}>{group}</Link>
+                    {snapshot.groupNotes.roles[group] && <div className="role-note group-note">{snapshot.groupNotes.roles[group]}</div>}
+                  </td>
+                </tr>
+              )}
+              {shown
+                .filter((role) => role.group === group)
                 .map((role) => (
-                  <RoleRow key={role.role} snapshot={snapshot} role={role} targeted={false} />
+                  <RoleRow
+                    key={role.role}
+                    snapshot={snapshot}
+                    role={role}
+                    id={group === "" ? role.role : undefined}
+                    targeted={group === "" && role.role === hash}
+                  />
                 ))}
             </Fragment>
           ))}
@@ -86,7 +102,7 @@ function RoleRow({
 }: {
   snapshot: Snapshot;
   role: SnapshotRole;
-  /** Set where the page is one domain, so a link can land on the row. */
+  /** Set where a link can land on the row: on a group's page, or a section's for a role in no group. */
   id?: string;
   targeted: boolean;
 }) {
@@ -101,7 +117,7 @@ function RoleRow({
         const trail = refTrail(snapshot, entry, index);
         const trailText = <code>{trail.join(" → ")}</code>;
         const inheritedNote = entry.inherited && <span className="muted">inherited from {parent}</span>;
-        if (STATIC) {
+        if (!EDITABLE) {
           return (
             <td key={index}>
               <ColorTip
@@ -162,7 +178,7 @@ function RoleRow({
                   target={{
                     kind: "ref",
                     section: role.section,
-                    role: [role.domain, role.role].filter(Boolean).join("."),
+                    role: rolePath(role),
                     mode: index,
                   }}
                   heading={`${role.role} · ${snapshot.modes[index]}`}
@@ -196,8 +212,8 @@ function refTrail(snapshot: Snapshot, entry: { ref: string; target: RefTarget },
   const trail = [entry.ref];
   let target = entry.target;
   while (target.kind === "role") {
-    const { domain, role } = target;
-    const next = snapshot.roles.find((candidate) => candidate.domain === domain && candidate.role === role)?.perMode[mode];
+    const { group, role } = target;
+    const next = snapshot.roles.find((candidate) => candidate.group === group && candidate.role === role)?.perMode[mode];
     if (!next) break;
     trail.push(next.ref);
     target = next.target;
@@ -217,8 +233,9 @@ function RefLink({
   children: ReactNode;
 }) {
   if (target.kind === "role") {
+    const section = snapshot.roles.find((role) => role.group === target.group && role.role === target.role)?.section;
     return (
-      <Link to={{ page: "domain", name: target.domain }} hash={target.role} onClick={onFollow}>
+      <Link to={target.group ? { page: "group", name: target.group } : { page: "roles", section }} hash={target.role} onClick={onFollow}>
         {children}
       </Link>
     );

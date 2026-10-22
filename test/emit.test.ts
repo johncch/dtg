@@ -139,7 +139,7 @@ roles:
   test("@supports redefines the same property at full strength", () => {
     const css = emitCss(wide, "plain");
     assert.ok(css.includes("@supports (color: color(display-p3 1 1 1)) {"));
-    assert.ok(css.includes("--color-wide-60: color(display-p3 1 0.4 0.4);"));
+    assert.ok(css.includes("--color-wide-60: color(display-p3 0.9736 0.336 0.3401);"));
   });
 
   test("an in-gamut color is not repeated — it renders the same either way", () => {

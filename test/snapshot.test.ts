@@ -50,8 +50,46 @@ describe("snapshot", () => {
       ["3", "8"],
     );
     assert.deepEqual(sky.steps[0].usedBy, [
-      { domain: "surface", role: "canvas", mode: "light", translucent: false },
+      { section: "roles", group: "surface", role: "canvas", mode: "light", translucent: false },
     ]);
+  });
+
+  test("a system lists the options of its choice params", () => {
+    const curved = buildSnapshot({
+      resolved: resolveDefinition(`
+dtg: 1
+systems:
+  blue: { algorithm: curve, params: { anchor: "#3b82f6" }, emit: [500] }
+`),
+      lineage: new Map(),
+      error: null,
+      stale: false,
+      gamut: "display-p3",
+      changes: [],
+      definition: { path: "colors.dtg.yaml", text: "" },
+    });
+    assert.deepEqual(curved.systems[0].choices, { gamut: ["srgb", "display-p3"] });
+    assert.deepEqual(snapshot.systems[0].choices, {});
+  });
+
+  test("a system lists which of its params carry a YAML anchor and which are aliases of one", () => {
+    const text = `
+dtg: 1
+systems:
+  red: { algorithm: curve, params: { anchor: "#ef4444", at: &at 400 }, emit: [500] }
+  blue: { algorithm: curve, params: { anchor: "#3b82f6", at: *at }, emit: [500] }
+`;
+    const anchored = buildSnapshot({
+      resolved: resolveDefinition(text),
+      lineage: new Map(),
+      error: null,
+      stale: false,
+      gamut: "display-p3",
+      changes: [],
+      definition: { path: "colors.dtg.yaml", text },
+    });
+    assert.deepEqual(anchored.systems.find((s) => s.system === "red")!.anchors, { at: { name: "at", role: "anchor" } });
+    assert.deepEqual(anchored.systems.find((s) => s.system === "blue")!.anchors, { at: { name: "at", role: "alias" } });
   });
 
   test("an overridden step keeps what the algorithm generated", () => {
@@ -106,10 +144,10 @@ systems:
       [["paper", "paper", 2]],
     );
     const tint = snapshot.roles.find((r) => r.role === "tint")!;
-    assert.equal(tint.domain, "surface");
+    assert.equal(tint.group, "surface");
     assert.deepEqual(tint.perMode[1].target, {
       kind: "role",
-      domain: "surface",
+      group: "surface",
       role: "canvas",
     });
   });

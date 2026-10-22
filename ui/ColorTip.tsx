@@ -5,6 +5,7 @@ import {
   formatColor,
   isOpaque,
   needsMapping,
+  NO_HUE_BELOW_CHROMA,
   oklabToOklch,
   roundChannel,
   rgbToHex,
@@ -92,7 +93,7 @@ function srgbFormsOf(color: Color): { hex: string; rgb: string; hsl: string } {
 export function ColorFacts({ color, reference }: { color: Color; reference?: ReactNode }) {
   const [L, C, H] = oklabToOklch(toOklab(color));
   // A gray has no hue; atan2 of two rounding errors is not worth printing.
-  const hue = C < 5e-5 ? 0 : H;
+  const hue = C < NO_HUE_BELOW_CHROMA ? 0 : H;
   const alpha = isOpaque(color) ? "" : ` / ${trim(color.alpha, 3)}`;
   const srgb = srgbFormsOf(color);
   const reach = reachOf(color);

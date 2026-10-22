@@ -9,6 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Gamut } from "./color-math.js";
 import type { DtgConfig } from "./config.js";
+import type { ModeRendering } from "./emit.js";
 import {
   DEFAULT_BACKGROUNDS,
   readBackgrounds,
@@ -16,18 +17,12 @@ import {
   type Background,
 } from "./dev-settings.js";
 import { writeOutputs } from "./outputs.js";
-import { applyEdits, describeTarget, type Edit } from "./edit.js";
-import {
-  buildLineage,
-  resolveDefinition,
-  type Lineage,
-  type ResolvedDefinition,
-} from "./resolve.js";
+import { describeTarget, type Edit } from "./edit.js";
+import { resolveDefinition } from "./resolve.js";
 import { appShell } from "./app-shell.js";
-import { buildSnapshot } from "./snapshot.js";
+import type { DevState } from "./dev-state.js";
 import { watchDefinition } from "./watch.js";
 import {
-  changesOf,
   discard,
   openFile,
   redo,
@@ -48,10 +43,6 @@ const UI_CONTENT_TYPES: Record<string, string> = {
 
 type State = {
   copy: WorkingCopy;
-  resolved: ResolvedDefinition;
-  lineage: Lineage;
-  /** Set when the last re-resolve failed; the previous good state stays served. */
-  error: string | null;
   /** Unsaved changes that could not be carried over when the file changed. */
   notices: string[];
 };
@@ -60,6 +51,7 @@ export function startDevServer(
   definitionPath: string,
   port: number,
   gamut: Gamut,
+  cssModes: ModeRendering,
   /** Where to write the outputs whenever the definition file changes, or null to leave them alone. */
   outputs: DtgConfig | null,
 ): void {
@@ -94,30 +86,31 @@ export function startDevServer(
   };
   takeBackgroundsFromConfig();
 
-  let state: State = settle(openFile(readDisk()), gamut);
+  // A definition that does not resolve at startup stops the server here; once
+  // it is running, the page resolves and shows any error itself.
+  try {
+    resolveDefinition(readDisk(), [], gamut);
+  } catch (e) {
+    console.error((e as Error).message);
+    process.exit(1);
+  }
+  let state: State = settle(openFile(readDisk()));
   const sseClients = new Set<ServerResponse>();
   const tellBrowsers = (message: "changed" | "reload") => {
     for (const client of sseClients) client.write(`data: ${message}\n\n`);
   };
-  const snapshotOf = (current: State) =>
-    buildSnapshot({
-      resolved: {
-        ...current.resolved,
-        warnings: [...current.notices, ...current.resolved.warnings],
-      },
-      lineage: current.lineage,
-      error: current.error,
-      stale,
-      gamut,
-      changes: changesOf(current.copy),
-      undo: current.copy.steps.at(-1) ?? null,
-      redo: current.copy.undone.at(-1) ?? null,
-      definition: { path: resolve(definitionPath), text: workingText(current.copy).text },
-      configPath: resolve(CONFIG_PATH),
-      backgrounds: backgrounds.length > 0 ? backgrounds : DEFAULT_BACKGROUNDS,
-    });
+  const stateOf = (current: State): DevState => ({
+    copy: current.copy,
+    notices: current.notices,
+    stale,
+    gamut,
+    definitionPath: resolve(definitionPath),
+    configPath: resolve(CONFIG_PATH),
+    backgrounds: backgrounds.length > 0 ? backgrounds : DEFAULT_BACKGROUNDS,
+    cssModes,
+  });
   const adopt = (copy: WorkingCopy) => {
-    state = settle(copy, gamut, state);
+    state = settle(copy);
     tellBrowsers("changed");
   };
 
@@ -217,55 +210,22 @@ export function startDevServer(
       res.end(JSON.stringify(body));
     };
 
-    if (url.pathname === "/api/snapshot") {
-      sendJson(200, snapshotOf(state));
-      return;
-    }
-
-    if (url.pathname === "/api/preview" && req.method === "POST") {
-      readJson(req).then((body) => {
-        try {
-          const tried = applyEdits(
-            workingText(state.copy).text,
-            (body as { edits: Edit[] }).edits,
-          );
-          const resolved = resolveDefinition(tried, [], gamut);
-          sendJson(
-            200,
-            snapshotOf({ ...state, resolved, lineage: buildLineage(resolved), error: null }),
-          );
-        } catch (e) {
-          sendJson(422, { error: (e as Error).message });
-        }
-      });
-      return;
-    }
-
-    if (url.pathname === "/api/probe" && req.method === "POST") {
-      readJson(req).then((body) => {
-        const { ref } = body as { ref: string };
-        try {
-          const [probe] = resolveDefinition(workingText(state.copy).text, [], gamut, [ref]).probed;
-          if ("error" in probe) sendJson(422, { error: probe.error });
-          else sendJson(200, { color: probe.color });
-        } catch (e) {
-          sendJson(422, { error: (e as Error).message });
-        }
-      });
+    if (url.pathname === "/api/state") {
+      sendJson(200, stateOf(state));
       return;
     }
 
     if (url.pathname === "/api/edits" && req.method === "POST") {
       readJson(req).then((body) => {
         const { edits } = body as { edits: Edit[] };
-        const next = settle(withEdits(state.copy, edits), gamut, state);
-        // A step any of whose edits cannot be applied, or that leaves a
-        // definition that does not resolve, is refused whole rather than kept
-        // as a change nobody can see.
+        const next = settle(withEdits(state.copy, edits));
+        // A step any of whose edits cannot be applied is refused whole rather
+        // than kept as a change nobody can see. Whether the result resolves
+        // the page checked before sending.
         const kept = next.copy.steps.at(-1) ?? [];
         const intact = kept.length === edits.length && edits.every((edit) => kept.includes(edit));
-        if (next.error || !intact) {
-          sendJson(422, { error: next.error ?? "that value is not in the definition" });
+        if (!intact) {
+          sendJson(422, { error: "that value is not in the definition" });
           return;
         }
         state = next;
@@ -329,26 +289,17 @@ export function startDevServer(
 }
 
 /**
- * Resolve a working copy into what the app is drawn from. An edit the file
- * can no longer take is dropped from the copy and reported. When the result
- * does not resolve, the previous good picture is kept and the error shown.
+ * A working copy without the edits the file can no longer take, each
+ * reported. The page resolves what is left.
  */
-function settle(copy: WorkingCopy, gamut: Gamut, previous?: State): State {
-  const { text, dropped } = workingText(copy);
-  const kept = withoutEdits(copy, dropped);
-  const notices = dropped.map(
-    (e) =>
-      `an unsaved change to ${describeTarget(e.target)} was dropped — the file no longer has that value`,
-  );
-  try {
-    const resolved = resolveDefinition(text, [], gamut);
-    return { copy: kept, resolved, lineage: buildLineage(resolved), error: null, notices };
-  } catch (e) {
-    const message = (e as Error).message;
-    if (previous) return { ...previous, copy: kept, error: message, notices };
-    console.error(message);
-    process.exit(1);
-  }
+function settle(copy: WorkingCopy): State {
+  const { dropped } = workingText(copy);
+  return {
+    copy: withoutEdits(copy, dropped),
+    notices: dropped.map(
+      (e) => `an unsaved change to ${describeTarget(e.target)} was dropped — the file no longer has that value`,
+    ),
+  };
 }
 
 function readJson(req: IncomingMessage): Promise<unknown> {

@@ -74,6 +74,61 @@ The result is a two-tier model: systems and roles. Roles point directly
 into systems, and each reference carries the reasoning. A new need can be
 expressed as one new decision instead of a reclassification of the scale.
 
+## Starting from the colors you have
+
+Most palettes were picked, not derived. dtg does not ask you to invent a
+recipe before you start.
+
+**Bring the palette as it is.** Put your hexes in `palette`, name your
+roles, and point them at those colors. A definition with no systems is
+valid: you get roles, modes, CSS and DTCG output, and the browser on day
+one.
+
+```yaml
+palette:
+  gray:
+    50: "#f7f8f9"
+    100: "#eef0f2"
+    300: "#c9ced3"
+    500: "#8a929a"
+    900: "#1d2125"
+
+core:
+  surface:
+    canvas: [gray.50]
+    card: [gray.100]
+  separator: [gray.300]
+  label:
+    secondary: [gray.500]
+    primary: [gray.900]
+```
+
+**Promote ramps into systems.** Where a group of picks is really a ramp,
+replace it with a system and compare the two in `dtg dev`. Pin a step that
+must stay exact with `overrides`. The role names don't change, so neither
+does any component that uses them.
+
+```yaml
+systems:
+  gray:
+    algorithm: tint
+    params: { base: "#ffffff", tint: "#1d2125" }
+    overrides: { "7": "#eef0f2" }
+
+core:
+  surface:
+    canvas: [gray(3)]
+    card: [gray(7)]
+  separator: [gray(22)]
+  label:
+    secondary: [gray(52)]
+    primary: [gray(100)]
+```
+
+**Keep real picks as picks.** A brand color handed over by a designer
+belongs in `palette`. dtg only asks that roles point at it rather than
+repeat it.
+
 ## How this relates to DTCG and Style Dictionary
 
 DTCG and Style Dictionary store values and transform them between formats.
@@ -84,7 +139,7 @@ from and how they remain coherent as the system changes.
 
 ## Principles
 
-1. **Open vocabulary, fixed contract.** Domains, roles, systems, algorithm
+1. **Open vocabulary, fixed contract.** Collections, groups, roles, systems, algorithm
    params, and selectors can grow with the project. The plumbing stays
    stable so the tooling can remain generic.
 2. **Deterministic generation.** The same definition produces the same
@@ -127,16 +182,37 @@ dtg dev  [--port <n>]                              # browse and edit: ramps, del
 dtg build [--watch] [--css <path>]                 # generate the CSS
           [--css-format <plain|tailwind>]          # default plain
           [--dtcg <path>]                          # DTCG; written only when asked
-dtg docs --out <dir>                               # a read-only copy of the browser, to publish
+dtg docs --out <dir> [--editable]                  # a copy of the browser, to publish
 ```
 
-`dtg docs` writes the browser as plain files: `index.html`, `snapshot.json`
+`dtg docs` writes the browser as plain files: `index.html`, `state.json`
 and `ui/`. Any static host serves it, from any folder — a site's `public/`
-directory, or GitHub Pages. It is read-only: everything you can look at in
-`dtg dev` is there, but nothing edits, and the step preview, which asks the
-dev server to resolve a selector, is left out. Pages are addressed in the
-fragment (`#/system/theme`), so deep links work on a host that knows nothing
-of the app.
+directory, or GitHub Pages. Everything you can look at in `dtg dev` is
+there. It is read-only unless you pass `--editable`: then visitors can edit
+the colors, undo and redo, but only in their own page; nothing is saved, and
+a reload starts over from the published definition. Pages are addressed in
+the fragment (`#/system/theme`), so deep links work on a host that knows
+nothing of the app.
+
+Embedded in an iframe, the browser — `dtg docs` or `dtg dev` — sends the
+page around it the CSS for whatever it shows, edits being tried included,
+each time it changes. A site whose components read the colors as CSS
+variables can re-skin live while someone edits:
+
+```js
+const frame = document.querySelector("iframe#dtg");
+const style = document.head.appendChild(document.createElement("style"));
+addEventListener("message", (event) => {
+  if (event.source === frame.contentWindow && event.data?.type === "dtg:css") {
+    style.textContent = event.data.css;
+  }
+});
+frame.contentWindow.postMessage({ type: "dtg:css?" }, "*"); // in case it loaded first
+```
+
+The CSS is always the plain format, with modes rendered as `dtg.config.yaml`
+says, so it overrides the same variables the site's own stylesheet sets.
+Nothing is written anywhere; a reload brings back the built colors.
 
 `dtg dev --build` writes the same outputs `dtg build` does, once at startup and
 again whenever the definition file changes — a save from the app or an edit
@@ -212,7 +288,7 @@ Precedence: CLI flags, then `dtg.config.yaml`, then convention defaults.
 ## The definition file
 
 A new project can start around fifteen lines and grow one decision at a
-time. The example below shows the full shape, but each section is optional.
+time. The example below shows the full shape, but each part is optional.
 
 ```yaml
 dtg: 1 # grammar version
@@ -246,8 +322,8 @@ defaults: # shared params, per algorithm
     hueShift: 15
     midpoint: 0.4
 
-core: # any non-reserved top-level key is a section you name;
-  surface: #   each section becomes a design-tool collection
+core: # any non-reserved top-level key is a collection you name;
+  surface: #   a group: part of every role's name below it
     canvas: [sky(3), night(0)] # one ref per mode
     card: [sky(0), night(4)]
     floating: [surface.card, night(6)] # roles can point at roles
@@ -292,14 +368,14 @@ core: # any non-reserved top-level key is a section you name;
     spaces (`sky(3)` is 3% ink,
     `sky(3 tint)` is that ink uncomposited, `theme(600)` is a stop name,
     `warm-wash.red(6)` is a tint in a group, 6% red over its base)
-  - `domain.role` — another decision in the same mode
+  - `group.role` — another decision in the same mode (just `role` for one in no group)
   - `transparent(paper 70)` — a constant at an opacity. Constants only:
     they have no recipe, so this is a plain function of a color and an
     amount. A system's uncomposited form is a selector instead, because it
     re-runs the recipe rather than transforming the output.
 - One meaning each: **`.` navigates, parentheses hand off.** Inside them,
   spaces separate — never commas, which end an item in a `[ ]` list.
-- **A raw color is legal only inside `systems`.** A color literal is
+- **A raw color is legal only inside `palette` and `systems`.** A color literal is
   `#rgb`, `#rrggbb`, `oklch(L C H)`, `oklab(L a b)`, `color(srgb r g b)` or
   `color(display-p3 r g b)`, each with an optional `/ alpha`. A color keeps
   the space it was written in, so a wide-gamut anchor is not clipped to sRGB
@@ -307,7 +383,7 @@ core: # any non-reserved top-level key is a section you name;
 - A **role** is a list of refs, one per mode, or `{ refs, alias?, omit?,
   description? }` when it needs more. This is the complete role grammar.
 - **`description`** is your own note, as text, on a system, a role, or a
-  group in `palette`, `systems` or a section. `dtg dev` shows it beside what
+  group in `palette`, `systems` or a collection. `dtg dev` shows it beside what
   it describes, and DTCG carries it as `$description`. It is a reserved key
   in those places, so nothing can be named `description`.
 - **`modes`** is a list of names, or a map when a mode needs more:
@@ -321,17 +397,24 @@ core: # any non-reserved top-level key is a section you name;
   through to the DTCG output untouched. It is prose for whoever replays the
   system into a design tool — "renamed `shadow.2` to `shadow.3`, rename in
   Figma rather than recreate" — and the resolver never interprets it.
-- **Sections are yours.** Top-level keys other than
-  `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` are sections: arbitrary
-  names, each emitted as a design-tool collection. CSS names never include the section. Role
-  paths (`domain.role`) must be unique across sections so refs stay
-  unambiguous.
+- **Collections are yours.** Top-level keys other than
+  `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` are collections:
+  arbitrary names, each emitted as a design-tool collection. Inside one,
+  roles may sit in groups, which nest; a role in no group is fine.
+- **A top-level block is a container, never a name.** `palette`, `systems`
+  and every collection hold things; they never appear in refs or in emitted
+  names, and everything below them does. So `hues.green` in the palette
+  emits `--color-hues-green`, `warm.sky(3)` emits `--color-warm-sky-3`, and
+  `surface.canvas` in the `core` collection emits `--surface-canvas`. Only
+  Figma has containers, so only Figma sees the collection: `core`, holding
+  `surface/canvas`. Because refs leave the collection out, a role's path
+  (`group.role`) must be unique across collections.
 - **`alias`** on any emitting key (a constant group, a system, the systems
-  block itself, a section, a domain, or a role) replaces its public name. A string for all
+  block itself, a collection, a group, or a role) replaces its public name. A string for all
   targets, or per-target: `alias: { css: light, figma: Light }`. Internal
   names are for pointing, public names are for emitting, refs always use
   internal names.
-- **`omit: true`** on a domain or role drops that segment from public
+- **`omit: true`** on a group or role drops that segment from public
   names, so `label.primary` with omit emits `--label` beside
   `--label-secondary`. The resolver rejects roles with both segments
   omitted, and any public-name collision aliasing or omission would create.

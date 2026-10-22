@@ -109,3 +109,8 @@ export function orderOf(shape: SelectorShape, selector: ParsedSelector): number[
   order.push(form == null ? 0 : (shape.forms ?? []).indexOf(String(form)) + 1);
   return order;
 }
+
+/** How refs name a role: its groups and its name, dotted — just the name for one written straight in its section. */
+export function rolePath(role: { group: string; role: string }): string {
+  return role.group ? `${role.group}.${role.role}` : role.role;
+}

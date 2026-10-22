@@ -18,6 +18,12 @@ const ink = { kind: "constant", path: "ink" } as const;
 const skyBase = { kind: "param", system: "sky", path: "base" } as const;
 
 describe("working copy", () => {
+  test("a param the file does not write shows as a change from nothing", () => {
+    const glowless = { kind: "param", system: "sky", path: "glow" } as const;
+    const copy = withEdit(openFile(DISK), { action: "set", target: glowless, value: "#ffffff" });
+    assert.deepEqual(changesOf(copy), [{ action: "set", target: glowless, from: null, to: "#ffffff" }]);
+  });
+
   test("with no edits it is the file", () => {
     assert.deepEqual(workingText(openFile(DISK)), { text: DISK, dropped: [] });
     assert.deepEqual(changesOf(openFile(DISK)), []);

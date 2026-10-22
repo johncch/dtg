@@ -1,0 +1,186 @@
+# Tailwind CSS v4's default palette, rebuilt as dtg `curve` systems.
+#
+# Each hue is anchored on Tailwind's own 500, and every colorful hue shares
+# one lightness curve and one chroma curve (in `defaults`); the grays share
+# their own pair. Reshape a shared curve in `dtg dev` and every hue moves
+# with it. Only the hue drift differs per hue: warm colors turn toward
+# orange as they darken, as Tailwind's do.
+#
+# It is close to Tailwind, not identical. Tailwind's shades were picked by
+# hand; these come from two curves fitted to all of them at once. Across its
+# 286 shades the mean difference is 0.015 (OKLab ΔE, where about 0.02 is
+# noticeable side by side): the grays all land within 0.03, and the colorful
+# hues drift most in the 200–300s and 600–800s. Pin any shade you need exact
+# with `overrides`.
+#
+#   npx dtg dev --definition examples/tailwind.dtg.yaml
+
+dtg: 1
+
+palette:
+  tailwind:
+    emit: false
+    red: "oklch(63.7% 0.237 25.331)"
+    orange: "oklch(70.5% 0.213 47.604)"
+    amber: "oklch(76.9% 0.188 70.08)"
+    yellow: "oklch(79.5% 0.184 86.047)"
+    lime: "oklch(76.8% 0.233 130.85)"
+    green: "oklch(72.3% 0.219 149.579)"
+    emerald: "oklch(69.6% 0.17 162.48)"
+    teal: "oklch(70.4% 0.14 182.503)"
+    cyan: "oklch(71.5% 0.143 215.221)"
+    sky: "oklch(68.5% 0.169 237.323)"
+    blue: "oklch(62.3% 0.214 259.815)"
+    indigo: "oklch(58.5% 0.233 277.117)"
+    violet: "oklch(60.6% 0.25 292.717)"
+    purple: "oklch(62.7% 0.265 303.9)"
+    fuchsia: "oklch(66.7% 0.295 322.15)"
+    pink: "oklch(65.6% 0.241 354.308)"
+    rose: "oklch(64.5% 0.246 16.439)"
+    slate: "oklch(55.4% 0.046 257.417)"
+    gray: "oklch(55.1% 0.027 264.364)"
+    zinc: "oklch(55.2% 0.016 285.938)"
+    neutral: "oklch(55.6% 0 none)"
+    stone: "oklch(55.3% 0.013 58.071)"
+    mauve: "oklch(54.2% 0.034 322.5)"
+    olive: "oklch(58% 0.031 107.3)"
+    mist: "oklch(56% 0.021 213.5)"
+    taupe: "oklch(54.7% 0.021 43.1)"
+
+defaults:
+  curve:
+    lightness: { from: 0.998, to: 0.175, easing: [[1, 0.7, 0.23, 0.22], [1, 0.89, 0.6, 0.16]] }
+    chroma: { from: 0, to: 0.828, easing: [[0, 0.86, 0, 0.77], [1, 0.35, 0.75, 2.65]] }
+
+systems:
+  red:
+    algorithm: curve
+    params: { anchor: tailwind.red, hue: { from: -8, to: 1 } }
+    emit: &steps [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
+  orange:
+    algorithm: curve
+    params: { anchor: tailwind.orange, hue: { from: 26, to: -11 } }
+    emit: *steps
+  amber:
+    algorithm: curve
+    params: { anchor: tailwind.amber, hue: { from: 25, to: -24 } }
+    emit: *steps
+  yellow:
+    algorithm: curve
+    params: { anchor: tailwind.yellow, hue: { from: 16, to: -32 } }
+    emit: *steps
+  lime:
+    algorithm: curve
+    params: { anchor: tailwind.lime, hue: { from: -10, to: 1 } }
+    emit: *steps
+  green:
+    algorithm: curve
+    params: { anchor: tailwind.green, hue: { from: 6, to: 3 } }
+    emit: *steps
+  emerald:
+    algorithm: curve
+    params: { anchor: tailwind.emerald, hue: { from: 4, to: 10 } }
+    emit: *steps
+  teal:
+    algorithm: curve
+    params: { anchor: tailwind.teal, hue: { from: -2, to: 10 } }
+    emit: *steps
+  cyan:
+    algorithm: curve
+    params: { anchor: tailwind.cyan, hue: { from: -14, to: 14 } }
+    emit: *steps
+  sky:
+    algorithm: curve
+    params: { anchor: tailwind.sky, hue: { from: -1, to: 6 } }
+    emit: *steps
+  blue:
+    algorithm: curve
+    params: { anchor: tailwind.blue, hue: { from: -5, to: 8 } }
+    emit: *steps
+  indigo:
+    algorithm: curve
+    params: { anchor: tailwind.indigo, hue: { from: -5, to: 4 } }
+    emit: *steps
+  violet:
+    algorithm: curve
+    params: { anchor: tailwind.violet, hue: { from: 1, to: -2 } }
+    emit: *steps
+  purple:
+    algorithm: curve
+    params: { anchor: tailwind.purple, hue: { from: 4, to: -1 } }
+    emit: *steps
+  fuchsia:
+    algorithm: curve
+    params: { anchor: tailwind.fuchsia, hue: { from: -2, to: 4 } }
+    emit: *steps
+  pink:
+    algorithm: curve
+    params: { anchor: tailwind.pink, hue: { from: -11, to: 10 } }
+    emit: *steps
+  rose:
+    algorithm: curve
+    params: { anchor: tailwind.rose, hue: { from: -4, to: -4 } }
+    emit: *steps
+  slate:
+    algorithm: curve
+    params:
+      anchor: tailwind.slate
+      lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
+      chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
+    emit: *steps
+  gray:
+    algorithm: curve
+    params:
+      anchor: tailwind.gray
+      lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
+      chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
+    emit: *steps
+  zinc:
+    algorithm: curve
+    params:
+      anchor: tailwind.zinc
+      lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
+      chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
+    emit: *steps
+  neutral:
+    algorithm: curve
+    params:
+      anchor: tailwind.neutral
+      lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
+      chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
+    emit: *steps
+  stone:
+    algorithm: curve
+    params:
+      anchor: tailwind.stone
+      lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
+      chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
+    emit: *steps
+  mauve:
+    algorithm: curve
+    params:
+      anchor: tailwind.mauve
+      lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
+      chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
+    emit: *steps
+  olive:
+    algorithm: curve
+    params:
+      anchor: tailwind.olive
+      lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
+      chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
+    emit: *steps
+  mist:
+    algorithm: curve
+    params:
+      anchor: tailwind.mist
+      lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
+      chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
+    emit: *steps
+  taupe:
+    algorithm: curve
+    params:
+      anchor: tailwind.taupe
+      lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
+      chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
+    emit: *steps

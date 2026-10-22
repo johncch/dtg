@@ -19,7 +19,7 @@ itself carries the reasoning.
 
 A large definition is a ceiling, not a floor. A new project starts around
 fifteen lines and grows one line at a time. **Tooling must never assume any
-section, domain, or role exists.** It renders and emits exactly what is
+collection, group, or role exists.** It renders and emits exactly what is
 declared.
 
 ## The grammar
@@ -70,7 +70,7 @@ Canonical. The README carries the user-facing version of the same rules.
 - `defaults`: shared params per algorithm, merged under each system's own
   params. One copy of each number.
 - `description`: the author's own note, as text, on a system, a role, or a
-  group in `palette`, `systems` or a section. Reserved in those places, the
+  group in `palette`, `systems` or a collection. Reserved in those places, the
   same as `alias`. It changes no color and nothing reads it but people: the
   app shows it, and DTCG carries it as `$description`. A palette color is a
   bare string with nowhere to put one, so its group's description stands in.
@@ -79,11 +79,22 @@ Canonical. The README carries the user-facing version of the same rules.
   a palette. Only constants: they are literals, so the chain ends after one
   hop and no cycle is possible. Letting a param name a system step would
   need systems resolved in dependency order and a cycle error first.
-- Sections: every top-level key other than
-  `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` is a section. Arbitrary
-  name, becomes a collection, holds `domain → role → [ref per mode]`. A
+- **A top-level block is a container, never a name.** Settled 2026-10-19.
+  `palette`, `systems` and every collection hold things; none appears in a
+  ref or an emitted name, and everything below them does: palette and
+  system groups, role groups, the leaf. The systems block emits behind a
+  fixed `--color-` prefix instead of its own name, which marks primitives
+  apart from the roles built on them. Only Figma has containers, so only it
+  sees a collection, as the collection itself. Naming the top-level block in
+  every name was considered and turned down: it would make `systems.sky` the
+  default spelling of every step, break both shipped projects' names and
+  refs, and still leave Figma's collection as the exception.
+- Collections: every top-level key other than
+  `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` is a collection.
+  Arbitrary name, becomes a design-tool collection, holds
+  `group → role → [ref per mode]`, where groups nest and are optional. A
   role may also be `{ refs, alias?, omit?, description? }`. `alias` (on a group, a
-  system, the systems block, a section, a domain, or a role; string or
+  system, the systems block, a collection, a group, or a role; string or
   per-target map) replaces a public name; `omit: true` drops a segment.
   Refs always use internal names. That is the *entire* role grammar. No
   flags, no options, no other object form.
@@ -94,7 +105,8 @@ Canonical. The README carries the user-facing version of the same rules.
     spaces (`sky(3.5)` is 3.5% ink,
     `sky(3 tint)` that ink uncomposited, `theme(600)` a stop name,
     `warm-wash.red(6)` a tint in a group)
-  - `domain.role` — another decision in the same mode
+  - `group.role` — another decision in the same mode; just `role` for one
+    written straight in its collection
   - `transparent(paper 70)` — a constant at an opacity, constants only.
     It is written like a system and read by the same parser, so no system
     can be named `transparent`
@@ -106,6 +118,10 @@ Canonical. The README carries the user-facing version of the same rules.
 - **Raw hex is legal only inside `palette` and `systems`.** The semantic tier points and
   derives; every color traces back to an anchor. This is the core invariant:
   a literal is a value that has forgotten its reason.
+- `none`, CSS's missing component, reads as `0` in any slot. It's a
+  spelling: `oklch(70% 0 none)` and `oklch(70% 0 0)` are the same gray, and
+  whether a color has a hue is decided by its chroma (see Color spaces).
+  Writing back puts `0`.
 
 Removed spellings are still detected and error with a pointer, rather than
 being silently ignored: a top-level `emit:` block (replaced by inline
@@ -124,20 +140,152 @@ Three built-ins, each *total*, with no optional-parameter modes.
 - **`tint`** (`base`, `tint`, both required): a tint composited over base;
   the selector is the tint's alpha percent. The token name doubles as the
   recipe, so `light-15` is 15% ink. Steps are opaque surface colors, and the
-  ramp also backs `transparent()`.
+  ramp also backs `transparent()`. Composited in encoded sRGB.
 - **`scale`** (`base`, `toward: [light, dark]`, `hueShift`, `midpoint`): a
   continuous curve through the base in OKLCH. The selector is any stop
   0–1000: 0 is `toward[0]`, 500 the base, 1000 `toward[1]`. The share of base
   at a stop is its distance from the near end raised to a power, mirrored
   about 500; `midpoint` (default 0.5, a straight line) is the share at 250
   and 750, and sets the power. `hueShift` 0 locks every stop to the base
-  hue, 100 follows the natural interpolated hue path. Scale was a lookup
+  hue, 100 follows the natural interpolated hue path. Blended in OKLCH from
+  OKLab. Scale was a lookup
   table of named stops; a single curve fit mosaic's hand-picked table to
   within ΔE 1.2 and made every stop between addressable.
 - **`overlay`** (`color`): color at selector % opacity, never flattened.
   Shadows and scrims. This is why `shadow` is not a baseless tint: what
   kind of value a system produces is the **algorithm's nature**, declared
   once in the systems block, never a per-role flag.
+- **`curve`** (experimental): a ramp drawn through a picked color, shaped
+  by editable curves. See below.
+- **`tone`** (experimental): a palette whose selector is lightness itself,
+  as in Material 3. See below.
+
+### `curve` (experimental)
+
+Settled 2026-10-19 while trying to replicate Tailwind's palette, which
+`scale` could not: Tailwind's steps are hand-picked, with uneven lightness
+gaps, chroma that peaks at 400 or 600 rather than at the base, and hue that
+turns as warm colors darken. `curve` exists to explore that shape. It is
+experimental: its params may change without a removed-spelling error.
+
+```yaml
+blue:
+  algorithm: curve
+  params:
+    anchor: hues.blue      # the ramp passes through it exactly
+    at: 500                # where the anchor sits
+    gamut: display-p3      # what full chroma is measured against
+    lightness: { from: 0.97, to: 0.25 }   # OKLab lightness
+    chroma: { from: 0.4, to: 0.7 }        # share of the gamut's maximum
+    hue: { from: 0, to: -32, easing: [[0.33, 0.33, 0.67, 0.67], [0.6, 0, 0.8, 1]] }  # degrees from the anchor's
+```
+
+- **The selector is a position, 0–1000,** so `blue(500)` emits
+  `--color-blue-500`. The number is relative to the pick, as in Tailwind
+  and Material 2: `at` declares where the anchor sits, and `blue(at)` is
+  the anchor exactly. A step number does not mean the same lightness across
+  hues. An algorithm whose selector *is* lightness is a separate one
+  (`tone`, on the roadmap), because the selector's meaning is the
+  algorithm's nature.
+- **Three channels, each a curve:** lightness (OKLab L), chroma (a share of
+  the most `gamut` holds at that lightness and hue), and hue (degrees from
+  the anchor's). A curve runs `from` its value at 0, through the anchor's
+  own value at `at`, `to` its value at 1000. `easing` is two CSS
+  `cubic-bezier(x1, y1, x2, y2)` lists, before the anchor and after it: x in
+  0–1, y free, so a curve can overshoot. The default,
+  `[0.33, 0.33, 0.67, 0.67]`, is a straight line with its handles a third of
+  the way along, where the editor can grab them. A field left out takes the
+  default's, so `{ from: 0.4, to: 0.7 }` is a whole curve.
+- **`curve` is a param kind,** not something only this algorithm knows. An
+  algorithm declares `{ kind: "curve", along, min, max, default }`; dtg
+  checks the fields, the bounds and the easing, and fills what is left out.
+  `along` names the selector field the curve runs along, here `stop`, and
+  the curve spans that field's range. Where it passes through what the
+  algorithm holds fixed comes from the optional `curvePivots(params)` hook;
+  the math that runs a curve through its pivot is one function, `curveAt`,
+  shared by the algorithm and the page.
+- **The page draws a curve from what the algorithm produces,** not from
+  drawing instructions. Because the curve runs along a selector field, dtg
+  resolves the system at evenly spaced points along it and sends those
+  colors with the curve, and places each emitted step on it by reading the
+  step's value for that field. The page shows the colors as a strip under
+  the curve and the steps as dots in their own colors; both follow a drag,
+  since previews are resolved like everything else.
+- **One control per curve.** In `dtg dev` a curve param is a chip in the
+  params row showing the curve in small, with the anchor marked. It opens
+  like a number param does: the curve to drag (its ends up and down, its
+  four easing handles anywhere) with `from`, `to` and the easing as numbers
+  below, tried live on the page and kept on close. An edit writes the whole
+  curve as one flow map.
+- **Chroma as a share of the maximum** keeps every step inside `gamut` while
+  the shares stay at or below 1, and lets chroma peak where the gamut is
+  widest without a param for it. An anchor outside `gamut` has a share above
+  1 and pulls its neighbors out with it; the outputs map them.
+- **`gamut` defaults to `display-p3`,** the most vivid rendition that stays
+  compatible: P3 screens get the full color and the CSS carries the nearest
+  sRGB color for the rest. On sRGB screens, neighboring steps past the sRGB
+  edge land on it together, so a shaped chroma curve looks flatter there.
+  `gamut: srgb` keeps the curve exact everywhere.
+- The math is OKLCH from OKLab throughout, like `scale`.
+
+**Why `scale` and `curve` both exist.** Settled 2026-10-19. They share a
+selector meaning (a position relative to a pick) and an operation
+(interpolating channels through it), and `scale` can nearly be written as a
+`curve`. They stay separate anyway, because an algorithm is allowed to be
+specific: it serves the way an app wants to make its colors, not every way.
+
+- `scale` is for one ramp steered by two end colors and a `midpoint`: pick a
+  base and where it should end up. That is how Mosaic makes its ramps, and
+  the colors-as-ends input is the point of it, not a limitation.
+- `curve` is for a family of ramps that should behave alike, or a shape that
+  needs channel-by-channel control. Its curves can live in `defaults`, so
+  every hue shares one shape and each system is just an anchor; tweaking the
+  shared curve moves every ramp together. It is also the one for shapes two
+  end colors cannot make (chroma peaking off the base, hue turning only in
+  the darks) and for steps that must stay in gamut by construction.
+
+What `curve` showed that does generalize is the `curve` param kind: shapes
+inside an algorithm are curves, drawn and edited the same way wherever they
+appear. `tone` will use them along lightness, which needs the pivot to be
+optional.
+
+### `tone` (experimental)
+
+Settled 2026-10-19. Where `curve` makes the pick a step, `tone` makes it a
+source: the pick lends its hue (and, unless told otherwise, its chroma),
+and the palette is generated by walking lightness from 0 to 100.
+
+```yaml
+primary:  { algorithm: tone, params: { anchor: brand, chroma: 0.09 } }
+tertiary: { algorithm: tone, params: { anchor: brand, chroma: 0.06, hue: 60 } }
+```
+
+- **The selector is tone, 0–100, and tone is CIELAB L\*.** `primary(40)`
+  emits `--color-primary-40`, and every palette's 40 is equally light.
+  Because L\* is a function of luminance alone, so is contrast: any tone 40
+  is about 6.5:1 against white, any tone 50 about 4.5:1, whatever the hue.
+  That is the reason to choose `tone`, and it holds exactly.
+- **Params:** `anchor` (a color); `chroma`, OKLCH chroma, optional, the
+  anchor's own when left out; `hue`, degrees from the anchor's OKLCH hue,
+  default 0; `gamut`, default `srgb`. Where a tone cannot hold the chroma
+  inside `gamut`, it gets the most it can, at the same tone and hue. With
+  `chroma` left out and `hue` at 0, the palette passes through the anchor at
+  the anchor's own tone.
+- **Material 3-style, not Material-exact.** Material builds its palettes in
+  HCT: tone is L\*, hue and chroma come from CAM16. Only the tone half
+  carries the contrast guarantee, so `tone` keeps L\* exactly and holds hue
+  and chroma in OKLCH like the rest of dtg, instead of porting CAM16 and its
+  solver (Google's `@material/material-color-utilities` does not run in
+  plain Node either). Measured against Material's own palettes for four
+  source colors, the difference is 0.001–0.005 on average and at most 0.014
+  (OKLab ΔE; about 0.02 is just noticeable), largest at tone 10. The numbers
+  differ in meaning, though: Material's chroma 36 is CAM16 chroma, about
+  0.09 in OKLCH.
+- **`gamut` defaults to `srgb`,** unlike `curve`: `chroma` here is absolute,
+  and a palette that never leaves sRGB looks the same on every screen, as
+  Material's does.
+- The math: a tone fixes a luminance; `tone` finds the OKLab lightness at
+  which the color, at that hue and (gamut-held) chroma, has it.
 
 ### The seam: color-math owns color, algorithms own vocabulary
 
@@ -184,6 +332,60 @@ fraction. Both are now single functions in `color-math.ts`. If you find
 yourself writing color arithmetic or a color string inside
 `algorithms/`, it belongs one level down.
 
+### Color spaces: how a color is written, what it is, and where the math runs
+
+Settled 2026-10-19, after a Tailwind replication exposed that a color's
+written form was changing results.
+
+Three things that used to blur together are kept apart:
+
+- **The written form** is how a definition spells a color: hex, `oklch()`,
+  `oklab()`, `color(srgb …)`, `color(display-p3 …)`. It is kept only to
+  write the file back and to emit the authored bytes exactly. It never
+  reaches the math.
+- **The value** is what the color is, held in OKLab. It's unbounded, so any
+  color from any gamut fits, and the same color has the same value however
+  it was written.
+- **The math space** is the set of numbers an operation averages, and it is
+  the algorithm's choice, part of what the algorithm means. The same two
+  colors mix to different colors in each: 50% black over white is `#808080`
+  in encoded sRGB, `#bcbcbc` in linear light, `#636363` in OKLab.
+  `color-math.ts` offers `composite(layer, ground, alpha, space)` over
+  `srgb`, `display-p3`, `linear` and `oklab`; the encoded spaces extend past
+  0–1, so a color outside them is carried rather than clipped. An algorithm
+  may fix its space or expose it as a param.
+  - `tint` composites in **encoded sRGB**, fixed. That is the long-standing
+    meaning of opacity in CSS and Figma, and every existing tint keeps its
+    value byte for byte.
+  - `scale` blends in **OKLCH**, converted straight from OKLab, with no
+    detour through RGB channels.
+
+Browsers composite in the space of the surface they draw on, not one tied to
+the color: Chrome flattens P3 red at 60% over white to `color(display-p3 1
+0.4 0.4)` on a P3 canvas and to the clipped sRGB result on an sRGB canvas.
+So a flattened step matches its translucent twin (`sky(15)` and
+`sky(15 tint)`) exactly for sRGB colors on an sRGB surface. For a color
+outside sRGB no flattened value matches every surface; `tint`'s answer is
+about 0.03 (OKLab ΔE) from a P3 surface's for P3 red at 60%, and dtg's
+near-gray tints differ by under 0.001.
+
+A gamut appears only at the edges: the project's `gamut` warns about
+authored colors, and the outputs encode into sRGB and P3. No algorithm
+receives or infers a gamut. `widestGamut`, which guessed one from how inputs
+were written, is gone. It is why an `oklch()` base outside sRGB was clipped,
+and why the same blue written as hex and as `color(display-p3 …)` produced
+different steps.
+
+**Hue.** Whether a color has a hue is a property of its value, never of its
+spelling. A color whose chroma is below ε (1e-5) has no hue. ε sits in a
+wide gap: exact hex grays carry rounding noise up to about 4e-8, and the
+least colorful non-gray hex color (`#feffff`) has chroma of about 1e-3.
+Where an operation needs a hue that a color doesn't have (a blend, or
+`scale` holding its base hue), it takes the other color's hue. If neither
+has one, the result is gray. This replaces three thresholds that disagreed:
+0.001 in blending, 5e-5 when writing back, and none at all for `scale`'s
+base hue, which made a gray base lock to noise.
+
 ### The algorithm contract
 
 `src/contract.ts` defines `Algorithm`:
@@ -205,10 +407,12 @@ yourself writing color arithmetic or a color string inside
 - `resolve(selector, params)` returns a color. The selector arrives parsed,
   one value per field plus `form`. It throws with a human-readable message
   on a selector the system cannot produce.
-- `workingGamut(params)` is optional: the gamut the arithmetic runs in, when
-  it has a fixed one.
-- `preview` is optional and holds `shape`: a ramp, where neighbor deltas
-  mean something, or a palette, where they do not.
+- `curvePivots(params)` is optional: for each `curve` param, the position
+  and value it passes through, so the page can draw the curve. Only an
+  algorithm with curve params has it.
+- `curveSwatch(params, name, value)` is optional: the color a value of a
+  `curve` param stands for, painted behind the curve in the editor. It never
+  reaches an output.
 
 There are no naming or ordering hooks. A step's public name is its fields
 joined by `-`, then the form (`sky(3.5 tint)` emits as `3_5-tint`), and steps sort
@@ -231,8 +435,8 @@ doing so is in `project-algorithms.md`.
 
 ## Rules the design settled (and why)
 
-1. **Rigidity comes from closed sets, so every set is open.** Sections,
-   domains, roles, systems, algorithm params, selectors. What is fixed is
+1. **Rigidity comes from closed sets, so every set is open.** Collections,
+   groups, roles, systems, algorithm params, selectors. What is fixed is
    only the plumbing contract that lets tooling stay generic.
 2. **Determinism is non-negotiable.** Same definition, same bytes. The
    definition is data (YAML, no computation); expressions are parsed, never
@@ -246,8 +450,11 @@ doing so is in `project-algorithms.md`.
    two lines. Twins are declared as sibling roles
    (`primary-translucent: [sky(15 tint), ...]`), so twinship stays
    recoverable by inspection.
-5. **Overrides pin flattened hexes only.** The uncomposited form always
-   follows pure ink math, and the resolver warns when the two overlap. Hand-tunes are
+5. **Overrides pin flattened steps only, with any opaque color.** An
+   override takes any color the grammar accepts, so a wide-gamut step can be
+   pinned exactly. It must be opaque, because it stands in for a flattened
+   step. The uncomposited form always follows the recipe, and the resolver
+   warns when the two overlap. Hand-tunes are
    explicit, visible, and survive regeneration. Exceptions either get
    promoted into the system later or stay flagged, never silent.
 6. **Constants emit, systems publish what they list, roles reference.** A
@@ -278,7 +485,7 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   definition is has no default; the config or a flag names it. Precedence is CLI flags,
   then `dtg.config.yaml`, then defaults.
 - `resolve.ts` — the grammar lives here. YAML in, `ResolvedDefinition` out
-  (systems with their steps, statics, sections, roles with a ref per mode,
+  (systems with their steps, statics, collections, roles with a ref per mode,
   plus accumulated warnings). Public-name resolution is here too:
   `aliasedName`, `publicSystemName`, `publicRoleName`.
 - `contract.ts` — the `Algorithm` interface.
@@ -289,14 +496,17 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `algorithms/` — the three built-ins.
 - `color-math.ts` — hex parsing, compositing, and the OKLCH and OKLAB math.
 - `emit.ts` — the CSS and DTCG emitters.
-- `dev-server.ts`, `watch.ts` — the HTTP and SSE server and definition file
-  watching. The server holds no markup: it serves one HTML shell, the built
-  browser bundle, and `/api/snapshot`.
+- `dev-server.ts`, `dev-state.ts`, `watch.ts` — the HTTP and SSE server and
+  definition file watching. The server holds no markup and draws nothing: it
+  serves one HTML shell, the built browser bundle, and `/api/state`, the
+  working copy with the settings around it. It resolves only to write
+  outputs and to refuse a definition that is broken at startup.
 - `app-shell.ts`, `site.ts` — the app's one HTML page, and `dtg docs`, which
-  writes that page, the bundle and the snapshot as files. The page names its
-  mode: `served` by dev, or `static`, where the app reads `snapshot.json`
+  writes that page, the bundle and the definition as files. The page names its
+  mode: `served` by dev, or `static`, where the app reads `state.json`
   beside it, addresses pages in the fragment so any host at any folder can
-  serve it, and offers no editing.
+  serve it, and saves nothing. A static page built with `--editable` keeps
+  its visitors' edits in the page alone (`ui/store.ts`).
 - `edit.ts` — writing one value into the definition's text: an authored
   color, or the ref a role holds for a mode. An edit is a `set`, which needs
   a value to write over, or for a constant also an `add`, `rename` or
@@ -321,12 +531,11 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   steps, which is what one undo takes back: randomizing a palette set is
   one step of many edits. What counts as a change follows a constant
   through renames, so renaming one back is no change at all.
-- `snapshot.ts` — the definition as plain JSON for the browser. Anything that
-  needs an algorithm or an alias is worked out here; colors travel as exact
-  values and the browser formats them.
+- `snapshot.ts` — the resolved definition as plain data for the pages to
+  draw, built in the page from the working copy.
 - `ui/` (outside `src/`) — the browsing UI, a React app bundled by Vite into
-  `dist/ui/`. It imports `color-math.ts` directly, so the pages and the
-  emitters run the same arithmetic.
+  `dist/ui/`. It runs the resolver, the edits and the color math itself
+  (`ui/engine.ts`), so the pages and the emitters run the same code.
 
 Errors accumulate rather than throwing on the first problem, so one resolve
 reports everything wrong with a definition. Keep that.
@@ -355,7 +564,8 @@ Anything outside those three is a real defect. Promoting this check into a
 - [x] Definition grammar, resolver, built-in algorithms
 - [x] Browsing dev server (`dtg dev`): overview strips, a page per system
       with demanded-by lineage, algorithm description and params, and
-      adjacent-step OKLAB ΔE; a page per domain with side-by-side modes.
+      adjacent-step OKLAB ΔE; a page per group of roles with side-by-side
+      modes.
       User-defined page backgrounds (named, localStorage-persisted, sidebar
       switcher) so colors are judged on a chosen ground, with chrome flipping
       to a dark scheme on dark backgrounds. Stdlib HTTP plus SSE live-reload
@@ -394,17 +604,27 @@ Anything outside those three is a real defect. Promoting this check into a
       sRGB edge drawn along the seams.
 - [ ] Rolls that keep the locked colors' lightness and chroma and vary only
       hue.
+- [x] `curve` editor: each curve param is one chip, a small drawing of the
+      curve, that opens to drag the curve and type its numbers.
+- [x] `tone`: an algorithm whose selector is lightness itself, as in
+      Material 3's tonal palettes. Tone is L\* exactly; hue and chroma are
+      OKLCH, which lands within 0.014 of Material's HCT palettes.
+- [ ] `tone` with curves: chroma and hue as `curve` params running along
+      tone, which needs a curve's pivot to be optional.
 - [ ] Multi-file definitions (`shadows.dtg.yaml`, `type.dtg.yaml` as
       siblings, one resolver over all). Discovery exists; merging does not.
-- [ ] Designer tweaking in the browser: controls POST param changes, the
-      server rewrites the definition (comment-preserving, via the yaml
-      document API), the watcher re-resolves, the page reloads. The file
-      stays the single source of truth; the browser is just another editor
-      of it.
-- [ ] Studio preview: apply resolved variables onto the document root so real
-      components render under a proposed palette, plus auto-generated
-      specimens (nested surfaces, labels at small sizes on every surface, 1px
-      separators, states) for the portable case.
+- [x] Designer tweaking in the browser: every param, ref and palette color
+      has a control. The page resolves edits itself; `dtg dev` keeps the
+      working copy and writes the file on save, one-line splices that keep
+      comments. `dtg docs --editable` keeps edits in the page alone.
+- [x] Live CSS for a host page: embedded in an iframe, the browser posts the
+      CSS for what it shows to the page around it, so real components render
+      under a proposed palette as it is edited. The host can post back a
+      `dtg:background` color so a docked panel is drawn on the page's own
+      background.
+- [ ] Specimens: auto-generated nested surfaces, labels at small sizes on
+      every surface, 1px separators and states, for the portable case with
+      no host page.
 - [ ] Figma sync. `emit` already writes the payload as DTCG (collections
       via `$extensions`, modes, values, aliases by path, no file IDs).
       Delivery paths, ranked: (1) an
