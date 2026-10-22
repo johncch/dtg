@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { parse } from "yaml";
 import {
   CSS_FORMATS,
@@ -39,8 +39,14 @@ export type DtgConfig = {
   gamut: Gamut;
 };
 
+/** The CSS a definition emits when nothing names one: beside it, with its name. */
+export function generatedCssBeside(definition: string): string {
+  const stem = basename(definition).replace(/\.dtg\.yaml$/, "");
+  return join(dirname(definition), `${stem}.generated.css`);
+}
+
 function starterConfig(definition: string): string {
-  const css = join(dirname(definition), "colors.generated.css");
+  const css = generatedCssBeside(definition);
   return `# dtg project config. Paths are relative to this file.
 definitions: ${definition}
 outputs:
@@ -169,7 +175,7 @@ export function loadConfig(flags: {
   return {
     definition,
     cssOut: requested.has("css")
-      ? (flags.css ?? css.path ?? join(dirname(definition), "tokens.generated.css"))
+      ? (flags.css ?? css.path ?? generatedCssBeside(definition))
       : undefined,
     cssFormat:
       assertCssFormat(flags.cssFormat, "--css-format") ?? css.format ?? "plain",

@@ -134,12 +134,12 @@ usage: dtg <command> [flags]
 
 commands
   init      write a starter definition and dtg.config.yaml in this folder
-
-init
-  --definition <file>         where to put the definition (asked otherwise)
   dev       browse and edit the definition in a browser
   build     write the configured outputs
   docs      write a copy of the browser as static files, to publish
+
+init
+  --definition <file>         where to put the definition (asked otherwise)
 
 dev
   --port <n>                  port to serve on (default 4401)
@@ -174,9 +174,9 @@ outputs (build, and dev --build)
                               the one space every DTCG color is written in
                               (default srgb); match your Figma document
 
-  Outputs are a set. Name none and you get CSS at tokens.generated.css
-  beside the definition. Name any, here or under \`outputs\` in
-  dtg.config.yaml, and you get exactly those.
+  Outputs are a set. Name none and you get CSS beside the definition,
+  named after it: colors.dtg.yaml → colors.generated.css. Name any, here
+  or under \`outputs\` in dtg.config.yaml, and you get exactly those.
 
 other
   -v, --version               print the version

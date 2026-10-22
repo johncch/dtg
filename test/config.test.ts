@@ -34,7 +34,7 @@ describe("outputs is a set, not a bag of defaults", () => {
   test("no dtg.config.yaml at all — css", () => {
     inProject(null, () => {
       const c = loadConfig({ definition: DEFINITION });
-      assert.equal(c.cssOut, join("design-tokens", "tokens.generated.css"), "beside the definition");
+      assert.equal(c.cssOut, join("design-tokens", "c.generated.css"), "beside the definition, named after it");
       assert.equal(c.scssOut, undefined);
       assert.equal(c.dtcgOut, undefined);
     });
@@ -106,11 +106,11 @@ describe("init", () => {
 
   test("puts the definition where it was asked, making the folder, with the CSS beside it", () => {
     inProject(null, () => {
-      writeStarter("src/colors.dtg.yaml");
+      writeStarter("src/tokens.dtg.yaml");
       const config = loadConfig({});
-      assert.equal(config.definition, "src/colors.dtg.yaml");
-      assert.equal(config.cssOut, "src/colors.generated.css");
-      assert.match(readFileSync("src/colors.dtg.yaml", "utf8"), /^dtg: 1$/m);
+      assert.equal(config.definition, "src/tokens.dtg.yaml");
+      assert.equal(config.cssOut, "src/tokens.generated.css");
+      assert.match(readFileSync("src/tokens.dtg.yaml", "utf8"), /^dtg: 1$/m);
     });
   });
 
