@@ -21,15 +21,13 @@ body { display: flex; min-height: 100vh; }
 :where(button:not(.btn)):active:not(:disabled) { box-shadow: none; }
 #app { display: contents; }
 aside { width: 208px; flex-shrink: 0; border-right: 1px solid var(--border); padding: 16px; display: flex; flex-direction: column; position: sticky; top: 0; align-self: flex-start; height: 100vh; overflow-y: auto; }
-aside h1 { font-size: var(--text-caption); font-weight: 700; text-transform: uppercase; letter-spacing: 0.025em; color: var(--muted); margin-bottom: 16px; }
+aside h1 { font-size: var(--text-body); font-weight: 500; color: var(--fg); margin-bottom: 16px; padding: 0 8px; }
 aside h1 a { color: var(--fg); text-decoration: none; }
 aside h1 .version { color: var(--muted); }
-aside h2 { font-size: var(--text-subhead); font-weight: 500; color: var(--muted); margin: 16px 0 4px; padding: 0 12px; }
+aside h2 { font-size: var(--text-subhead); font-weight: 500; color: var(--muted); margin: 16px 0 4px; padding: 0 8px; }
 aside nav { display: flex; flex-direction: column; gap: 2px; }
-aside nav a { display: block; padding: 6px 12px; border-radius: var(--radius-lg); color: var(--fg); text-decoration: none; font-size: var(--text-body); }
+aside nav a { gap: 4px; }
 aside nav a .algorithm { color: var(--muted); }
-aside nav a:hover { background: var(--hover); }
-aside nav a[aria-current] { background: var(--selected); }
 .nav-group-name { padding: 6px 12px; color: var(--muted); font-size: var(--text-body); }
 .nav-group-items { padding-left: 12px; }
 main { flex: 1; min-width: 0; padding: 24px 32px; }
@@ -247,6 +245,7 @@ tr.group-row .group-note { font-weight: normal; max-width: 70ch; margin-top: 4px
   aside h1 { margin: 0; }
   aside h2 { margin: 0; padding: 0; }
   aside nav { order: 2; flex-basis: 100%; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+  aside nav a { width: auto; }
   aside nav h2 { margin-left: 8px; }
   aside nav h2:first-child { margin-left: 0; }
   .nav-group, .nav-group-items { display: contents; }

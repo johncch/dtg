@@ -103,6 +103,7 @@
   --color-surface-bubble: var(--surface-bubble);
   --color-state-hover: var(--state-hover);
   --color-state-selected: var(--state-selected);
+  --color-state-selected-tint: var(--state-selected-tint);
   --color-state-active: var(--state-active);
   --color-state-button-hover: var(--state-button-hover);
   --color-label: var(--label);
@@ -170,6 +171,7 @@
   --surface-bubble: var(--color-theme-150);
   --state-hover: rgba(0, 26, 40, 0.03);
   --state-selected: var(--color-light-0);
+  --state-selected-tint: var(--color-theme-200);
   --state-active: var(--color-light-8);
   --state-button-hover: var(--color-light-8);
   --label: var(--color-dark-0);
@@ -221,6 +223,7 @@
   --surface-bubble: var(--color-theme-700);
   --state-hover: rgba(250, 253, 255, 0.04);
   --state-selected: var(--color-dark-6_5);
+  --state-selected-tint: var(--color-theme-800);
   --state-active: var(--color-dark-8);
   --state-button-hover: var(--color-dark-12);
   --label: var(--color-light-0);
@@ -269,6 +272,7 @@
   --surface-track: var(--surface-toggle);
   --state-hover: rgba(250, 253, 255, 0.065);
   --state-selected: var(--color-midnight-12);
+  --state-selected-tint: var(--color-theme-900);
   --state-active: var(--color-midnight-16);
   --state-button-hover: var(--color-midnight-14);
   --separator-primary: var(--color-midnight-16);
@@ -317,6 +321,42 @@
 }
 :where(.mosaic-base a:hover) {
   text-decoration: underline;
+}
+:where(.mosaic-base nav a) {
+  display: flex;
+  height: calc(0.25rem * 8);
+  width: 100%;
+  min-width: 0px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: calc(0.25rem * 3);
+  overflow: hidden;
+  border-radius: var(--radius-sm);
+  padding-inline: calc(0.25rem * 2);
+  text-align: left;
+  font-size: var(--text-body);
+  --tw-font-weight: var(--font-weight-medium);
+  font-weight: var(--font-weight-medium);
+  color: var(--label-secondary);
+  text-decoration-line: none;
+  &:hover {
+    @media (hover: hover) {
+      background-color: var(--state-hover);
+    }
+  }
+  &:focus-visible {
+    outline: 1px solid var(--color-shape-theme);
+    outline-offset: 1px;
+  }
+}
+:where(.mosaic-base nav a[aria-current]) {
+  background-color: var(--state-selected-tint);
+  color: var(--label);
+  &:hover {
+    @media (hover: hover) {
+      background-color: var(--state-selected-tint);
+    }
+  }
 }
 :where(.mosaic-base code, .mosaic-base kbd, .mosaic-base samp, .mosaic-base pre) {
   font-family: var(--font-mono);
