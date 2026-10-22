@@ -122,6 +122,25 @@ describe("init", () => {
     });
   });
 
+  test("starts from an example when asked", () => {
+    inProject(null, () => {
+      writeStarter("colors.dtg.yaml", "material");
+      const text = readFileSync("colors.dtg.yaml", "utf8");
+      assert.match(text, /^# Material 3's color scheme/);
+      assert.doesNotMatch(text, /npx dtg dev --definition examples/);
+      assert.equal(loadConfig({}).definition, "colors.dtg.yaml");
+    });
+  });
+
+  test("a blank is the modes and comments, and resolves", () => {
+    inProject(null, () => {
+      writeStarter("colors.dtg.yaml", "blank");
+      const text = readFileSync("colors.dtg.yaml", "utf8");
+      assert.match(text, /^modes: \[light, dark\]$/m);
+      assert.equal(text.split("\n").filter((l) => l && !l.startsWith("#")).length, 2);
+    });
+  });
+
   test("keeps a definition that is there", () => {
     inProject(null, () => {
       writeFileSync("colors.dtg.yaml", "dtg: 1\n");

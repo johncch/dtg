@@ -1,7 +1,13 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
-import { defaultDefinitionPath, loadConfig, writeStarter } from "./config.js";
+import {
+  defaultDefinitionPath,
+  loadConfig,
+  STARTS,
+  writeStarter,
+  type Start,
+} from "./config.js";
 import { startDevServer } from "./dev-server.js";
 import { writeOutputs } from "./outputs.js";
 import { resolveDefinition } from "./resolve.js";
@@ -45,17 +51,45 @@ async function askDefinitionPath(): Promise<string> {
   return answer || fallback;
 }
 
+function isStart(name: string): name is Start {
+  return name in STARTS;
+}
+
+/**
+ * What the definition starts as: `--from`, or a question whose Enter takes
+ * the starter. Without a terminal, the starter.
+ */
+async function askStart(): Promise<Start> {
+  const given = flagValue("--from");
+  if (given != null) {
+    if (!isStart(given)) fail(`--from: unknown "${given}" (known: ${Object.keys(STARTS).join(", ")})`);
+    return given;
+  }
+  if (!process.stdin.isTTY) return "starter";
+  const names = Object.keys(STARTS) as Start[];
+  const choices = names.map((name, i) => `  ${i + 1}. ${STARTS[name]}`);
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = (await rl.question(`Start from:\n${choices.join("\n")}\n[1] `)).trim();
+  rl.close();
+  if (answer === "") return "starter";
+  if (isStart(answer)) return answer;
+  const picked = names[Number(answer) - 1];
+  if (picked == null) fail(`init: no choice "${answer}"`);
+  return picked;
+}
+
 if (command === "init") {
   const definition = await askDefinitionPath();
+  const from = await askStart();
   let definitionWritten = false;
   try {
-    ({ definitionWritten } = writeStarter(definition));
+    ({ definitionWritten } = writeStarter(definition, from));
   } catch (e) {
     fail((e as Error).message);
   }
   console.log(
     definitionWritten
-      ? `wrote dtg.config.yaml and a starter ${definition} — \`dtg dev\` opens it`
+      ? `wrote dtg.config.yaml and ${from === "starter" ? "a starter" : `the ${from} definition as`} ${definition} — \`dtg dev\` opens it`
       : `wrote dtg.config.yaml, pointing at the ${definition} already here — \`dtg dev\` opens it`,
   );
 } else if (command === "emit") {
@@ -140,6 +174,8 @@ commands
 
 init
   --definition <file>         where to put the definition (asked otherwise)
+  --from <starter|blank|tailwind|material>
+                              what the definition starts as (asked otherwise)
 
 dev
   --port <n>                  port to serve on (default 4401)

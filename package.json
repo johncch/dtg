@@ -28,11 +28,11 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "build": "tsc && tsc -p ui && vite build",
+    "build": "tsc && tsc -p ui && vite build && node scripts/copy-examples.mjs",
     "watch": "tsc --watch --preserveWatchOutput & vite build --watch",
     "dev": "tsc --watch --preserveWatchOutput & vite build --watch & node --watch dist/cli.js dev",
-    "prepare": "tsc && vite build",
-    "test": "tsc && node --test --test-reporter=./test/reporter.mjs test/*.test.ts",
+    "prepare": "tsc && vite build && node scripts/copy-examples.mjs",
+    "test": "tsc && node scripts/copy-examples.mjs && node --test --test-reporter=./test/reporter.mjs test/*.test.ts",
     "test:spec": "tsc && node --test test/*.test.ts",
     "release": "./scripts/release.sh"
   },

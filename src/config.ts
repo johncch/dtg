@@ -100,12 +100,44 @@ export function defaultDefinitionPath(): string {
   return existsSync("src") ? "src/colors.dtg.yaml" : "colors.dtg.yaml";
 }
 
+const BLANK_DEFINITION = `# Your color system, as decisions. Raw colors live only in \`palette\` and
+# \`systems\`; roles point at them. Run \`npx dtg dev\` to browse and edit it.
+dtg: 1
+
+modes: [light, dark]
+
+# palette:                       # the colors you have, as they are
+#   gray: { 50: "#f7f8f9", 900: "#1d2125" }
+# core:                          # names that point at them, one ref per mode
+#   surface:
+#     canvas: [gray.50, gray.900]
+`;
+
+/** What `dtg init` can write as the definition. The examples ship in dist/examples. */
+export const STARTS = {
+  starter: "a starter: two neutral ramps and an accent",
+  blank: "a blank: the modes, and nothing else",
+  tailwind: "Tailwind v4's palette, as curve systems",
+  material: "Material 3's scheme, as tone systems",
+} as const;
+export type Start = keyof typeof STARTS;
+
+function startingDefinition(from: Start): string {
+  if (from === "starter") return STARTER_DEFINITION;
+  if (from === "blank") return BLANK_DEFINITION;
+  return readFileSync(new URL(`./examples/${from}.dtg.yaml`, import.meta.url), "utf8");
+}
+
 /**
  * Writes a starter dtg.config.yaml naming `definition`, and the definition
- * itself, into the current folder. Never replaces a config that is there; a
- * definition that is there is kept and the config points at it.
+ * itself (the starter, a blank, or one of the examples), into the current folder.
+ * Never replaces a config that is there; a definition that is there is kept
+ * and the config points at it.
  */
-export function writeStarter(definition: string): { definitionWritten: boolean } {
+export function writeStarter(
+  definition: string,
+  from: Start = "starter",
+): { definitionWritten: boolean } {
   try {
     writeFileSync("dtg.config.yaml", starterConfig(definition), { flag: "wx" });
   } catch (e) {
@@ -114,7 +146,7 @@ export function writeStarter(definition: string): { definitionWritten: boolean }
   }
   mkdirSync(dirname(definition), { recursive: true });
   try {
-    writeFileSync(definition, STARTER_DEFINITION, { flag: "wx" });
+    writeFileSync(definition, startingDefinition(from), { flag: "wx" });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
     return { definitionWritten: false };

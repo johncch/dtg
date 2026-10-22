@@ -141,14 +141,17 @@ one's params are documented in the browser, on the system's page.
 
 ## Examples
 
-- [`examples/tailwind.dtg.yaml`](https://github.com/johncch/dtg/blob/main/examples/tailwind.dtg.yaml):
-  Tailwind v4's palette as `curve` systems sharing one lightness curve.
-- [`examples/material.dtg.yaml`](https://github.com/johncch/dtg/blob/main/examples/material.dtg.yaml):
-  Material 3's scheme as `tone` systems, contrast held per tone.
+`init` asks what the definition starts as: the starter, a blank with only
+the modes, or a complete example. `--from` answers for it:
 
 ```
-npx dtg dev --definition examples/tailwind.dtg.yaml
+npx dtg init --from tailwind
 ```
+
+- `tailwind`: Tailwind v4's palette as `curve` systems sharing one lightness
+  curve. [Source.](https://github.com/johncch/dtg/blob/main/examples/tailwind.dtg.yaml)
+- `material`: Material 3's scheme as `tone` systems, contrast held per tone.
+  [Source.](https://github.com/johncch/dtg/blob/main/examples/material.dtg.yaml)
 
 ## Publish and embed
 
@@ -192,7 +195,7 @@ Name no outputs and you get CSS beside the definition, named after it:
 ## Commands
 
 ```
-dtg init [--definition <file>]       # a starter definition and config; asks where if not told
+dtg init [--definition <file>] [--from <name>]   # a definition and config; asks what it is not told
 dtg dev  [--port <n>] [--build]      # browse and edit; --build also writes outputs on change
 dtg build [--watch]                  # write the configured outputs
 dtg docs --out <dir> [--editable]    # the browser as static files
