@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { readFileSync } from "node:fs";
-import { loadConfig, writePlaceholderConfig } from "./config.js";
+import { createInterface } from "node:readline/promises";
+import { defaultDefinitionPath, loadConfig, writeStarter } from "./config.js";
 import { startDevServer } from "./dev-server.js";
 import { writeOutputs } from "./outputs.js";
 import { resolveDefinition } from "./resolve.js";
@@ -29,13 +30,34 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+/**
+ * Where the definition should live: `--definition`, or a question whose
+ * Enter takes the default. Without a terminal, the default.
+ */
+async function askDefinitionPath(): Promise<string> {
+  const given = flagValue("--definition");
+  if (given) return given;
+  const fallback = defaultDefinitionPath();
+  if (!process.stdin.isTTY) return fallback;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = (await rl.question(`Where should the definition live? (${fallback}) `)).trim();
+  rl.close();
+  return answer || fallback;
+}
+
 if (command === "init") {
+  const definition = await askDefinitionPath();
+  let definitionWritten = false;
   try {
-    writePlaceholderConfig();
+    ({ definitionWritten } = writeStarter(definition));
   } catch (e) {
     fail((e as Error).message);
   }
-  console.log("wrote dtg.config.yaml — point `definitions` and `outputs` at your files");
+  console.log(
+    definitionWritten
+      ? `wrote dtg.config.yaml and a starter ${definition} — \`dtg dev\` opens it`
+      : `wrote dtg.config.yaml, pointing at the ${definition} already here — \`dtg dev\` opens it`,
+  );
 } else if (command === "emit") {
   fail("`dtg emit` is now `dtg build` — the same flags, the same outputs");
 } else if (command === "docs") {
@@ -111,7 +133,10 @@ if (command === "init") {
 usage: dtg <command> [flags]
 
 commands
-  init      write a placeholder dtg.config.yaml in this folder
+  init      write a starter definition and dtg.config.yaml in this folder
+
+init
+  --definition <file>         where to put the definition (asked otherwise)
   dev       browse and edit the definition in a browser
   build     write the configured outputs
   docs      write a copy of the browser as static files, to publish

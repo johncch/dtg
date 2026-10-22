@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { parse } from "yaml";
 import {
@@ -39,20 +39,81 @@ export type DtgConfig = {
   gamut: Gamut;
 };
 
-const PLACEHOLDER_CONFIG = `# dtg project config. Paths are relative to this file.
-definitions: colors.dtg.yaml
+function starterConfig(definition: string): string {
+  const css = join(dirname(definition), "colors.generated.css");
+  return `# dtg project config. Paths are relative to this file.
+definitions: ${definition}
 outputs:
-  css: colors.generated.css
+  css: ${css}
+`;
+}
+
+const STARTER_DEFINITION = `# Your color system, as decisions. Raw colors live only in \`palette\` and
+# \`systems\`; roles point at them. Run \`npx dtg dev\` to browse and edit it.
+dtg: 1
+
+modes:
+  light: { scheme: light }
+  dark: { scheme: dark }
+
+palette:
+  hues:
+    emit: false
+    accent: "#0066ff"
+
+systems:
+  # A neutral ramp per mode: ink tinted over a base. light(3) is 3% ink.
+  light:
+    algorithm: tint
+    params: { base: "#ffffff", tint: "#000000" }
+  dark:
+    algorithm: tint
+    params: { base: "#111111", tint: "#ffffff" }
+  # A chromatic scale: the hue at 500, running toward white and black at
+  # the ends. accent(600) is the 600 stop.
+  accent:
+    algorithm: scale
+    params: { base: hues.accent, toward: ["#ffffff", "#111111"] }
+    emit: [100, 200, 400, 600, 800]
+
+roles:
+  surface:
+    canvas: [light(3), dark(0)]
+    card: [light(1), dark(1)]
+  label:
+    primary: [dark(0), light(0)]
+    secondary: [dark(30), light(40)]
+  separator:
+    primary: [light(15), dark(16)]
+  theme:
+    primary: [accent(600), accent(400)]
 `;
 
-/** Writes a placeholder dtg.config.yaml into the current folder. Never replaces one that is there. */
-export function writePlaceholderConfig(): void {
+/** Where `dtg init` offers to put the definition: under src/ when a project has one. */
+export function defaultDefinitionPath(): string {
+  return existsSync("src") ? "src/colors.dtg.yaml" : "colors.dtg.yaml";
+}
+
+/**
+ * Writes a starter dtg.config.yaml naming `definition`, and the definition
+ * itself, into the current folder. Never replaces a config that is there; a
+ * definition that is there is kept and the config points at it.
+ */
+export function writeStarter(definition: string): { definitionWritten: boolean } {
   try {
-    writeFileSync("dtg.config.yaml", PLACEHOLDER_CONFIG, { flag: "wx" });
+    writeFileSync("dtg.config.yaml", starterConfig(definition), { flag: "wx" });
   } catch (e) {
     if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
     throw new Error("dtg.config.yaml is already here — edit it, or remove it first");
   }
+  mkdirSync(dirname(definition), { recursive: true });
+  try {
+    writeFileSync(definition, STARTER_DEFINITION, { flag: "wx" });
+  } catch (e) {
+    if ((e as NodeJS.ErrnoException).code !== "EEXIST") throw e;
+    return { definitionWritten: false };
+  }
+  return { definitionWritten: true };
 }
 
 /**

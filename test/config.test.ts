@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig, writePlaceholderConfig } from "../dist/config.js";
+import { defaultDefinitionPath, loadConfig, writeStarter } from "../dist/config.js";
 
 const DEFINITION = join("design-tokens", "c.dtg.yaml");
 
@@ -94,18 +94,45 @@ describe("gamut", () => {
 });
 
 describe("init", () => {
-  test("writes a dtg.config.yaml the loader reads", () => {
+  test("writes a dtg.config.yaml the loader reads and the definition it names", () => {
     inProject(null, () => {
-      writePlaceholderConfig();
+      assert.deepEqual(writeStarter("colors.dtg.yaml"), { definitionWritten: true });
       const config = loadConfig({});
       assert.equal(config.definition, "colors.dtg.yaml");
       assert.equal(config.cssOut, "colors.generated.css");
+      assert.match(readFileSync("colors.dtg.yaml", "utf8"), /^dtg: 1$/m);
+    });
+  });
+
+  test("puts the definition where it was asked, making the folder, with the CSS beside it", () => {
+    inProject(null, () => {
+      writeStarter("src/colors.dtg.yaml");
+      const config = loadConfig({});
+      assert.equal(config.definition, "src/colors.dtg.yaml");
+      assert.equal(config.cssOut, "src/colors.generated.css");
+      assert.match(readFileSync("src/colors.dtg.yaml", "utf8"), /^dtg: 1$/m);
+    });
+  });
+
+  test("offers src/ when the project has one", () => {
+    inProject(null, () => {
+      assert.equal(defaultDefinitionPath(), "colors.dtg.yaml");
+      mkdirSync("src");
+      assert.equal(defaultDefinitionPath(), "src/colors.dtg.yaml");
+    });
+  });
+
+  test("keeps a definition that is there", () => {
+    inProject(null, () => {
+      writeFileSync("colors.dtg.yaml", "dtg: 1\n");
+      assert.deepEqual(writeStarter("colors.dtg.yaml"), { definitionWritten: false });
+      assert.equal(readFileSync("colors.dtg.yaml", "utf8"), "dtg: 1\n");
     });
   });
 
   test("never replaces one that is there", () => {
     inProject("definitions: mine.dtg.yaml\n", () => {
-      assert.throws(() => writePlaceholderConfig(), /dtg\.config\.yaml is already here/);
+      assert.throws(() => writeStarter("colors.dtg.yaml"), /dtg\.config\.yaml is already here/);
       assert.equal(readFileSync("dtg.config.yaml", "utf8"), "definitions: mine.dtg.yaml\n");
     });
   });
