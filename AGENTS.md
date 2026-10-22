@@ -32,9 +32,11 @@ Working notes:
   own `ui/tsconfig.json`; `pnpm build` type-checks it. React and Vite are
   devDependencies — the bundle is what ships.
 - Conventions the tool promises (see README): a `dtg.config.yaml` project config at
-  root names the definition (`dtg init` writes a placeholder); there is no
-  default place dtg looks for one. An unnamed CSS output lands beside the
-  definition. Flags > `dtg.config.yaml` > defaults.
+  root names the definition (`dtg init` writes a starter definition and the
+  config, asking where the definition goes); there is no default place dtg
+  looks for one. An unnamed CSS output lands beside the definition, named
+  after it (`colors.dtg.yaml` → `colors.generated.css`). Flags >
+  `dtg.config.yaml` > defaults.
 - `pnpm test` builds, then runs `node --test` over `test/*.test.ts`. Tests
   import from `dist/`, not `src/` — Node's type stripping does not remap a
   `.js` specifier onto a `.ts` file — so the script builds first and a stale
