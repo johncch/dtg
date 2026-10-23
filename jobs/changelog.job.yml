@@ -1,0 +1,27 @@
+# Drafts the changelog section for a release when nobody wrote one. Run by
+# scripts/release.sh; needs the axle CLI (`axle`) and its provider config.
+provider: openai
+model: openai/gpt-6-luna
+
+task: |
+  Write the CHANGELOG.md section for version {{version}} of dtg.
+
+  1. Run `git describe --tags --abbrev=0` to find the last release tag.
+  2. Run `git log <tag>..HEAD --format="%s%n%n%b"` for the commits since it,
+     and `git diff <tag>..HEAD --stat` for what they touched. Read files
+     where a commit message is too thin to say what changed for a user.
+  3. Read CHANGELOG.md.
+  4. If it has a `## Unreleased` section, keep every line of it, add what
+     is missing, and retitle it. Otherwise write a new section. Either way
+     the section goes right after the `# Changelog` heading.
+
+  Rules:
+  - The heading is `## [{{version}}] - {{date}}`.
+  - Bullets say what changed for someone using the previous version, not
+    how. Skip commits that change nothing a user sees.
+  - American English. No em dashes.
+
+tools:
+  - exec
+  - read-file
+  - write-file

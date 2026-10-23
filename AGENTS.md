@@ -42,6 +42,10 @@ Working notes:
   `.js` specifier onto a `.ts` file — so the script builds first and a stale
   artifact cannot give a false pass. Beyond that, verification is the dev
   server and (for Sunnyday) parity of emitted CSS against what shipped.
+- Work lands with its line in `CHANGELOG.md`, under `## Unreleased`, written
+  for someone on the previous version. `pnpm release` stamps that section
+  with the version, shows it, and asks before committing; the publish
+  workflow turns it into the GitHub release.
 - Extend by conversation with Chong Han first, in small steps. If a feature
   can't be expressed as "edit one line of definition, regenerate," question
   the feature.
