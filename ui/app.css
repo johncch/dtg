@@ -30,7 +30,7 @@ aside h1 .version { color: var(--muted); }
 aside h2 { font-size: var(--text-subhead); font-weight: 500; color: var(--muted); margin: 16px 0 4px; padding: 0 8px; }
 aside nav { display: flex; flex-direction: column; gap: 2px; }
 aside nav a { gap: 4px; }
-aside nav a .algorithm { color: var(--muted); }
+aside nav a .algorithm { color: var(--muted); font-size: var(--text-caption); }
 .nav-group-name { padding: 6px 12px; color: var(--muted); font-size: var(--text-body); }
 .nav-group-items { padding-left: 12px; }
 main { flex: 1; min-width: 0; padding: 24px 32px; }

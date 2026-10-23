@@ -8,10 +8,9 @@ import { LiveCss } from "./LiveCss.js";
 import { ProjectGamutProvider } from "./gamut.js";
 import { TryingProvider } from "./preview.js";
 import { ConstantsPage } from "./pages/ConstantsPage.js";
-import { DefinitionPage, fileName } from "./pages/DefinitionPage.js";
+import { DefinitionPage } from "./pages/DefinitionPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { GroupPage, RolesPage } from "./pages/GroupPage.js";
-import { OverviewPage } from "./pages/OverviewPage.js";
 import { PalettePage, palettesOf } from "./pages/PalettePage.js";
 import { SystemPage } from "./pages/SystemPage.js";
 import { Link, useRoute, type Route } from "./router.js";
@@ -81,7 +80,7 @@ function Nav({ snapshot }: { snapshot: Snapshot }) {
     <>
       <div className="brand">
         <h1>
-          <Link to={{ page: "overview" }}>
+          <Link to={{ page: "definition" }}>
             dtg <span className="version">{version}</span>
           </Link>
         </h1>
@@ -92,12 +91,12 @@ function Nav({ snapshot }: { snapshot: Snapshot }) {
         </a>
       </div>
       <nav>
-        <Link to={{ page: "definition" }}>{fileName(snapshot.definition.path)}</Link>
-        {SAVABLE && <Link to={{ page: "settings" }}>settings</Link>}
+        <Link to={{ page: "definition" }}>Definition</Link>
+        {SAVABLE && <Link to={{ page: "settings" }}>Settings</Link>}
         {snapshot.constants.length > 0 && (
           <>
             <h2>Palette</h2>
-            <Link to={{ page: "constants" }}>all</Link>
+            <Link to={{ page: "constants" }}>All</Link>
             {palettesOf(snapshot.constants).map(({ group }) => (
               <Link key={group} to={{ page: "palette", name: group }}>
                 {group}
@@ -110,7 +109,7 @@ function Nav({ snapshot }: { snapshot: Snapshot }) {
         {sections.map((section) => (
           <Fragment key={section}>
             <h2>{section}</h2>
-            <Link to={{ page: "roles", section }}>all</Link>
+            <Link to={{ page: "roles", section }}>All</Link>
             <GroupLinks
               notes={snapshot.groupNotes.roles}
               nodes={groupTree([
@@ -226,8 +225,7 @@ function NotFound({ what }: { what: string }) {
 
 function Page({ route, snapshot }: { route: Route; snapshot: Snapshot }) {
   if (route.page === "unknown") return <NotFound what={route.path} />;
-  if (route.page === "overview") return <OverviewPage snapshot={snapshot} />;
-  if (route.page === "definition") return <DefinitionPage definition={snapshot.definition} />;
+  if (route.page === "definition") return <DefinitionPage definition={snapshot.definition} warnings={snapshot.warnings} />;
   if (route.page === "settings" && SAVABLE) return <SettingsPage configPath={snapshot.configPath} snapshot={snapshot} />;
   if (route.page === "constants") {
     return snapshot.constants.length > 0 ? (

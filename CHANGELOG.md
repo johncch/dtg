@@ -39,6 +39,8 @@
   change, and takes `dtg:background` from the host.
 - The chrome is built on Mosaic's base stylesheet, with a narrow layout
   under 640px. No bundled fonts; the system stack.
+- The overview page is gone. `/` is the definition, which now carries the
+  warnings; the sidebar's top links are Definition and Settings.
 
 ### Package
 

@@ -3,17 +3,23 @@ import { parseColor } from "../../src/color-math.js";
 import type { SnapshotDefinition } from "../../src/snapshot.js";
 import { paintCss } from "../paint.js";
 
-export function fileName(path: string): string {
-  return path.split(/[\\/]/).at(-1)!;
-}
-
-export function DefinitionPage({ definition }: { definition: SnapshotDefinition }) {
+export function DefinitionPage({ definition, warnings }: { definition: SnapshotDefinition; warnings: string[] }) {
   return (
     <>
-      <h1>{fileName(definition.path)}</h1>
+      <h1>Definition</h1>
       <p className="sub">
         <code>{definition.path}</code>
       </p>
+      {warnings.length > 0 && (
+        <div className="warn">
+          <strong>Warnings</strong>
+          <ul className="plain">
+            {warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <pre className="source">
         {definition.text.split("\n").map((line, index) => (
           <span key={index}>

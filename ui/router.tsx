@@ -2,7 +2,6 @@ import { useEffect, useSyncExternalStore, type AnchorHTMLAttributes, type MouseE
 import { STATIC } from "./mode.js";
 
 export type Route =
-  | { page: "overview" }
   | { page: "definition" }
   | { page: "settings" }
   | { page: "system"; name: string }
@@ -17,7 +16,7 @@ function parse(pathname: string): Route {
   const path = pathname.replace(/\/+$/, "");
   const [, kind, ...rest] = path.split("/");
   const name = decodeURIComponent(rest.join("/"));
-  if (kind == null) return { page: "overview" };
+  if (kind == null) return { page: "definition" };
   if (kind === "system" && name) return { page: "system", name };
   if (kind === "group" && name) return { page: "group", name };
   if (kind === "roles") return name ? { page: "roles", section: name } : { page: "roles" };
@@ -30,7 +29,7 @@ function parse(pathname: string): Route {
 
 export function hrefFor(route: Exclude<Route, { page: "unknown" }>): string {
   switch (route.page) {
-    case "overview":
+    case "definition":
       return "/";
     case "system":
     case "group":

@@ -24,7 +24,7 @@ export function SystemPage({ system, snapshot }: { system: SnapshotSystem; snaps
       <h1>
         {system.system}{" "}
         <span className="muted" style={{ fontSize: "var(--text-body)" }}>
-          emits <code>{system.cssName}</code> · {system.algorithm}
+          {system.algorithm}
         </span>
       </h1>
       {system.note && <p className="note">{system.note}</p>}
