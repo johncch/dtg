@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { parseColor, toOklab, type Color } from "../src/color-math.js";
 import type { SnapshotBackground } from "../src/snapshot.js";
 import { paintCss } from "./paint.js";
+import { Popup } from "./Popup.js";
 
 const ACTIVE = "colors.activeBackground";
 const EMBEDDED = window.parent !== window;
@@ -50,26 +51,45 @@ export function Backgrounds({ backgrounds }: { backgrounds: SnapshotBackground[]
   }, []);
 
   return (
-    <div id="bg-section">
-      <h2>Background</h2>
-      <div className="bg-swatches">
-        {backgrounds.map((background) => (
-          <button
-            key={background.modes[0]}
-            type="button"
-            className="bg-swatch"
-            title={background.modes.join(", ")}
-            aria-label={background.modes.join(", ")}
-            aria-pressed={paintCss(background.color) === css}
-            style={{ background: paintCss(background.color) }}
-            onClick={() => {
-              localStorage.setItem(ACTIVE, background.modes[0]);
-              setActiveName(background.modes[0]);
-              setHostColor(null);
-            }}
-          />
-        ))}
-      </div>
-    </div>
+    <Popup
+      title="Background"
+      className="chip chip-small chip-editable bg-chip"
+      label={
+        <>
+          <span className="swatch">
+            <span className="swatch-color" style={{ background: css }} />
+          </span>
+          {active.modes.join(", ")}
+        </>
+      }
+      focus="panel"
+    >
+      {(panel) => (
+        <div className="bg-menu editor-palette-colors">
+          {backgrounds.map((background) => {
+            const chosen = paintCss(background.color) === css;
+            return (
+              <button
+                key={background.modes[0]}
+                type="button"
+                className={chosen ? "editor-palette-color editor-palette-chosen" : "editor-palette-color"}
+                aria-pressed={chosen}
+                onClick={() => {
+                  localStorage.setItem(ACTIVE, background.modes[0]);
+                  setActiveName(background.modes[0]);
+                  setHostColor(null);
+                  panel.dismiss();
+                }}
+              >
+                <span className="swatch editor-before">
+                  <span className="swatch-color" style={{ background: paintCss(background.color) }} />
+                </span>
+                {background.modes.join(", ")}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </Popup>
   );
 }

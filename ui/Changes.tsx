@@ -75,39 +75,45 @@ export function Changes({ working }: { working: Snapshot }) {
   return (
     <div className="changes">
       <div className="changes-row">
-        <span title={changes.map(summary).join("\n")}>
+        <span className="changes-count" title={changes.map(summary).join("\n")}>
           {changes.length === 0 ? "No changes" : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`}
         </span>
         <button
-          className="btn changes-step"
+          className="btn btn-small changes-step"
           aria-label="Undo"
           title={undo ? `Undo: ${describe(undo)}` : "Nothing to undo"}
           disabled={!undo}
           onClick={() => run("undo")}
         >
-          ↶
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9 14 4 9l5-5" />
+            <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
+          </svg>
         </button>
         <button
-          className="btn changes-step"
+          className="btn btn-small changes-step"
           aria-label="Redo"
           title={redo ? `Redo: ${describe(redo)}` : "Nothing to redo"}
           disabled={!redo}
           onClick={() => run("redo")}
         >
-          ↷
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="m15 14 5-5-5-5" />
+            <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13" />
+          </svg>
         </button>
       </div>
       {changes.length > 0 && (
         <div className="changes-row">
-          <button className="btn" title="Drop every unsaved change. Redo brings them back." onClick={() => run("discard")}>
+          <button className="btn btn-small" title="Drop every unsaved change. Redo brings them back." onClick={() => run("discard")}>
             discard
           </button>
           {store.save ? (
-            <button className="btn changes-save" onClick={() => run("save")}>
+            <button className="btn btn-small changes-save" onClick={() => run("save")}>
               save
             </button>
           ) : (
-            <span className="muted">Edits here aren't saved.</span>
+            <span className="muted changes-save">not saved</span>
           )}
         </div>
       )}

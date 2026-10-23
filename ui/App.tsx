@@ -57,8 +57,10 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
           <PaletteColorsProvider value={working.constants}>
             <aside>
               <Nav snapshot={snapshot} />
-              <Backgrounds backgrounds={snapshot.backgrounds} />
-              {EDITABLE && <Changes working={working} />}
+              <div className="dock">
+                {EDITABLE && <Changes working={working} />}
+                <Backgrounds backgrounds={snapshot.backgrounds} />
+              </div>
             </aside>
             <main>
               <div className="page">
