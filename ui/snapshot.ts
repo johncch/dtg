@@ -28,7 +28,7 @@ function drawn(dev: DevState, previous: Loaded): Loaded {
 }
 
 /**
- * The working copy, drawn, and the store that changes it. `dtg dev` keeps the
+ * The working copy, drawn, and the store that changes it. `dtg edit` keeps the
  * copy on the server and says when it changes; a static copy reads it from
  * `state.json` and keeps every edit in the page, where a reload drops them.
  */

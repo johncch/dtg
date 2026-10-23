@@ -5,7 +5,7 @@ a list.**
 
 `@fifthrevision/dtg` turns color rules into design tokens. You write a YAML
 definition of how your colors are _made_, and it compiles into CSS
-variables, a DTCG token file, and a browser you can edit the colors in.
+variables, a DTCG token file, and an editor to tune them in.
 
 Most palettes start as a system, a few picks and a rule for the steps
 between them, and end as a list of hexes that drifts as people edit it. dtg
@@ -21,12 +21,12 @@ changing one parameter moves everything derived from it. The argument is in
 ```
 pnpm add -D @fifthrevision/dtg
 npx dtg init
-npx dtg dev
+npx dtg edit
 ```
 
 `init` asks where the definition should live and writes a starter there,
-with a `dtg.config.yaml` pointing at it. `dev` opens the browser; edits are
-written back to the file. `npx dtg build` writes the CSS beside the
+with a `dtg.config.yaml` pointing at it. `edit` opens the editor; edits
+are written back to the file. `npx dtg build` writes the CSS beside the
 definition.
 
 ## Starting from the colors you have
@@ -54,7 +54,7 @@ core:
 ```
 
 Where a group of picks is really a ramp, replace it with a system and
-compare the two in `dtg dev`. Pin a step that must stay exact with
+compare the two in `dtg edit`. Pin a step that must stay exact with
 `overrides`. The role names do not change, so neither does anything that
 uses them.
 
@@ -137,7 +137,7 @@ behind it are in [`docs/how-this-works.md`](docs/how-this-works.md).
 | `tone`    | lightness itself, 0 to 100: `primary(40)`                      | contrast you can promise per tone, as Material 3 does. Experimental |
 
 The algorithm decides what a step is, once, in the systems block. Each
-one's params are documented in the browser, on the system's page.
+one's params are documented in the editor, on the system's page.
 
 ## Examples
 
@@ -155,11 +155,11 @@ npx dtg init --from tailwind
 
 ## Publish and embed
 
-`dtg docs --out <dir>` writes the browser as static files for any host.
+`dtg docs --out <dir>` writes the editor as static files for any host.
 With `--editable`, visitors can try edits in their own page; nothing is
 saved.
 
-In an iframe, the browser posts the CSS for whatever it shows, edits
+In an iframe, the editor posts the CSS for whatever it shows, edits
 included, so a page built on the variables re-skins live:
 
 ```js
@@ -192,13 +192,23 @@ Name no outputs and you get CSS beside the definition, named after it:
 `colors.dtg.yaml` gives `colors.generated.css`. Flags override the config.
 `dtg --help` lists every flag and output.
 
+The editor shows each mode on white or black, by its scheme. To view a mode
+on another background, set it on the Settings page, which keeps it in the
+config:
+
+```yaml
+editor:
+  backgrounds:
+    dark: surface.canvas # a color or a ref, per mode
+```
+
 ## Commands
 
 ```
 dtg init [--definition <file>] [--from <name>]   # a definition and config; asks what it is not told
-dtg dev  [--port <n>] [--build]      # browse and edit; --build also writes outputs on change
+dtg edit [--port <n>] [--build]      # open the editor; --build also writes outputs on change
 dtg build [--watch]                  # write the configured outputs
-dtg docs --out <dir> [--editable]    # the browser as static files
+dtg docs --out <dir> [--editable]    # the editor as static files
 ```
 
 ## Status

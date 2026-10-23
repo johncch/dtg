@@ -55,7 +55,7 @@ outputs:
 }
 
 const STARTER_DEFINITION = `# Your color system, as decisions. Raw colors live only in \`palette\` and
-# \`systems\`; roles point at them. Run \`npx dtg dev\` to browse and edit it.
+# \`systems\`; roles point at them. Run \`npx dtg edit\` to open it in the editor.
 dtg: 1
 
 modes:
@@ -101,7 +101,7 @@ export function defaultDefinitionPath(): string {
 }
 
 const BLANK_DEFINITION = `# Your color system, as decisions. Raw colors live only in \`palette\` and
-# \`systems\`; roles point at them. Run \`npx dtg dev\` to browse and edit it.
+# \`systems\`; roles point at them. Run \`npx dtg edit\` to open it in the editor.
 dtg: 1
 
 modes: [light, dark]

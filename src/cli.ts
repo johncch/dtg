@@ -89,8 +89,8 @@ if (command === "init") {
   }
   console.log(
     definitionWritten
-      ? `wrote dtg.config.yaml and ${from === "starter" ? "a starter" : `the ${from} definition as`} ${definition} — \`dtg dev\` opens it`
-      : `wrote dtg.config.yaml, pointing at the ${definition} already here — \`dtg dev\` opens it`,
+      ? `wrote dtg.config.yaml and ${from === "starter" ? "a starter" : `the ${from} definition as`} ${definition} — \`dtg edit\` opens it`
+      : `wrote dtg.config.yaml, pointing at the ${definition} already here — \`dtg edit\` opens it`,
   );
 } else if (command === "emit") {
   fail("`dtg emit` is now `dtg build` — the same flags, the same outputs");
@@ -103,7 +103,7 @@ if (command === "init") {
   } catch (e) {
     fail((e as Error).message);
   }
-} else if (command === "dev" || command === "build") {
+} else if (command === "edit" || command === "build") {
   let config;
   try {
     config = loadConfig({
@@ -119,8 +119,7 @@ if (command === "init") {
     fail((e as Error).message);
   }
 
-  if (command === "dev") {
-    if (args.includes("--emit")) fail("`dtg dev --emit` is now `dtg dev --build`");
+  if (command === "edit") {
     startDevServer(
       config.definition,
       Number(flagValue("--port") ?? "4401"),
@@ -168,16 +167,16 @@ usage: dtg <command> [flags]
 
 commands
   init      write a starter definition and dtg.config.yaml in this folder
-  dev       browse and edit the definition in a browser
+  edit      open the definition in the editor
   build     write the configured outputs
-  docs      write a copy of the browser as static files, to publish
+  docs      write a copy of the editor as static files, to publish
 
 init
   --definition <file>         where to put the definition (asked otherwise)
   --from <starter|blank|tailwind|material>
                               what the definition starts as (asked otherwise)
 
-dev
+edit
   --port <n>                  port to serve on (default 4401)
   --build                     also write the outputs, at startup and whenever
                               the definition file changes
@@ -193,11 +192,11 @@ docs
   --editable                  let visitors edit the colors in their page; edits
                               are never saved, and a reload starts over
 
-dev, build and docs
+edit, build and docs
   --definition <file>         the definition to read (default: \`definitions\`
                               in dtg.config.yaml)
 
-outputs (build, and dev --build)
+outputs (build, and edit --build)
   --css <path>                write CSS here
   --css-format <plain|tailwind>
                               plain (default), or tailwind: primitives in

@@ -53,7 +53,7 @@ Canonical. The README carries the user-facing version of the same rules.
   its dotted path. Every constant emits, unless its group says
   `emit: false`: then its colors are inputs, emitted only when a role points
   at one, since a reference always emits what it names. A group of
-  constants is a palette in `dtg dev`. It is read before `systems`, so a param can name any
+  constants is a palette in `dtg edit`. It is read before `systems`, so a param can name any
   constant wherever it is written. A string left in `systems` is refused
   with a pointer here.
 - `systems` holds the recipes: an object with **`algorithm`** is a system,
@@ -211,7 +211,7 @@ blue:
   step's value for that field. The page shows the colors as a strip under
   the curve and the steps as dots in their own colors; both follow a drag,
   since previews are resolved like everything else.
-- **One control per curve.** In `dtg dev` a curve param is a chip in the
+- **One control per curve.** In `dtg edit` a curve param is a chip in the
   params row showing the curve in small, with the anchor marked. It opens
   like a number param does: the curve to drag (its ends up and down, its
   four easing handles anywhere) with `from`, `to` and the easing as numbers
@@ -473,12 +473,12 @@ ESM TypeScript in `src/`, with explicit `.js` extensions on relative imports
 (NodeNext). `pnpm build` compiles to `dist/`; the `dtg` bin is `dist/cli.js`.
 Consumers run `dist/`, so rebuild after edits or they see stale code.
 
-- `cli.ts` — command dispatch and flag parsing for `dev` and `emit`.
+- `cli.ts` — command dispatch and flag parsing for `edit`, `build` and `docs`.
 - `outputs.ts` — writing the configured outputs for a resolved definition.
-  `build` calls it once, or on every change with `--watch`; `dev --build` calls
-  it whenever the definition file changes. Outputs follow the file on disk,
-  never the working copy's unsaved edits. Writing outputs is always an
-  explicit action — `dtg build`, or the `--build` flag on one `dev` run. No
+  `build` calls it once, or on every change with `--watch`; `edit --build`
+  calls it whenever the definition file changes. Outputs follow the file on
+  disk, never the working copy's unsaved edits. Writing outputs is always an
+  explicit action — `dtg build`, or the `--build` flag on one `edit` run. No
   setting in `dtg.config.yaml` can turn it on: a config file must not be able to
   overwrite the files an app ships.
 - `config.ts` — reading `dtg.config.yaml`, and `dtg init`'s placeholder for it. Where the
@@ -498,12 +498,12 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `emit.ts` — the CSS and DTCG emitters.
 - `dev-server.ts`, `dev-state.ts`, `watch.ts` — the HTTP and SSE server and
   definition file watching. The server holds no markup and draws nothing: it
-  serves one HTML shell, the built browser bundle, and `/api/state`, the
+  serves one HTML shell, the built editor bundle, and `/api/state`, the
   working copy with the settings around it. It resolves only to write
   outputs and to refuse a definition that is broken at startup.
 - `app-shell.ts`, `site.ts` — the app's one HTML page, and `dtg docs`, which
   writes that page, the bundle and the definition as files. The page names its
-  mode: `served` by dev, or `static`, where the app reads `state.json`
+  mode: `served` by edit, or `static`, where the app reads `state.json`
   beside it, addresses pages in the fragment so any host at any folder can
   serve it, and saves nothing. A static page built with `--editable` keeps
   its visitors' edits in the page alone (`ui/store.ts`).
@@ -519,8 +519,8 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   the whole file. A ref edit can also carry `~`, putting a mode back to
   inheriting; a ref for a mode past the end of the role's list is added to
   it, with `~` holding any modes in between.
-- `dev-settings.ts` — what a project keeps under `dev` in `dtg.config.yaml` for the
-  app's own use: today the backgrounds to view against. The dev server reads
+- `dev-settings.ts` — what a project keeps under `editor` in `dtg.config.yaml` for the
+  editor's own use: today the background to view each mode on. The server reads
   it, watches it, and writes it straight to the file when the Settings page
   changes it. It is config, not the definition, so it stays out of the
   working copy and its undo, and `emit` never reads it.
@@ -562,13 +562,13 @@ Anything outside those three is a real defect. Promoting this check into a
 ## Roadmap
 
 - [x] Definition grammar, resolver, built-in algorithms
-- [x] Browsing dev server (`dtg dev`): overview strips, a page per system
+- [x] The editor (`dtg edit`): a page per system
       with demanded-by lineage, algorithm description and params, and
       adjacent-step OKLAB ΔE; a page per group of roles with side-by-side
       modes.
-      User-defined page backgrounds (named, localStorage-persisted, sidebar
-      switcher) so colors are judged on a chosen ground, with chrome flipping
-      to a dark scheme on dark backgrounds. Stdlib HTTP plus SSE live-reload
+      A background per mode, white or black by its scheme, or a color or
+      ref set in `editor.backgrounds`, so colors are judged on their ground,
+      with chrome flipping to a dark scheme on dark backgrounds. Stdlib HTTP plus SSE live-reload
       on definition edits; a resolve error keeps serving the last good state
       behind an error banner. Restart to pick up changes to the tool's own
       code.
@@ -583,14 +583,14 @@ Anything outside those three is a real defect. Promoting this check into a
       author's `description`; until 0.3.0 it held the identity. An agent may ferry the payload; it
       never invents values.
 - [x] Palette: a `palette:` block of the colors picked by hand, read
-      before `systems`. Each group is a palette page in `dtg dev`, listed
+      before `systems`. Each group is a palette page in `dtg edit`, listed
       under Palette with an "all" table of every color. A page adds,
       renames, removes, locks and randomizes its colors (space rolls every
       unlocked one); a color the file does not have yet is renamed after its
       nearest color name on each roll, and once saved its name stays. Every
       palette color emits, since apps use them directly, unless its group
       says `emit: false`; an unsaved roll never reaches the outputs anyway.
-- [x] `dtg docs`: the browser as static files, read-only, for a site's
+- [x] `dtg docs`: the editor as static files, read-only, for a site's
       `public/` folder or GitHub Pages. `emit` became `build` alongside it,
       so each command names what it makes.
 - [x] Params and `defaults` naming a palette color (`base: hues.sky`).
@@ -613,11 +613,11 @@ Anything outside those three is a real defect. Promoting this check into a
       tone, which needs a curve's pivot to be optional.
 - [ ] Multi-file definitions (`shadows.dtg.yaml`, `type.dtg.yaml` as
       siblings, one resolver over all). Discovery exists; merging does not.
-- [x] Designer tweaking in the browser: every param, ref and palette color
-      has a control. The page resolves edits itself; `dtg dev` keeps the
+- [x] Designer tweaking in the editor: every param, ref and palette color
+      has a control. The page resolves edits itself; `dtg edit` keeps the
       working copy and writes the file on save, one-line splices that keep
       comments. `dtg docs --editable` keeps edits in the page alone.
-- [x] Live CSS for a host page: embedded in an iframe, the browser posts the
+- [x] Live CSS for a host page: embedded in an iframe, the editor posts the
       CSS for what it shows to the page around it, so real components render
       under a proposed palette as it is edited. The host can post back a
       `dtg:background` color so a docked panel is drawn on the page's own
@@ -649,7 +649,7 @@ Anything outside those three is a real defect. Promoting this check into a
       `sky(8)` against `night(8)`, asking whether the modes step at the same
       rate); generated candidate ramps from structured randomization of
       algorithm params, rendered beside the current system with delta rows
-      aligned; more generally, ephemeral browser-only systems with full
+      aligned; more generally, ephemeral editor-only systems with full
       instrumentation, promotable into the definition when they win. This
       subsumes the tweak panel, since a tweak is a one-parameter candidate.
 

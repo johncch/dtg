@@ -127,7 +127,7 @@ describe("init", () => {
       writeStarter("colors.dtg.yaml", "material");
       const text = readFileSync("colors.dtg.yaml", "utf8");
       assert.match(text, /^# Material 3's color scheme/);
-      assert.doesNotMatch(text, /npx dtg dev --definition examples/);
+      assert.doesNotMatch(text, /npx dtg edit --definition examples/);
       assert.equal(loadConfig({}).definition, "colors.dtg.yaml");
     });
   });

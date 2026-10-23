@@ -40,7 +40,7 @@ export function writeSite(
     cssModes,
   };
   const bundle = fileURLToPath(new URL("./ui", import.meta.url));
-  if (!existsSync(join(bundle, "dtg-ui.js"))) throw new Error(`no browser bundle at ${bundle} — run the build first`);
+  if (!existsSync(join(bundle, "dtg-ui.js"))) throw new Error(`no editor bundle at ${bundle} — run the build first`);
 
   mkdirSync(outDir, { recursive: true });
   cpSync(bundle, join(outDir, "ui"), { recursive: true });

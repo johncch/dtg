@@ -1,7 +1,7 @@
 import type { AppMode } from "../src/app-shell.js";
 
 /**
- * Served by `dtg dev`, with the API behind it, or a static copy written by
+ * Served by `dtg edit`, with the API behind it, or a static copy written by
  * `dtg docs`, which reads its state from a file and saves nothing. The page
  * says which; it cannot change while the page is open.
  */

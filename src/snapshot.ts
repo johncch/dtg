@@ -65,11 +65,11 @@ export type SnapshotMode = {
   scheme: ModeScheme;
   /** The definition never said, so the scheme was guessed from the mode's colors. */
   schemeInferred: boolean;
-  /** As `dev.backgrounds` has it, or the scheme's default: a color or a ref. */
+  /** As `editor.backgrounds` has it, or the scheme's default: a color or a ref. */
   backgroundWritten: string;
   /** What `backgroundWritten` comes to in this mode, or the scheme's default when it comes to nothing. */
   background: Color;
-  /** Set by hand in `dev.backgrounds` rather than implied by the scheme. */
+  /** Set by hand in `editor.backgrounds` rather than implied by the scheme. */
   backgroundOverridden: boolean;
   /** Why `backgroundWritten` could not be shown, or null when it was. */
   backgroundProblem: string | null;
@@ -78,7 +78,7 @@ export type SnapshotMode = {
 /** One sidebar swatch: a color and the modes seen on it. */
 export type SnapshotBackground = {
   modes: string[];
-  /** As `dev.backgrounds` has it, or would: hex or `oklch()`. */
+  /** As `editor.backgrounds` has it, or would: hex or `oklch()`. */
   written: string;
   color: Color;
 };
@@ -267,10 +267,10 @@ export function buildSnapshot({
   const backgroundWarnings = [
     ...Object.keys(backgroundOverrides)
       .filter((mode) => !resolved.modes.includes(mode))
-      .map((mode) => `dev.backgrounds: no mode named ${JSON.stringify(mode)}`),
+      .map((mode) => `editor.backgrounds: no mode named ${JSON.stringify(mode)}`),
     ...modeDetails
       .filter((mode) => mode.backgroundProblem !== null)
-      .map((mode) => `dev.backgrounds.${mode.name}: ${mode.backgroundProblem}`),
+      .map((mode) => `editor.backgrounds.${mode.name}: ${mode.backgroundProblem}`),
   ];
   return {
     error,

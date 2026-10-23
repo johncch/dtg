@@ -29,7 +29,7 @@ export function useStore(): Store {
   return store;
 }
 
-/** The store behind `dtg dev`: each command asks the server, whose new state comes back over the event stream. */
+/** The store behind `dtg edit`: each command asks the server, whose new state comes back over the event stream. */
 export const bridgeStore: Store = {
   commit: (edits) => post("/api/edits", { edits }),
   undo: () => post("/api/undo"),

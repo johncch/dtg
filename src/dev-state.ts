@@ -4,7 +4,7 @@ import type { ModeRendering } from "./emit.js";
 import type { WorkingCopy } from "./working-copy.js";
 
 /**
- * What `dtg dev` hands the page at `/api/state`: the working copy and the
+ * What `dtg edit` hands the page at `/api/state`: the working copy and the
  * settings around it. The page resolves the copy itself; the server only
  * keeps it, applies edits to it, and reads and writes the files.
  */

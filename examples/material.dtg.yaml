@@ -8,7 +8,7 @@
 # so on-primary (100) over primary (40) is about 6.5:1 for any source color.
 # The source is one line in `defaults`: point it at any color in the
 # `material` palette and the whole scheme follows, contrast intact. In
-# `dtg dev`, any palette's anchor chip opens a picker listing them.
+# `dtg edit`, any palette's anchor chip opens a picker listing them.
 #
 # It is Material-style, not Material-exact. Material builds its palettes in
 # HCT; `tone` keeps HCT's tone (CIELAB L*) exactly and holds hue and chroma
@@ -20,7 +20,7 @@
 # Left out: Material's fixed and inverse roles, shadow, scrim, surface tint.
 # Roles emit under Material's own token names (--md-sys-color-primary, …).
 #
-#   npx dtg dev --definition examples/material.dtg.yaml
+#   npx dtg edit --definition examples/material.dtg.yaml
 
 dtg: 1
 

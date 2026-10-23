@@ -9,18 +9,18 @@ import { isMap, isScalar, parseDocument } from "yaml";
  */
 export type BackgroundOverrides = Record<string, string>;
 
-const BACKGROUNDS_KEY = ["dev", "backgrounds"];
+const BACKGROUNDS_KEY = ["editor", "backgrounds"];
 
 /** Throws with a human message on an override that could not be written. */
 export function assertBackgroundOverrides(overrides: BackgroundOverrides): void {
   for (const [mode, value] of Object.entries(overrides)) {
-    if (mode.trim() === "") throw new Error("dev.backgrounds: a background needs a mode");
-    if (value.trim() === "") throw new Error(`dev.backgrounds.${mode}: a background needs a color or a ref`);
+    if (mode.trim() === "") throw new Error("editor.backgrounds: a background needs a mode");
+    if (value.trim() === "") throw new Error(`editor.backgrounds.${mode}: a background needs a color or a ref`);
   }
 }
 
 /**
- * The backgrounds a `dtg.config.yaml` sets under `dev.backgrounds`, by mode;
+ * The backgrounds a `dtg.config.yaml` sets under `editor.backgrounds`, by mode;
  * none when it sets none. Read from the document rather than the parsed
  * value, because a parsed map hands number-like names back sorted.
  */
@@ -28,7 +28,7 @@ export function readBackgroundOverrides(configText: string): BackgroundOverrides
   const written = parseDocument(configText).getIn(BACKGROUNDS_KEY, true);
   if (written == null || (isScalar(written) && written.value == null)) return {};
   if (!isMap(written)) {
-    throw new Error("dev.backgrounds: expected a map of mode: color or ref");
+    throw new Error("editor.backgrounds: expected a map of mode: color or ref");
   }
   const overrides: BackgroundOverrides = {};
   for (const pair of written.items) {
@@ -49,8 +49,8 @@ export function withBackgroundOverrides(configText: string, overrides: Backgroun
     doc.setIn(BACKGROUNDS_KEY, doc.createNode(new Map(Object.entries(overrides))));
   } else if (doc.hasIn(BACKGROUNDS_KEY)) {
     doc.deleteIn(BACKGROUNDS_KEY);
-    const dev = doc.get("dev", true);
-    if (isMap(dev) && dev.items.length === 0) doc.delete("dev");
+    const editor = doc.get("editor", true);
+    if (isMap(editor) && editor.items.length === 0) doc.delete("editor");
     if (isMap(doc.contents) && doc.contents.items.length === 0) return "";
   }
   return doc.toString();

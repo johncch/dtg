@@ -14,7 +14,7 @@ import { useStore } from "../store.js";
 /**
  * The definition's modes and how this app shows each: its scheme, and the
  * background its colors are seen on. A background changed here is written to
- * `dev.backgrounds` in `dtg.config.yaml` at once. It is config, not the
+ * `editor.backgrounds` in `dtg.config.yaml` at once. It is config, not the
  * definition, so it is never one of the unsaved changes and undo does not
  * reach it.
  */
@@ -51,7 +51,7 @@ export function SettingsPage({
       <p className="sub">
         The definition's modes. Each one's colors are seen on its background:
         white for a light scheme, black for a dark one, or any color or ref set
-        here, which is kept under <code>dev.backgrounds</code> in the config. A
+        here, which is kept under <code>editor.backgrounds</code> in the config. A
         ref resolves in that mode.
       </p>
       <table className="modes">

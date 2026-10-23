@@ -12,7 +12,7 @@ export type Resolved = { resolved: ResolvedDefinition; lineage: Lineage };
 export type Drawn = { snapshot: Snapshot; resolved: ResolvedDefinition };
 
 /**
- * The app as `dtg dev`'s state draws it. When the working copy does not
+ * The app as `dtg edit`'s state draws it. When the working copy does not
  * resolve, the last copy that did is drawn with the error over it; with none
  * to fall back on, this throws.
  */

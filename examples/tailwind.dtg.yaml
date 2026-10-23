@@ -2,7 +2,7 @@
 #
 # Each hue is anchored on Tailwind's own 500, and every colorful hue shares
 # one lightness curve and one chroma curve (in `defaults`); the grays share
-# their own pair. Reshape a shared curve in `dtg dev` and every hue moves
+# their own pair. Reshape a shared curve in `dtg edit` and every hue moves
 # with it. Only the hue drift differs per hue: warm colors turn toward
 # orange as they darken, as Tailwind's do.
 #
@@ -13,7 +13,7 @@
 # hues drift most in the 200–300s and 600–800s. Pin any shade you need exact
 # with `overrides`.
 #
-#   npx dtg dev --definition examples/tailwind.dtg.yaml
+#   npx dtg edit --definition examples/tailwind.dtg.yaml
 
 dtg: 1
 

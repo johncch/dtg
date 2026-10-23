@@ -324,7 +324,7 @@ roles:
 
   test("an override for a mode the definition does not have is a warning", () => {
     const { warnings } = snapshotOf(THEMED, { white: "#ffffff" });
-    assert.deepEqual(warnings, ['dev.backgrounds: no mode named "white"']);
+    assert.deepEqual(warnings, ['editor.backgrounds: no mode named "white"']);
   });
 
   test("a definition without modes has one light mode on white", () => {

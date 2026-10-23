@@ -1,5 +1,5 @@
 /**
- * How the app is being run: by `dtg dev`, which answers every page address
+ * How the app is being run: by `dtg edit`, which answers every page address
  * with this document and serves the API, or as files from `dtg docs`, which
  * any static host can serve from any folder.
  */
