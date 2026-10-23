@@ -5,7 +5,7 @@ import { formatRef, formatSelector } from "../src/selector.js";
 import type { SnapshotSystem } from "../src/snapshot.js";
 import { ColorFacts } from "./ColorTip.js";
 import { probeOf } from "./engine.js";
-import { carriedOver, StepControls } from "./RefEditor.js";
+import { carriedOver, StepControls } from "./picker/StepControls.js";
 
 type Answer = { kind: "color"; color: Color } | { kind: "refused"; error: string };
 

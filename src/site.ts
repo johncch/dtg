@@ -3,7 +3,7 @@ import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { appShell } from "./app-shell.js";
 import type { Gamut } from "./color-math.js";
-import { DEFAULT_BACKGROUNDS, readBackgrounds } from "./dev-settings.js";
+import { readBackgroundOverrides } from "./dev-settings.js";
 import type { DevState } from "./dev-state.js";
 import type { ModeRendering } from "./emit.js";
 import { resolveDefinition } from "./resolve.js";
@@ -27,7 +27,7 @@ export function writeSite(
   const text = readFileSync(definitionPath, "utf8");
   // Resolved here too, so a broken definition fails the build rather than the published page.
   const resolved = resolveDefinition(text, [], gamut);
-  const backgrounds = existsSync(configPath) ? readBackgrounds(readFileSync(configPath, "utf8")) : [];
+  const backgroundOverrides = existsSync(configPath) ? readBackgroundOverrides(readFileSync(configPath, "utf8")) : {};
   const state: DevState = {
     copy: openFile(text),
     notices: [],
@@ -36,7 +36,7 @@ export function writeSite(
     // Only the file's name: the path on this machine is nobody's business once published.
     definitionPath: basename(definitionPath),
     configPath: "",
-    backgrounds: backgrounds.length > 0 ? backgrounds : DEFAULT_BACKGROUNDS,
+    backgroundOverrides,
     cssModes,
   };
   const bundle = fileURLToPath(new URL("./ui", import.meta.url));

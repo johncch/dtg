@@ -9,15 +9,15 @@ const EMBEDDED = window.parent !== window;
 const DARK_BELOW = 0.6;
 
 /**
- * Which of the project's backgrounds the app is drawn on. The list is the
- * project's, in `dtg.config.yaml`; the choice is this browser's. Inside an
+ * Which background the app is drawn on: one per distinct mode background, and
+ * the choice is this browser's, remembered by the first mode seen on it. Inside an
  * iframe, the host page can override it with `{ type: "dtg:background",
  * color }` (hex or `oklch()`); `color: null` hands the choice back.
  */
 export function Backgrounds({ backgrounds }: { backgrounds: SnapshotBackground[] }) {
   const [activeName, setActiveName] = useState(() => localStorage.getItem(ACTIVE));
   const [hostColor, setHostColor] = useState<Color | null>(null);
-  const active = backgrounds.find((background) => background.name === activeName) ?? backgrounds[0];
+  const active = backgrounds.find((background) => background.modes.includes(activeName ?? "")) ?? backgrounds[0];
   const color = hostColor ?? active.color;
   const css = paintCss(color);
   const dark = toOklab(color)[0] < DARK_BELOW;
@@ -55,16 +55,16 @@ export function Backgrounds({ backgrounds }: { backgrounds: SnapshotBackground[]
       <div className="bg-swatches">
         {backgrounds.map((background) => (
           <button
-            key={background.name}
+            key={background.modes[0]}
             type="button"
             className="bg-swatch"
-            title={background.name}
-            aria-label={background.name}
+            title={background.modes.join(", ")}
+            aria-label={background.modes.join(", ")}
             aria-pressed={paintCss(background.color) === css}
             style={{ background: paintCss(background.color) }}
             onClick={() => {
-              localStorage.setItem(ACTIVE, background.name);
-              setActiveName(background.name);
+              localStorage.setItem(ACTIVE, background.modes[0]);
+              setActiveName(background.modes[0]);
               setHostColor(null);
             }}
           />

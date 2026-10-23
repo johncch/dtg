@@ -13,7 +13,7 @@ import { Popup, type PopupPanel } from "../Popup.js";
 import { useTrying } from "../preview.js";
 import { labelColorOn } from "../Strip.js";
 
-type PaletteEntry = { name: string; path: string; color: Color };
+type PaletteEntry = { name: string; path: string; written: string; color: Color };
 
 /** A group of constants: `group` is its path in `systems`. */
 type Palette = { group: string; entries: PaletteEntry[] };
@@ -21,13 +21,13 @@ type Palette = { group: string; entries: PaletteEntry[] };
 /** Each group that holds constants of its own, in the order written. Constants in no group are not a palette. */
 export function palettesOf(constants: SnapshotConstant[]): Palette[] {
   const palettes: Palette[] = [];
-  for (const { path, color } of constants) {
+  for (const { path, written, color } of constants) {
     const cut = path.lastIndexOf(".");
     if (cut === -1) continue;
     const group = path.slice(0, cut);
     let palette = palettes.find((candidate) => candidate.group === group);
     if (!palette) palettes.push((palette = { group, entries: [] }));
-    palette.entries.push({ name: path.slice(cut + 1), path, color });
+    palette.entries.push({ name: path.slice(cut + 1), path, written, color });
   }
   return palettes;
 }
@@ -241,7 +241,7 @@ function PaletteEntry({
   }
   return (
     <div className="palette-entry">
-      <EditableChip color={entry.color} target={target} className="palette-entry-color">
+      <EditableChip color={entry.color} value={entry.written} target={target} className="palette-entry-color">
         {swatch}
       </EditableChip>
       <div className="palette-entry-foot">

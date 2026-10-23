@@ -11,10 +11,9 @@ import type { Gamut } from "./color-math.js";
 import type { DtgConfig } from "./config.js";
 import type { ModeRendering } from "./emit.js";
 import {
-  DEFAULT_BACKGROUNDS,
-  readBackgrounds,
-  withBackgrounds,
-  type Background,
+  readBackgroundOverrides,
+  withBackgroundOverrides,
+  type BackgroundOverrides,
 } from "./dev-settings.js";
 import { writeOutputs } from "./outputs.js";
 import { describeTarget, type Edit } from "./edit.js";
@@ -76,10 +75,10 @@ export function startDevServer(
   // Backgrounds are settings, not the definition: they are read from and
   // written to `dtg.config.yaml` directly, outside the working copy and its undo.
   const readConfig = () => (existsSync(CONFIG_PATH) ? readFileSync(CONFIG_PATH, "utf8") : "");
-  let backgrounds: Background[] = [];
+  let backgroundOverrides: BackgroundOverrides = {};
   const takeBackgroundsFromConfig = () => {
     try {
-      backgrounds = readBackgrounds(readConfig());
+      backgroundOverrides = readBackgroundOverrides(readConfig());
     } catch (e) {
       console.error(`${CONFIG_PATH} ${(e as Error).message} — keeping the backgrounds as they were`);
     }
@@ -106,7 +105,7 @@ export function startDevServer(
     gamut,
     definitionPath: resolve(definitionPath),
     configPath: resolve(CONFIG_PATH),
-    backgrounds: backgrounds.length > 0 ? backgrounds : DEFAULT_BACKGROUNDS,
+    backgroundOverrides,
     cssModes,
   });
   const adopt = (copy: WorkingCopy) => {
@@ -260,9 +259,9 @@ export function startDevServer(
     if (url.pathname === "/api/backgrounds" && req.method === "POST") {
       readJson(req).then((body) => {
         try {
-          const wanted = (body as { backgrounds: Background[] }).backgrounds;
-          writeFileSync(CONFIG_PATH, withBackgrounds(readConfig(), wanted));
-          backgrounds = wanted;
+          const wanted = (body as { overrides: BackgroundOverrides }).overrides;
+          writeFileSync(CONFIG_PATH, withBackgroundOverrides(readConfig(), wanted));
+          backgroundOverrides = wanted;
           tellBrowsers("changed");
           sendJson(200, {});
         } catch (e) {

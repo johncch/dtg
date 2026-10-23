@@ -219,7 +219,7 @@ function Page({ route, snapshot }: { route: Route; snapshot: Snapshot }) {
   if (route.page === "unknown") return <NotFound what={route.path} />;
   if (route.page === "overview") return <OverviewPage snapshot={snapshot} />;
   if (route.page === "definition") return <DefinitionPage definition={snapshot.definition} />;
-  if (route.page === "settings" && SAVABLE) return <SettingsPage configPath={snapshot.configPath} backgrounds={snapshot.backgrounds} />;
+  if (route.page === "settings" && SAVABLE) return <SettingsPage configPath={snapshot.configPath} snapshot={snapshot} />;
   if (route.page === "constants") {
     return snapshot.constants.length > 0 ? (
       <ConstantsPage constants={snapshot.constants} />

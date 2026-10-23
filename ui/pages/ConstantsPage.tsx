@@ -43,7 +43,7 @@ export function ConstantsPage({ constants }: { constants: SnapshotConstant[] }) 
                   )}
                 </td>
                 <td>
-                  <ColorChip color={constant.color} edit={{ kind: "constant", path: constant.path }} />
+                  <ColorChip color={constant.color} label={constant.written} edit={{ kind: "constant", path: constant.path }} />
                 </td>
                 <td>
                   {constant.usedBy.length > 0 || constant.paramOf.length > 0 ? (

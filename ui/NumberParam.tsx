@@ -61,18 +61,20 @@ function NumberEditor({
   panel: PopupPanel;
 }) {
   const { preview, commit, refusal } = useTrying();
-  const [text, setText] = useState(String(original));
+  // The page shows the number being tried, so `original` follows it; the panel compares against what it opened on.
+  const [opened] = useState(original);
+  const [text, setText] = useState(String(opened));
   const parsed = Number(text);
   const valid = text.trim() !== "" && Number.isFinite(parsed);
   // Arrow keys and the slider step by what the value is written in: whole numbers by 1, fractions by 0.01.
-  const step = Number.isInteger(original) ? 1 : 0.01;
-  const edit = valid && parsed !== original ? { action: "set" as const, target, value: String(parsed) } : null;
+  const step = Number.isInteger(opened) ? 1 : 0.01;
+  const edit = valid && parsed !== opened ? { action: "set" as const, target, value: String(parsed) } : null;
   const latest = useRef(edit);
   latest.current = edit;
   useEffect(() => preview(edit), [text]);
   useEffect(
     () => () => {
-      if (latest.current) commit(latest.current);
+      if (latest.current && !panel.escaped()) commit(latest.current);
       else preview(null);
     },
     [],
@@ -106,7 +108,7 @@ function NumberEditor({
           min={range.min}
           max={range.max}
           step={step}
-          value={valid ? parsed : original}
+          value={valid ? parsed : opened}
           onChange={(event) => setText(event.target.value)}
         />
       )}

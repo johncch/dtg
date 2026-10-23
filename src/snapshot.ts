@@ -1,6 +1,6 @@
-import { parseColor, type Color, type Gamut } from "./color-math.js";
+import { parseColor, toOklab, type Color, type Gamut } from "./color-math.js";
 import type { SelectorShape } from "./contract.js";
-import { DEFAULT_BACKGROUNDS, type Background } from "./dev-settings.js";
+import type { BackgroundOverrides } from "./dev-settings.js";
 import { parseDocument } from "yaml";
 import { anchorsOf, type Edit, type ParamAnchor } from "./edit.js";
 import type { Change } from "./working-copy.js";
@@ -13,8 +13,9 @@ import {
   type ResolvedColorParam,
   type ResolvedCurve,
   type ResolvedDefinition,
+  type ModeScheme,
 } from "./resolve.js";
-import { formatRef } from "./selector.js";
+import { formatRef, parseCall, rolePath } from "./selector.js";
 
 /**
  * Everything the browser needs to draw the definition, as plain JSON. The
@@ -37,11 +38,11 @@ export type Snapshot = {
   definition: SnapshotDefinition;
   /** The full path of the `dtg.config.yaml` the settings are kept in, whether or not it exists yet. */
   configPath: string;
-  /** The page colors the app can be looked at against. Never empty. */
+  /** The page colors the app can be looked at against: one per distinct mode background. Never empty. */
   backgrounds: SnapshotBackground[];
   modes: string[];
-  /** Index-parallel to `modes`: the mode each one extends, or null for a root. */
-  modeParents: (string | null)[];
+  /** Index-parallel to `modes`. */
+  modeDetails: SnapshotMode[];
   warnings: string[];
   systems: SnapshotSystem[];
   constants: SnapshotConstant[];
@@ -57,12 +58,113 @@ export type SnapshotDefinition = {
   text: string;
 };
 
-export type SnapshotBackground = {
+export type SnapshotMode = {
   name: string;
-  /** As `dtg.config.yaml` has it, or would: hex or `oklch()`. */
+  /** The mode this one falls back to, or null for a root. */
+  extends: string | null;
+  scheme: ModeScheme;
+  /** The definition never said, so the scheme was guessed from the mode's colors. */
+  schemeInferred: boolean;
+  /** As `dev.backgrounds` has it, or the scheme's default: a color or a ref. */
+  backgroundWritten: string;
+  /** What `backgroundWritten` comes to in this mode, or the scheme's default when it comes to nothing. */
+  background: Color;
+  /** Set by hand in `dev.backgrounds` rather than implied by the scheme. */
+  backgroundOverridden: boolean;
+  /** Why `backgroundWritten` could not be shown, or null when it was. */
+  backgroundProblem: string | null;
+};
+
+/** One sidebar swatch: a color and the modes seen on it. */
+export type SnapshotBackground = {
+  modes: string[];
+  /** As `dev.backgrounds` has it, or would: hex or `oklch()`. */
   written: string;
   color: Color;
 };
+
+const SCHEME_BACKGROUND: Record<ModeScheme, string> = { light: "#ffffff", dark: "#000000" };
+
+/** OKLab lightness at which a mode's colors, taken together, read as a light scheme. */
+const LIGHT_FROM = 0.6;
+
+/** The median lightness of the mode's opaque role colors, light at 0.6 and above. Light when there is nothing to go on. */
+function inferScheme(resolved: ResolvedDefinition, modeIndex: number): ModeScheme {
+  const lightness = resolved.roles
+    .map((role) => role.perMode[modeIndex].color)
+    .filter((color) => color.alpha === 1)
+    .map((color) => toOklab(color)[0])
+    .sort((a, b) => a - b);
+  if (lightness.length === 0) return "light";
+  return lightness[Math.floor(lightness.length / 2)] >= LIGHT_FROM ? "light" : "dark";
+}
+
+function sameColor(a: Color, b: Color): boolean {
+  if (a.alpha !== b.alpha) return false;
+  const [la, aa, ba] = toOklab(a);
+  const [lb, ab, bb] = toOklab(b);
+  return la === lb && aa === ab && ba === bb;
+}
+
+/**
+ * What a background value comes to in one mode: a color as written, a
+ * constant, a role in that mode, or a system step the resolver was asked to
+ * probe. Throws with the reason when it comes to nothing.
+ */
+export function resolveBackground(written: string, resolved: ResolvedDefinition, modeIndex: number): Color {
+  const constant = resolved.statics.find((candidate) => candidate.path === written);
+  if (constant) return constant.color;
+  const role = resolved.roles.find((candidate) => rolePath(candidate) === written);
+  if (role) return role.perMode[modeIndex].color;
+  if (parseCall(written)) {
+    const probe = resolved.probed.find((candidate) => candidate.ref === written);
+    if (!probe) throw new Error(`"${written}" was not resolved`);
+    if ("error" in probe) throw new Error(probe.error);
+    return probe.color;
+  }
+  return parseColor(written, "background");
+}
+
+/** The step refs among `overrides`, for the resolver to probe so they resolve without a role demanding them. */
+export function backgroundProbes(overrides: BackgroundOverrides): string[] {
+  return Object.values(overrides).filter((written) => parseCall(written) !== null);
+}
+
+function modeDetailsOf(resolved: ResolvedDefinition, overrides: BackgroundOverrides): SnapshotMode[] {
+  return resolved.modeDetails.map((mode, index) => {
+    const scheme = mode.scheme ?? inferScheme(resolved, index);
+    const overridden = mode.name in overrides;
+    const backgroundWritten = overridden ? overrides[mode.name] : SCHEME_BACKGROUND[scheme];
+    let background: Color;
+    let backgroundProblem: string | null = null;
+    try {
+      background = resolveBackground(backgroundWritten, resolved, index);
+    } catch (e) {
+      background = parseColor(SCHEME_BACKGROUND[scheme], "background");
+      backgroundProblem = (e as Error).message;
+    }
+    return {
+      name: mode.name,
+      extends: mode.extends ?? null,
+      scheme,
+      schemeInferred: mode.scheme === undefined,
+      backgroundWritten,
+      background,
+      backgroundOverridden: overridden,
+      backgroundProblem,
+    };
+  });
+}
+
+function backgroundsOf(modeDetails: SnapshotMode[]): SnapshotBackground[] {
+  const backgrounds: SnapshotBackground[] = [];
+  for (const mode of modeDetails) {
+    const same = backgrounds.find((background) => sameColor(background.color, mode.background));
+    if (same) same.modes.push(mode.name);
+    else backgrounds.push({ modes: [mode.name], written: mode.backgroundWritten, color: mode.background });
+  }
+  return backgrounds;
+}
 
 export type SnapshotUse = {
   section: string;
@@ -114,6 +216,8 @@ export type SnapshotConstant = {
   cssName: string;
   /** False for an input: its group is `emit: false` and no role points at it. */
   emitted: boolean;
+  /** The color as the definition writes it, which an editor opens on. */
+  written: string;
   color: Color;
   usedBy: SnapshotUse[];
   /** The system params that name it, as `{ system, param }`. */
@@ -144,7 +248,7 @@ export function buildSnapshot({
   redo = null,
   definition,
   configPath = "dtg.config.yaml",
-  backgrounds = DEFAULT_BACKGROUNDS,
+  backgroundOverrides = {},
 }: {
   resolved: ResolvedDefinition;
   lineage: Lineage;
@@ -156,9 +260,18 @@ export function buildSnapshot({
   redo?: Edit[] | null;
   definition: SnapshotDefinition;
   configPath?: string;
-  backgrounds?: Background[];
+  backgroundOverrides?: BackgroundOverrides;
 }): Snapshot {
   const document = parseDocument(definition.text);
+  const modeDetails = modeDetailsOf(resolved, backgroundOverrides);
+  const backgroundWarnings = [
+    ...Object.keys(backgroundOverrides)
+      .filter((mode) => !resolved.modes.includes(mode))
+      .map((mode) => `dev.backgrounds: no mode named ${JSON.stringify(mode)}`),
+    ...modeDetails
+      .filter((mode) => mode.backgroundProblem !== null)
+      .map((mode) => `dev.backgrounds.${mode.name}: ${mode.backgroundProblem}`),
+  ];
   return {
     error,
     stale,
@@ -168,14 +281,10 @@ export function buildSnapshot({
     redo,
     definition,
     configPath,
-    backgrounds: backgrounds.map(({ name, color }) => ({
-      name,
-      written: color,
-      color: parseColor(color, `dev.backgrounds.${name}`),
-    })),
+    backgrounds: backgroundsOf(modeDetails),
     modes: resolved.modes,
-    modeParents: resolved.modeDetails.map((mode) => mode.extends ?? null),
-    warnings: resolved.warnings,
+    modeDetails,
+    warnings: [...resolved.warnings, ...backgroundWarnings],
     systems: resolved.systems.map((system) => ({
       system: system.system,
       cssName: publicSystemName(system, "css"),
@@ -203,6 +312,7 @@ export function buildSnapshot({
       path: constant.path,
       cssName: publicPath(constant.segments, "css", "-"),
       emitted: constant.emitted,
+      written: constant.written,
       color: constant.color,
       usedBy: lineage.get(constant.path) ?? [],
       paramOf: resolved.systems.flatMap((system) =>

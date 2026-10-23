@@ -67,7 +67,7 @@ function ChoiceEditor({
   useEffect(() => preview(edit), [picked]);
   useEffect(
     () => () => {
-      if (latest.current) commit(latest.current);
+      if (latest.current && !panel.escaped()) commit(latest.current);
       else preview(null);
     },
     [],

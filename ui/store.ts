@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { Background } from "../src/dev-settings.js";
+import type { BackgroundOverrides } from "../src/dev-settings.js";
 import type { Edit } from "../src/edit.js";
 
 /**
@@ -15,8 +15,8 @@ export type Store = {
   discard(): Promise<void>;
   /** Write the unsaved changes to the definition file; null where there is no file to write. */
   save: (() => Promise<void>) | null;
-  /** Write the backgrounds to `dtg.config.yaml`; null where there is no file to write. */
-  setBackgrounds: ((backgrounds: Background[]) => Promise<void>) | null;
+  /** Write the background overrides to `dtg.config.yaml`; null where there is no file to write. */
+  setBackgroundOverrides: ((overrides: BackgroundOverrides) => Promise<void>) | null;
 };
 
 const StoreContext = createContext<Store | null>(null);
@@ -36,7 +36,7 @@ export const bridgeStore: Store = {
   redo: () => post("/api/redo"),
   discard: () => post("/api/discard"),
   save: () => post("/api/save"),
-  setBackgrounds: (backgrounds) => post("/api/backgrounds", { backgrounds }),
+  setBackgroundOverrides: (overrides) => post("/api/backgrounds", { overrides }),
 };
 
 async function post(path: string, body?: unknown): Promise<void> {

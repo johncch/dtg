@@ -161,7 +161,7 @@ function ParamValue({
   const colorParam = colorParams.find((param) => param.path === path);
   if (colorParam) {
     return (
-      <ColorChip color={colorParam.color} label={String(value)} edit={readOnly ? undefined : target} named={colorParam.constant}>
+      <ColorChip color={colorParam.color} label={String(value)} edit={readOnly ? undefined : target}>
         {note && <span className="muted">{note}</span>}
       </ColorChip>
     );

@@ -21,7 +21,10 @@ export type PopupPanel = {
   /** The panel's close control. */
   close: ReactNode;
   dismiss(): void;
+  /** Whether the panel was closed with Escape, for contents that take that as "not this". Read as they unmount. */
+  escaped(): boolean;
 };
+
 
 /**
  * A button that opens a small movable panel beside itself. The panel's
@@ -51,6 +54,7 @@ export function Popup({
   const button = useRef<HTMLButtonElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   const unplaced = useRef(false);
+  const escaped = useRef(false);
 
   // Below the button, unless that runs off the screen: then above it, or as
   // near as fits. Run from the panel's ref rather than an effect on opening,
@@ -76,6 +80,7 @@ export function Popup({
     }
     const anchor = button.current!.getBoundingClientRect();
     unplaced.current = true;
+    escaped.current = false;
     setPlacement({ open: true, at: { x: anchor.left, y: anchor.bottom + GAP } });
   };
 
@@ -129,10 +134,14 @@ export function Popup({
             // which happens when a panel that just closed hands focus back to
             // its button after this one has opened.
             onFocusOutside={(event) => event.preventDefault()}
+            onEscapeKeyDown={() => {
+              escaped.current = true;
+            }}
           >
             <Dialog.Title className="sr-only">{title}</Dialog.Title>
             {children({
               handle,
+              escaped: () => escaped.current,
               close: (
                 <Dialog.Close asChild>
                   <button type="button" className="editor-close" aria-label="Close" title="Close">

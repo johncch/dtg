@@ -6,7 +6,7 @@ import { ColorTip } from "../ColorTip.js";
 import { paintCss } from "../paint.js";
 import { Popup } from "../Popup.js";
 import { EDITABLE } from "../mode.js";
-import { RefEditor } from "../RefEditor.js";
+import { sourcesFor, TargetValueEditor } from "../picker/ValueEditor.js";
 import { Link, useScrollToHash } from "../router.js";
 import { INHERIT, rolePath } from "../../src/selector.js";
 import { stepAnchor } from "../Strip.js";
@@ -113,7 +113,7 @@ function RoleRow({
         {role.note && <div className="role-note">{role.note}</div>}
       </td>
       {role.perMode.map((entry, index) => {
-        const parent = snapshot.modeParents[index];
+        const parent = snapshot.modeDetails[index].extends;
         const trail = refTrail(snapshot, entry, index);
         const trailText = <code>{trail.join(" → ")}</code>;
         const inheritedNote = entry.inherited && <span className="muted">inherited from {parent}</span>;
@@ -173,29 +173,25 @@ function RoleRow({
               )}
             >
               {(panel) => (
-                <RefEditor
-                  written={entry.inherited ? INHERIT : entry.ref}
+                <TargetValueEditor
                   target={{
                     kind: "ref",
                     section: role.section,
                     role: rolePath(role),
                     mode: index,
                   }}
-                  heading={`${role.role} · ${snapshot.modes[index]}`}
+                  value={entry.inherited ? INHERIT : entry.ref}
+                  color={entry.color}
+                  sources={sourcesFor({ kind: "ref", section: role.section, role: rolePath(role), mode: index })}
+                  constants={snapshot.constants}
+                  systems={snapshot.systems}
+                  roles={snapshot.roles
+                    .filter((other) => other !== role)
+                    .map((other) => ({ path: rolePath(other), color: other.perMode[index].color }))}
+                  transparent
                   inherits={
                     parent == null ? null : { mode: parent, ref: role.perMode[snapshot.modes.indexOf(parent)].ref }
                   }
-                  color={entry.color}
-                  reference={
-                    <>
-                      <RefLink snapshot={snapshot} target={entry.target} onFollow={panel.dismiss}>
-                        {trailText}
-                      </RefLink>
-                      {inheritedNote}
-                    </>
-                  }
-                  systems={snapshot.systems}
-                  constants={snapshot.constants}
                   panel={panel}
                 />
               )}

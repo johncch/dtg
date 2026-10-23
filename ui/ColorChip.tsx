@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { formatColor, isOpaque, type Color } from "../src/color-math.js";
 import type { EditTarget } from "../src/edit.js";
 import { ColorTip } from "./ColorTip.js";
 import { EDITABLE } from "./mode.js";
 import { paintCss } from "./paint.js";
-import { ColorEditor } from "./picker/ColorEditor.js";
+import { usePaletteColors } from "./palette-colors.js";
+import { sourcesFor, TargetValueEditor } from "./picker/ValueEditor.js";
 import { Popup } from "./Popup.js";
 
 /**
@@ -17,7 +18,6 @@ export function ColorChip({
   size = "regular",
   label = formatColor(color, "srgb"),
   edit,
-  named = null,
   children,
 }: {
   color: Color;
@@ -25,10 +25,8 @@ export function ColorChip({
   size?: "regular" | "small";
   /** The text beside the swatch; the sRGB value unless the caller has the authored form. */
   label?: string;
-  /** Where an authored color is written, which makes the chip open the picker. Derived colors have none. */
+  /** Where an authored color is written, which makes the chip open the editor. Derived colors have none. */
   edit?: EditTarget;
-  /** The palette color an editable value names, when it names one rather than writing a color. */
-  named?: string | null;
   /** Shown under the value and part of the same hover target, e.g. the ref a role points at. */
   children?: ReactNode;
 }) {
@@ -51,7 +49,7 @@ export function ColorChip({
   );
   if (edit && EDITABLE) {
     return (
-      <EditableChip color={color} target={edit} named={named} className={className}>
+      <EditableChip color={color} value={label} target={edit} className={className}>
         {content}
       </EditableChip>
     );
@@ -65,17 +63,19 @@ export function ColorChip({
 
 export function EditableChip({
   color,
+  value = formatColor(color, "srgb"),
   target,
-  named = null,
   className,
   children,
 }: {
   color: Color;
+  /** The value as written, which the editor opens on. */
+  value?: string;
   target: EditTarget;
-  named?: string | null;
   className: string;
   children: ReactNode;
 }) {
+  const constants = usePaletteColors();
   return (
     <Popup
       title="Edit color"
@@ -90,19 +90,9 @@ export function EditableChip({
         </ColorTip>
       )}
     >
-      {({ handle, close }) => <OpenedColorEditor color={color} target={target} named={named} handle={handle} close={close} />}
+      {(panel) => (
+        <TargetValueEditor target={target} value={value} color={color} sources={sourcesFor(target)} constants={constants} panel={panel} />
+      )}
     </Popup>
   );
-}
-
-function OpenedColorEditor({
-  color,
-  named,
-  ...editor
-}: { color: Color } & Omit<Parameters<typeof ColorEditor>[0], "original">) {
-  // While the picker is open the chip redraws with the color being tried,
-  // so what the definition had is taken once, at the moment of opening.
-  const [original] = useState(color);
-  const [namedAtOpening] = useState(named);
-  return <ColorEditor original={original} named={namedAtOpening} {...editor} />;
 }

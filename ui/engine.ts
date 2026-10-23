@@ -2,7 +2,7 @@ import type { Color, Gamut } from "../src/color-math.js";
 import type { DevState } from "../src/dev-state.js";
 import { applyEdits, type Edit } from "../src/edit.js";
 import { buildLineage, resolveDefinition, type Lineage, type ResolvedDefinition } from "../src/resolve.js";
-import { buildSnapshot, type Snapshot } from "../src/snapshot.js";
+import { backgroundProbes, buildSnapshot, type Snapshot } from "../src/snapshot.js";
 import { changesOf, workingText } from "../src/working-copy.js";
 
 /** A working copy that resolved, kept to draw from while a later one does not. */
@@ -21,7 +21,7 @@ export function drawState(state: DevState, lastGood: Resolved | null): { snapsho
   let good: Resolved;
   let error: string | null = null;
   try {
-    const resolved = resolveDefinition(text, [], state.gamut);
+    const resolved = resolveDefinition(text, [], state.gamut, backgroundProbes(state.backgroundOverrides));
     good = { resolved, lineage: buildLineage(resolved) };
   } catch (e) {
     if (!lastGood) throw e;
@@ -39,7 +39,7 @@ export function drawState(state: DevState, lastGood: Resolved | null): { snapsho
     redo: state.copy.undone.at(-1) ?? null,
     definition: { path: state.definitionPath, text },
     configPath: state.configPath,
-    backgrounds: state.backgrounds,
+    backgroundOverrides: state.backgroundOverrides,
   });
   return { snapshot, good };
 }
@@ -50,7 +50,10 @@ export function drawState(state: DevState, lastGood: Resolved | null): { snapsho
  * cannot be made or the result does not resolve.
  */
 export function previewOf(base: Snapshot, edits: Edit[]): Drawn {
-  const resolved = resolveDefinition(applyEdits(base.definition.text, edits), [], base.gamut);
+  const backgroundOverrides = Object.fromEntries(
+    base.modeDetails.filter((mode) => mode.backgroundOverridden).map((mode) => [mode.name, mode.backgroundWritten]),
+  );
+  const resolved = resolveDefinition(applyEdits(base.definition.text, edits), [], base.gamut, backgroundProbes(backgroundOverrides));
   const snapshot = buildSnapshot({
     resolved,
     lineage: buildLineage(resolved),
@@ -62,7 +65,7 @@ export function previewOf(base: Snapshot, edits: Edit[]): Drawn {
     redo: base.redo,
     definition: base.definition,
     configPath: base.configPath,
-    backgrounds: base.backgrounds.map(({ name, written }) => ({ name, color: written })),
+    backgroundOverrides,
   });
   return { snapshot, resolved };
 }

@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { readBackgrounds, withBackgrounds } from "../dist/dev-settings.js";
+import { readBackgroundOverrides, withBackgroundOverrides } from "../dist/dev-settings.js";
 
 const CONFIG = `# project config
 gamut: srgb
@@ -9,57 +9,43 @@ outputs:
 `;
 
 describe("dev.backgrounds", () => {
-  test("is read in the order written, number-like names included", () => {
-    const config = `dev:\n  backgrounds:\n    paper: "#ffffff"\n    "900": oklch(0.2 0.02 260)\n    "100": "#f0f0f0"\n`;
-    assert.deepEqual(readBackgrounds(config), [
-      { name: "paper", color: "#ffffff" },
-      { name: "900", color: "oklch(0.2 0.02 260)" },
-      { name: "100", color: "#f0f0f0" },
-    ]);
+  test("is read by mode, number-like names included", () => {
+    const config = `dev:\n  backgrounds:\n    light: "#ffffff"\n    "900": oklch(0.2 0.02 260)\n`;
+    assert.deepEqual(readBackgroundOverrides(config), { light: "#ffffff", "900": "oklch(0.2 0.02 260)" });
   });
 
   test("is empty when the file says nothing", () => {
-    assert.deepEqual(readBackgrounds(""), []);
-    assert.deepEqual(readBackgrounds(CONFIG), []);
-    assert.deepEqual(readBackgrounds("dev:\n  backgrounds:\n"), []);
+    assert.deepEqual(readBackgroundOverrides(""), {});
+    assert.deepEqual(readBackgroundOverrides(CONFIG), {});
+    assert.deepEqual(readBackgroundOverrides("dev:\n  backgrounds:\n"), {});
   });
 
-  test("refuses what is not a map of colors", () => {
-    assert.throws(() => readBackgrounds("dev:\n  backgrounds: [white]\n"), /expected a map of name: color/);
-    assert.throws(() => readBackgrounds("dev:\n  backgrounds:\n    paper: papery\n"), /dev\.backgrounds\.paper/);
+  test("takes a ref as well as a color, and refuses what is not a map", () => {
+    assert.deepEqual(readBackgroundOverrides("dev:\n  backgrounds:\n    dark: surface.canvas\n"), { dark: "surface.canvas" });
+    assert.throws(() => readBackgroundOverrides("dev:\n  backgrounds: [white]\n"), /expected a map of mode: color or ref/);
+    assert.throws(() => readBackgroundOverrides("dev:\n  backgrounds:\n    dark: ''\n"), /dev\.backgrounds\.dark: a background needs/);
   });
 
   test("is written into a file that had none, keeping the rest", () => {
-    const written = withBackgrounds(CONFIG, [
-      { name: "paper", color: "#ffffff" },
-      { name: "dusk", color: "oklch(0.3 0.05 260)" },
-    ]);
+    const written = withBackgroundOverrides(CONFIG, { dark: "oklch(0.3 0.05 260)" });
     assert.ok(written.startsWith(CONFIG), "what was there is untouched, comments included");
-    assert.deepEqual(readBackgrounds(written), [
-      { name: "paper", color: "#ffffff" },
-      { name: "dusk", color: "oklch(0.3 0.05 260)" },
-    ]);
+    assert.deepEqual(readBackgroundOverrides(written), { dark: "oklch(0.3 0.05 260)" });
   });
 
-  test("is written into an empty file", () => {
-    const written = withBackgrounds("", [{ name: "ink", color: "#101114" }]);
-    assert.deepEqual(readBackgrounds(written), [{ name: "ink", color: "#101114" }]);
+  test("is written into an empty file, in block style", () => {
+    const written = withBackgroundOverrides("", { dark: "#101114" });
+    assert.equal(written, 'dev:\n  backgrounds:\n    dark: "#101114"\n');
+    assert.equal(withBackgroundOverrides("{}\n", { dark: "night(4)" }), "dev:\n  backgrounds:\n    dark: night(4)\n");
   });
 
-  test("an empty list takes the key back out", () => {
-    const written = withBackgrounds(CONFIG, [{ name: "ink", color: "#101114" }]);
-    assert.equal(withBackgrounds(written, []), CONFIG);
+  test("no overrides takes the key back out", () => {
+    const written = withBackgroundOverrides(CONFIG, { dark: "#101114" });
+    assert.equal(withBackgroundOverrides(written, {}), CONFIG);
+    assert.equal(withBackgroundOverrides(withBackgroundOverrides("", { dark: "#101114" }), {}), "");
   });
 
-  test("a list the app could not offer is not written", () => {
-    assert.throws(() => withBackgrounds("", [{ name: "", color: "#fff" }]), /needs a name/);
-    assert.throws(
-      () =>
-        withBackgrounds("", [
-          { name: "ink", color: "#101114" },
-          { name: "ink", color: "#000000" },
-        ]),
-      /"ink" appears twice/,
-    );
+  test("an override the app could not show is not written", () => {
+    assert.throws(() => withBackgroundOverrides("", { "": "#fff" }), /needs a mode/);
+    assert.throws(() => withBackgroundOverrides("", { dark: " " }), /dev\.backgrounds\.dark/);
   });
 });

@@ -39,6 +39,7 @@ export function ColorTip({
   color,
   reference,
   suppressed = false,
+  side = "top",
   children,
 }: {
   color: Color;
@@ -46,6 +47,8 @@ export function ColorTip({
   reference?: ReactNode;
   /** Keeps the tooltip shut while something else, like the picker, is open on the same element. */
   suppressed?: boolean;
+  /** Where it opens; it flips to the opposite side when that runs off the screen. */
+  side?: "top" | "right";
   children: ReactElement;
 }) {
   const [open, setOpen] = useState(false);
@@ -53,7 +56,7 @@ export function ColorTip({
     <Tooltip.Root open={open && !suppressed} onOpenChange={setOpen}>
       <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
       <Tooltip.Portal>
-        <Tooltip.Content className="tip" side="top" sideOffset={6} collisionPadding={8}>
+        <Tooltip.Content className="tip" side={side} sideOffset={6} collisionPadding={8}>
           <ColorFacts color={color} reference={reference} />
         </Tooltip.Content>
       </Tooltip.Portal>

@@ -315,6 +315,8 @@ export type PathSegment = {
 export type ResolvedStatic = {
   path: string;
   segments: PathSegment[];
+  /** The color as the definition writes it. */
+  written: string;
   color: Color;
   /** False for a color in a group marked `emit: false` that no role points at. */
   emitted: boolean;
@@ -615,7 +617,7 @@ export function resolveDefinition(
       const path = segments.map((seg) => seg.name).join(".");
       if (typeof raw === "string") {
         try {
-          statics.push({ path, segments, color: parseColor(raw, `palette color "${path}"`), emitted: true });
+          statics.push({ path, segments, written: raw, color: parseColor(raw, `palette color "${path}"`), emitted: true });
           if (!emits) silent.add(path);
         } catch (e) {
           errors.push((e as Error).message);

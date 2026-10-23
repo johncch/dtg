@@ -97,7 +97,7 @@ function CurveEditor({
   useEffect(() => preview(edit), [JSON.stringify(value)]);
   useEffect(
     () => () => {
-      if (latest.current) commit(latest.current);
+      if (latest.current && !panel.escaped()) commit(latest.current);
       else preview(null);
     },
     [],

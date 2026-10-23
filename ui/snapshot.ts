@@ -49,7 +49,7 @@ export function useSnapshot(): { state: SnapshotState; store: Store } {
       redo: () => change(redo),
       discard: () => change(discard),
       save: null,
-      setBackgrounds: null,
+      setBackgroundOverrides: null,
     };
   }, []);
 
