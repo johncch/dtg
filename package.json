@@ -1,6 +1,6 @@
 {
   "name": "@fifthrevision/dtg",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Store colors as algorithms, not hexes. Design tokens from a YAML definition of how your colors are made, compiled to CSS and DTCG.",
   "license": "MIT",
   "keywords": [
