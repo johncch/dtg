@@ -143,7 +143,7 @@
   --text-title: 1rem;
   --text-title--font-weight: 500;
   --text-large-title: 1.125rem;
-  --text-large-title--font-weight: 500;
+  --text-large-title--font-weight: 600;
   --width-dialog-small: 27.5rem;
   --width-dialog-medium: 40rem;
   --width-dialog-large: 60rem;
@@ -303,7 +303,8 @@
 }
 :where(.mosaic-base h1) {
   font-size: var(--text-large-title);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--tw-font-weight, var(--text-large-title--font-weight));
+  font-variation-settings: "opsz" 32;
 }
 :where(.mosaic-base h2) {
   font-size: var(--text-title);
@@ -323,9 +324,9 @@
   text-decoration: underline;
 }
 :where(.mosaic-base nav a) {
+  margin-inline: calc(0.25rem * -2);
   display: flex;
   height: calc(0.25rem * 8);
-  width: 100%;
   min-width: 0px;
   flex-shrink: 0;
   align-items: center;

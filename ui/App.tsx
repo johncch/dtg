@@ -182,7 +182,7 @@ function GroupLinks({ nodes, notes, prefix = "" }: { nodes: GroupNode[]; notes: 
   return nodes.map((node) => {
     const path = prefix + node.name;
     return (
-      <div key={node.name}>
+      <div key={node.name} className="nav-group">
         {node.group ? (
           <Link to={{ page: "group", name: node.group }} title={notes[path]}>
             {node.name}
