@@ -1,7 +1,7 @@
 # Drafts the changelog section for a release when nobody wrote one. Run by
 # scripts/release.sh; needs the axle CLI (`axle`) and its provider config.
-provider: openai
-model: openai/gpt-6-luna
+provider: anthropic
+model: anthropic/claude-sonnet-5-5
 
 task: |
   Write the CHANGELOG.md section for version {{version}} of dtg.
