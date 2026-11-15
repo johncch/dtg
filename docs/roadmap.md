@@ -322,6 +322,22 @@ why it is about twenty lines.
   repo's convention for removed spellings. The `figma` alias target stays:
   DTCG is what feeds Figma, so `alias: { css: light, figma: Light }` still
   means what it always did.
+- **A setting for what hex means.** A hex in a definition is read as sRGB,
+  as CSS reads it. `HEX_SPACE` in `color-math.ts` names that (2026-11-14),
+  and reading a definition's hex, writing one back, the picker's Hex format
+  and the palette's Add, Randomize and Spread all go through it. A setting
+  that reads hex as Display P3, for a definition kept in step with a P3
+  Figma document, is not built. Before it can be:
+  - The setting belongs in the definition, not `dtg.config.yaml`: it
+    changes what the colors are, and one definition must not mean different
+    colors under different configs.
+  - The picker still hard-codes sRGB in its "sRGB only" note and in the
+    boundary line drawn on the field (`ui/picker/Picker.tsx`).
+  - Hex that something else reads stays sRGB whatever the setting says: the
+    tooltip's hex, emitted CSS, the DTCG `hex` field, and `hexToOklab` and
+    `oklabDeltaE`, which only ever see color-name data and converted output.
+  - A definition's hex is 3 or 6 digits. 8-digit hex with alpha is not
+    parsed, so a translucent color cannot be written as hex.
 
 ## Open questions
 

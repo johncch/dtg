@@ -1,3 +1,4 @@
+import { Redo2, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Edit, EditTarget } from "../src/edit.js";
 import type { Snapshot } from "../src/snapshot.js";
@@ -34,6 +35,7 @@ export function Changes({ working }: { working: Snapshot }) {
   const describeEdit = (edit: Edit) => {
     const name = nameOf(edit.target, modes);
     if (edit.action === "rename") return `rename ${name} to ${edit.name}`;
+    if (edit.action === "move") return `move ${name}`;
     if (edit.action === "remove") return `remove ${name}`;
     if (edit.action === "add") return `add ${name} ${edit.value}`;
     return `${name} → ${edit.value}`;
@@ -42,6 +44,7 @@ export function Changes({ working }: { working: Snapshot }) {
   const summary = (change: Change) => {
     const name = nameOf(change.target, modes);
     if (change.action === "rename") return `${name}: renamed to ${change.to.path}`;
+    if (change.action === "move") return `${name}: moved`;
     if (change.action === "remove") return `${name}: removed (was ${change.from})`;
     return `${name}: ${change.from ?? "added"} → ${change.to}`;
   };
@@ -85,10 +88,7 @@ export function Changes({ working }: { working: Snapshot }) {
           disabled={!undo}
           onClick={() => run("undo")}
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M9 14 4 9l5-5" />
-            <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />
-          </svg>
+          <Undo2 size={14} aria-hidden />
         </button>
         <button
           className="btn btn-small changes-step"
@@ -97,10 +97,7 @@ export function Changes({ working }: { working: Snapshot }) {
           disabled={!redo}
           onClick={() => run("redo")}
         >
-          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="m15 14 5-5-5-5" />
-            <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5A5.5 5.5 0 0 0 9.5 20H13" />
-          </svg>
+          <Redo2 size={14} aria-hidden />
         </button>
       </div>
       {changes.length > 0 && (

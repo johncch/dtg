@@ -15,13 +15,16 @@ export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
 /**
  * Setting writes a value; for a ref, `INHERIT` is a value too: the mode says
  * nothing and follows the one it extends. Setting needs a value to write over;
- * a constant the file does not have is added instead. A constant can also be
- * renamed within its group, or removed.
+ * a constant the file does not have is added instead, at the end of its group
+ * or after the sibling `after` names. A constant can also be renamed within
+ * its group, moved to follow another of its group (`after` null puts it
+ * first), or removed.
  */
 export type Edit =
   | { action: "set"; target: EditTarget; value: string }
-  | { action: "add"; target: ConstantTarget; value: string }
+  | { action: "add"; target: ConstantTarget; value: string; after?: string }
   | { action: "rename"; target: ConstantTarget; name: string }
+  | { action: "move"; target: ConstantTarget; after: string | null }
   | { action: "remove"; target: ConstantTarget };
 
 /** Where a constant is after it is renamed. */
@@ -89,12 +92,16 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       text = withConstantRenamed(text, edit.target, edit.name);
       continue;
     }
+    if (edit.action === "move") {
+      text = withConstantMoved(text, edit.target, edit.after);
+      continue;
+    }
     if (edit.action === "remove") {
       text = withConstantRemoved(text, edit.target);
       continue;
     }
     if (edit.action === "add") {
-      text = withConstantAdded(text, edit.target, edit.value);
+      text = withConstantAdded(text, edit.target, edit.value, edit.after);
       continue;
     }
     const alias = aliasOnTheWay(text, edit.target);
@@ -275,9 +282,9 @@ function withRefsAdded(text: string, last: LastRef, sources: string[]): string {
 }
 
 /** A new constant at the end of its group, or of `palette` for one in no group. */
-function withConstantAdded(text: string, target: ConstantTarget, value: string): string {
+function withConstantAdded(text: string, target: ConstantTarget, value: string, after?: string): string {
   const keys = ["palette", ...target.path.split(".")];
-  return withEntryAdded(text, keys.slice(0, -1), keys.at(-1)!, JSON.stringify(value), target, "and is not a color");
+  return withEntryAdded(text, keys.slice(0, -1), keys.at(-1)!, JSON.stringify(value), target, "and is not a color", after);
 }
 
 /** A param the system does not write yet, added to its `params` block: the algorithm's default stops applying. */
@@ -287,9 +294,9 @@ function withParamAdded(text: string, target: Extract<EditTarget, { kind: "param
 }
 
 /**
- * A new entry at the end of a map. In a block map it goes on its own line,
- * past everything the last entry holds, at the indent the map's entries are
- * written at.
+ * A new entry in a map: after the entry `after` names, or at the end when
+ * there is none. In a block map it goes on its own line, past everything the
+ * entry before it holds, at the indent the map's entries are written at.
  */
 function withEntryAdded(
   text: string,
@@ -298,6 +305,7 @@ function withEntryAdded(
   valueSource: string,
   target: EditTarget,
   alreadyWritten: string,
+  after?: string,
 ): string {
   const set = parseDocument(text).getIn(mapKeys, true);
   if (!isMap(set) || !set.range) {
@@ -307,7 +315,13 @@ function withEntryAdded(
     throw new Error(`${describeTarget(target)} is already written, ${alreadyWritten}`);
   }
   const entry = `${keySource(name)}: ${valueSource}`;
+  const before = after == null ? undefined : set.items.find((item) => isScalar(item.key) && item.key.value === after);
+  const beforeNode = before && ((before.value ?? before.key) as Node);
   if (set.flow) {
+    if (beforeNode) {
+      const end = beforeNode.range![1];
+      return `${text.slice(0, end)}, ${entry}${text.slice(end)}`;
+    }
     const brace = text.lastIndexOf("}", set.range[1]);
     const end = set.range[0] + text.slice(set.range[0], brace).trimEnd().length;
     if (set.items.length === 0) return `${text.slice(0, end)} ${entry} ${text.slice(brace)}`;
@@ -316,7 +330,7 @@ function withEntryAdded(
   const firstKey = set.items[0].key as Node;
   const keyStart = firstKey.range![0];
   const indent = text.slice(text.lastIndexOf("\n", keyStart) + 1, keyStart);
-  const nextLine = text.indexOf("\n", lastWrittenEnd(set));
+  const nextLine = text.indexOf("\n", lastWrittenEnd(beforeNode ?? set));
   const lineEnd = nextLine === -1 ? text.length : nextLine;
   return `${text.slice(0, lineEnd)}\n${indent}${entry}${text.slice(lineEnd)}`;
 }
@@ -395,6 +409,34 @@ function pointersAt(node: unknown, keys: string[], from: string, to: string): { 
  * The constant and its line go. A group left with nothing is written as `{}`,
  * so it stays a group to add to rather than becoming an empty value.
  */
+/**
+ * The group's entries in a new order. Each entry's own text moves, a block
+ * entry with the comment on its line; whatever is written between entries
+ * stays where it is.
+ */
+function withConstantMoved(text: string, target: ConstantTarget, after: string | null): string {
+  const { set, pair } = constantAt(text, target);
+  const items: Pair[] = set.items;
+  const others = items.filter((item) => item !== pair);
+  const at = after == null ? 0 : others.findIndex((item) => isScalar(item.key) && item.key.value === after) + 1;
+  if (after != null && at === 0) {
+    throw new Error(`nothing written for ${describeTarget(target)} to follow`);
+  }
+  const order = [...others.slice(0, at), pair, ...others.slice(at)];
+  const spans = items.map((item) => {
+    const value = (item.value ?? item.key) as Node;
+    const end = set.flow ? value.range![1] : lineEndAfter(text, lastWrittenEnd(value));
+    return { start: (item.key as Node).range![0], end };
+  });
+  let moved = text.slice(0, spans[0].start);
+  order.forEach((item, slot) => {
+    const span = spans[items.indexOf(item)];
+    moved += text.slice(span.start, span.end);
+    if (slot + 1 < spans.length) moved += text.slice(spans[slot].end, spans[slot + 1].start);
+  });
+  return moved + text.slice(spans.at(-1)!.end);
+}
+
 function withConstantRemoved(text: string, target: ConstantTarget): string {
   const { doc, keys, set, pair } = constantAt(text, target);
   const index = set.items.indexOf(pair);

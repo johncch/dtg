@@ -243,6 +243,7 @@ function RefLink({
       </Link>
     );
   }
+  if (target.kind === "literal") return <>{children}</>;
   const step = snapshot.systems
     .find((system) => system.system === target.system)
     ?.steps.find((candidate) => candidate.selector === target.selector);

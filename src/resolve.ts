@@ -19,6 +19,8 @@ import {
   needsMapping,
   parseColor,
   isOpaque,
+  formatAuthored,
+  toOklab,
   type Color,
   type Gamut,
 } from "./color-math.js";
@@ -141,6 +143,8 @@ const RENAMED_ALGORITHMS: Record<string, string> = {
   "oklch-scale": "scale",
 };
 
+const LITERAL_FUNCTIONS = ["oklch", "oklab", "color"];
+
 const TRANSPARENT_USAGE = `transparent() takes a constant and an opacity, as transparent(shade 70). For a system's uncomposited form, ask the algorithm — tint spells it "sky(3 tint)".`;
 
 /** A public-name override: one name for all targets, or per-target ("css", "figma"). */
@@ -216,7 +220,7 @@ export function buildLineage(resolved: ResolvedDefinition): Lineage {
   for (const role of resolved.roles) {
     role.perMode.forEach((entry, i) => {
       const target = entry.target;
-      if (target.kind === "role") return;
+      if (target.kind === "role" || target.kind === "literal") return;
       const key =
         target.kind === "constant"
           ? target.name
@@ -341,7 +345,8 @@ export type RefTarget =
   | { kind: "step"; system: string; selector: string }
   /** A declared constant; `alpha` present means it was taken through transparent(). */
   | { kind: "constant"; name: string; alpha?: number }
-  | { kind: "role"; group: string; role: string };
+  | { kind: "role"; group: string; role: string }
+  | { kind: "literal" };
 
 export type ResolvedRef = {
   ref: string;
@@ -690,6 +695,12 @@ export function resolveDefinition(
         );
         continue;
       }
+      if (LITERAL_FUNCTIONS.includes(path)) {
+        errors.push(
+          `system "${path}": that name is taken by the ${path}() color literal`,
+        );
+        continue;
+      }
       const renamedTo = RENAMED_ALGORITHMS[algoName];
       if (renamedTo) {
         errors.push(
@@ -906,6 +917,11 @@ export function resolveDefinition(
             continue;
           }
           refs = block.refs.map((r) => (r == null ? null : String(r)));
+        } else if (raw == null) {
+          errors.push(
+            `${context}: is empty — an unquoted # starts a YAML comment; quote the color, as "#000000"`,
+          );
+          continue;
         } else {
           errors.push(
             modeless
@@ -1036,18 +1052,20 @@ export function resolveDefinition(
     context: string,
     stack: string[],
   ): ResolvedRef | undefined {
-    if (ref.startsWith("#")) {
-      errors.push(
-        `${context}: raw hex is not allowed outside \`systems\` — point at a system or derive`,
-      );
-      return undefined;
-    }
     const call = parseCall(ref);
     if (call && call.selector.includes(",")) {
       errors.push(
         `${context}: "${ref}" separates with a comma — write spaces, as ${ref.replace(/\s*,\s*/g, " ")}`,
       );
       return undefined;
+    }
+    if (ref.startsWith("#") || LITERAL_FUNCTIONS.includes(call?.name ?? "")) {
+      try {
+        return { ref, target: { kind: "literal" }, color: parseColor(ref, context) };
+      } catch (error) {
+        errors.push((error as Error).message);
+        return undefined;
+      }
     }
     if (call?.name === "transparent") {
       // transparent(<constant> <opacity>): a declared color at an alpha,
@@ -1245,6 +1263,35 @@ export function resolveDefinition(
           `system "${system.system}" param \`${param.path}\` is outside ${gamut}, the project's gamut`,
         );
       }
+    }
+  }
+
+  const constantByValue = new Map(
+    statics.map((constant) => [formatAuthored(toOklab(constant.color), constant.color.alpha), constant.path]),
+  );
+  const literalUses = new Map<string, { ref: string; places: string[] }>();
+  for (const role of roles) {
+    const rolePath = role.segments.map((seg) => seg.name).join(".");
+    role.perMode.forEach((entry, i) => {
+      if (entry.target.kind !== "literal" || role.inherited[i]) return;
+      const place = `${rolePath}[${modes[i]}]`;
+      if (needsMapping(entry.color, gamut)) {
+        warnings.push(`${place}: ${entry.ref} is outside ${gamut}, the project's gamut`);
+      }
+      const value = formatAuthored(toOklab(entry.color), entry.color.alpha);
+      const constant = constantByValue.get(value);
+      if (constant) {
+        warnings.push(`${place}: ${entry.ref} is the constant \`${constant}\` — point at it`);
+        return;
+      }
+      const uses = literalUses.get(value) ?? { ref: entry.ref, places: [] };
+      uses.places.push(place);
+      literalUses.set(value, uses);
+    });
+  }
+  for (const { ref, places } of literalUses.values()) {
+    if (places.length > 1) {
+      warnings.push(`${ref} is written in ${places.join(" and ")} — name it in the palette`);
     }
   }
 

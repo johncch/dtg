@@ -188,8 +188,8 @@ function cssValueFor(
       };
     }
   }
-  // transparent() results and overlay steps have no primitive variable to
-  // point at; they inline their computed value.
+  // transparent() results, overlay steps and literals have no primitive
+  // variable to point at; they inline their computed value.
   return { css: formatColor(entry.color, "srgb"), inlined: true };
 }
 

@@ -61,11 +61,12 @@ export function discard(copy: WorkingCopy): WorkingCopy {
 /**
  * One color whose working state differs from the file's. A constant can
  * also be added (`from` null), renamed, or removed, and `target` then names
- * it as the file has it.
+ * it as the file has it. A moved constant is named as it is now.
  */
 export type Change =
   | { action: "set"; target: EditTarget; from: string | null; to: string }
   | { action: "rename"; target: ConstantTarget; to: ConstantTarget }
+  | { action: "move"; target: ConstantTarget }
   | { action: "remove"; target: ConstantTarget; from: string };
 
 const sameTarget = (a: EditTarget, b: EditTarget) =>
@@ -97,6 +98,7 @@ export function workingText(copy: WorkingCopy): {
 type Followed = {
   inFile: EditTarget | null;
   added: boolean;
+  moved: boolean;
   now: EditTarget | null;
   value: string | null;
   lastEdit: number;
@@ -116,7 +118,7 @@ export function changesOf(copy: WorkingCopy): Change[] {
     // A name another color was renamed away from is a new color if it comes back.
     const claimed = followed.some((color) => color.inFile != null && sameTarget(color.inFile, target));
     const inFile = !claimed && readValue(copy.diskText, target) != null ? target : null;
-    const color = { inFile, added: false, now: target, value: null, lastEdit: -1 };
+    const color = { inFile, added: false, moved: false, now: target, value: null, lastEdit: -1 };
     followed.push(color);
     return color;
   };
@@ -126,11 +128,12 @@ export function changesOf(copy: WorkingCopy): Change[] {
     if (edit.action === "add") color.added = true;
     if (edit.action === "set" || edit.action === "add") color.value = edit.value;
     else if (edit.action === "rename") color.now = renamedTarget(edit.target, edit.name);
+    else if (edit.action === "move") color.moved = true;
     else color.now = null;
   });
 
   const changes: { change: Change; lastEdit: number }[] = [];
-  for (const { inFile, added, now, value, lastEdit } of followed) {
+  for (const { inFile, added, moved, now, value, lastEdit } of followed) {
     const push = (change: Change) => changes.push({ change, lastEdit });
     if (inFile == null) {
       // A set on a param the file does not write adds it, as `add` does a constant.
@@ -143,6 +146,7 @@ export function changesOf(copy: WorkingCopy): Change[] {
       continue;
     }
     if (!sameTarget(now, inFile)) push({ action: "rename", target: inFile as ConstantTarget, to: now as ConstantTarget });
+    if (moved) push({ action: "move", target: now as ConstantTarget });
     if (value != null && value !== from) push({ action: "set", target: now, from, to: value });
   }
   return changes.sort((a, b) => a.lastEdit - b.lastEdit).map(({ change }) => change);

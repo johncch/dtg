@@ -1,7 +1,8 @@
 import type { ReactNode } from "react";
 import { formatColor, isOpaque, type Color } from "../src/color-math.js";
 import type { EditTarget } from "../src/edit.js";
-import { ColorTip } from "./ColorTip.js";
+import { ColorFacts, ColorTip } from "./ColorTip.js";
+import { LockIcon } from "./LockIcon.js";
 import { EDITABLE } from "./mode.js";
 import { paintCss } from "./paint.js";
 import { usePaletteColors } from "./palette-colors.js";
@@ -18,6 +19,7 @@ export function ColorChip({
   size = "regular",
   label = formatColor(color, "srgb"),
   edit,
+  onUnlock,
   children,
 }: {
   color: Color;
@@ -27,6 +29,8 @@ export function ColorChip({
   label?: string;
   /** Where an authored color is written, which makes the chip open the editor. Derived colors have none. */
   edit?: EditTarget;
+  /** Given while an editable color is locked; see `EditableChip`. */
+  onUnlock?: () => void;
   /** Shown under the value and part of the same hover target, e.g. the ref a role points at. */
   children?: ReactNode;
 }) {
@@ -49,7 +53,7 @@ export function ColorChip({
   );
   if (edit && EDITABLE) {
     return (
-      <EditableChip color={color} value={label} target={edit} className={className}>
+      <EditableChip color={color} value={label} target={edit} className={className} onUnlock={onUnlock}>
         {content}
       </EditableChip>
     );
@@ -66,6 +70,8 @@ export function EditableChip({
   value = formatColor(color, "srgb"),
   target,
   className,
+  tipInside = false,
+  onUnlock,
   children,
 }: {
   color: Color;
@@ -73,6 +79,10 @@ export function EditableChip({
   value?: string;
   target: EditTarget;
   className: string;
+  /** Opens the hover tooltip over the chip, for one large enough to hold it. */
+  tipInside?: boolean;
+  /** Given while the color is locked: the panel then shows the color and offers this, and becomes the editor once it is no longer given. */
+  onUnlock?: () => void;
   children: ReactNode;
 }) {
   const constants = usePaletteColors();
@@ -85,14 +95,30 @@ export function EditableChip({
       // ring on its first control would say it is.
       focus="panel"
       wrap={(button, open) => (
-        <ColorTip color={color} suppressed={open}>
+        <ColorTip color={color} suppressed={open} inside={tipInside}>
           {button}
         </ColorTip>
       )}
     >
-      {(panel) => (
-        <TargetValueEditor target={target} value={value} color={color} sources={sourcesFor(target)} constants={constants} panel={panel} />
-      )}
+      {(panel) =>
+        onUnlock ? (
+          <div className="ref-editor">
+            <div className="editor-head" {...panel.handle}>
+              <span className="ref-editor-heading locked-heading">
+                <LockIcon locked />
+                Locked –
+                <button type="button" className="locked-unlock" onClick={onUnlock}>
+                  unlock to edit
+                </button>
+              </span>
+              {panel.close}
+            </div>
+            <ColorFacts color={color} />
+          </div>
+        ) : (
+          <TargetValueEditor target={target} value={value} color={color} sources={sourcesFor(target)} constants={constants} panel={panel} />
+        )
+      }
     </Popup>
   );
 }

@@ -157,19 +157,85 @@ s:
   });
 });
 
-describe("rejects", () => {
-  test("raw hex outside systems", () => {
-    assert.throws(
-      () =>
-        withRoles(`
+describe("literals", () => {
+  test("a role can hold a hex or a color function", () => {
+    const r = withRoles(`
 s:
   d:
-    flat: ["#ff0000", "#ff0000"]
+    ink: ["#123456", oklch(0.5 0.1 30)]
+`);
+    assert.equal(r.roles[0].perMode[0].target.kind, "literal");
+    assert.equal(formatColor(r.roles[0].perMode[0].color, "srgb"), "#123456");
+    assert.equal(r.roles[0].perMode[1].target.kind, "literal");
+  });
+
+  test("emits as a value, not a reference", () => {
+    const r = withRoles(`
+s:
+  d:
+    ink: ["#123456", "#654321"]
+`);
+    assert.match(emitCss(r, "plain"), /--d-ink: #123456;/);
+    const dtcg = emitDtcg(r) as { s: { d: { ink: { $value: { hex: string } } } } };
+    assert.equal(dtcg.s.d.ink.$value.hex, "#123456");
+  });
+
+  test("the same literal written twice warns", () => {
+    const r = withRoles(`
+s:
+  d:
+    ink: ["#123456", "#654321"]
+    rule: ["#123456", "#abcdef"]
+`);
+    assert.ok(r.warnings.some((w) => /"?#123456"? is written in d\.ink\[light\] and d\.rule\[light\]/.test(w)));
+  });
+
+  test("a literal equal to a constant warns", () => {
+    const r = withRoles(`
+s:
+  d:
+    ink: ["#FFF", "#654321"]
+`);
+    assert.ok(r.warnings.some((w) => w.includes("is the constant `paper`")));
+  });
+
+  test("an inherited literal is not a repeat", () => {
+    const r = resolveDefinition(`
+dtg: 1
+modes: { light: {}, dim: { extends: light } }
+s:
+  ink: ["#123456"]
+`);
+    assert.ok(!r.warnings.some((w) => w.includes("is written in")));
+  });
+
+  test("a system cannot take a color function's name", () => {
+    assert.throws(
+      () =>
+        resolveDefinition(`
+dtg: 1
+palette: { paper: "#ffffff" }
+systems:
+  oklch: { algorithm: tint, params: { base: paper, tint: "#000000" } }
 `),
-      /raw hex is not allowed/,
+      /that name is taken by the oklch\(\) color literal/,
     );
   });
 
+  test("an unquoted hex is read as a comment and says so", () => {
+    assert.throws(
+      () =>
+        resolveDefinition(`
+dtg: 1
+s:
+  ink: #000000
+`),
+      /is empty — an unquoted # starts a YAML comment/,
+    );
+  });
+});
+
+describe("rejects", () => {
   test("a role with the wrong number of refs", () => {
     assert.throws(
       () =>

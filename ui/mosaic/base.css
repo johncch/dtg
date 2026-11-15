@@ -30,10 +30,12 @@
   --font-weight-medium: 500;
   --color-light-0: #fafdff;
   --color-light-1: #f8fbfd;
+  --color-light-2_5: #f4f7fa;
   --color-light-3: #f3f6f9;
   --color-light-5: #eef2f4;
   --color-light-6_5: #eaeef1;
   --color-light-8: #e6ebee;
+  --color-light-8_5: #e5eaed;
   --color-light-15: #d5dbdf;
   --color-light-20: #c8d0d4;
   --color-light-40: #96a2a9;
@@ -56,7 +58,6 @@
   --color-midnight-10: #1a1b1f;
   --color-midnight-12: #1f2024;
   --color-midnight-14: #242529;
-  --color-midnight-15: #26282b;
   --color-midnight-16: #292a2e;
   --color-theme-50: #f1f9fe;
   --color-theme-100: #e3f3fd;
@@ -91,10 +92,10 @@
   --color-surface-canvas: var(--surface-canvas);
   --color-surface-shell: var(--surface-shell);
   --color-surface-panel: var(--surface-panel);
+  --color-surface-dialog: var(--surface-dialog);
   --color-surface-card: var(--surface-card);
   --color-surface-card-subdued: var(--surface-card-subdued);
   --color-surface-floating: var(--surface-floating);
-  --color-surface-elevated: var(--surface-elevated);
   --color-surface-scrim: var(--surface-scrim);
   --color-surface-button: var(--surface-button);
   --color-surface-input: var(--surface-input);
@@ -133,6 +134,7 @@
   --color-shadow-1: var(--shadow-1);
   --color-shadow-2: var(--shadow-2);
   --color-shadow-3: var(--shadow-3);
+  --color-shadow-4: var(--shadow-4);
   --color-diff-added-line: var(--diff-added-line);
   --color-diff-added-text: var(--diff-added-text);
   --color-diff-removed-line: var(--diff-removed-line);
@@ -147,23 +149,25 @@
   --width-dialog-small: 27.5rem;
   --width-dialog-medium: 40rem;
   --width-dialog-large: 60rem;
+  --width-dialog-xlarge: 72rem;
   --radius-xs: 0.125rem;
   --radius-sm: 0.25rem;
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+  --radius-h6: 0.375rem;
   --font-weight-regular: 400;
 }
 :root {
   color-scheme: light;
-  --surface-canvas: var(--color-light-3);
+  --surface-canvas: var(--color-light-2_5);
   --surface-shell: var(--color-light-5);
   --surface-panel: var(--surface-shell);
+  --surface-dialog: var(--surface-canvas);
   --surface-card: var(--color-light-1);
   --surface-card-subdued: var(--color-light-3);
   --surface-floating: var(--surface-card);
-  --surface-elevated: var(--color-light-0);
-  --surface-scrim: rgba(0, 0, 0, 0.1);
+  --surface-scrim: rgba(0, 0, 0, 0.07);
   --surface-button: var(--color-light-6_5);
   --surface-input: rgba(0, 26, 40, 0.015);
   --surface-toggle: rgba(0, 26, 40, 0.12);
@@ -173,7 +177,7 @@
   --state-selected: var(--color-light-0);
   --state-selected-tint: var(--color-theme-200);
   --state-active: var(--color-light-8);
-  --state-button-hover: var(--color-light-8);
+  --state-button-hover: var(--color-light-8_5);
   --label: var(--color-dark-0);
   --label-secondary: var(--color-dark-30);
   --label-tertiary: var(--color-dark-60);
@@ -201,6 +205,7 @@
   --shadow-1: rgba(0, 0, 0, 0.05);
   --shadow-2: rgba(0, 0, 0, 0.1);
   --shadow-3: rgba(0, 0, 0, 0.15);
+  --shadow-4: rgba(0, 0, 0, 0.2);
   --diff-added-line: var(--color-emerald-100);
   --diff-added-text: var(--color-emerald-200);
   --diff-removed-line: var(--color-ruby-100);
@@ -211,11 +216,11 @@
   --surface-canvas: var(--color-dark-0);
   --surface-shell: var(--color-dark-1_5);
   --surface-panel: var(--surface-shell);
+  --surface-dialog: var(--surface-canvas);
   --surface-card: var(--color-dark-1);
   --surface-card-subdued: var(--color-dark-0);
   --surface-floating: var(--surface-card);
-  --surface-elevated: var(--color-dark-12);
-  --surface-scrim: rgba(0, 0, 0, 0.2);
+  --surface-scrim: rgba(0, 0, 0, 0.1);
   --surface-button: var(--color-dark-8);
   --surface-input: rgba(250, 253, 255, 0.02);
   --surface-toggle: rgba(250, 253, 255, 0.12);
@@ -250,9 +255,10 @@
   --separator-input-focus: var(--color-theme-600);
   --separator-toggle-hover: var(--color-theme-800);
   --separator-toggle-selected: var(--color-theme-700);
-  --shadow-1: rgba(0, 0, 0, 0.4);
-  --shadow-2: rgba(0, 0, 0, 0.5);
-  --shadow-3: rgba(0, 0, 0, 0.6);
+  --shadow-1: rgba(0, 0, 0, 0.3);
+  --shadow-2: rgba(0, 0, 0, 0.4);
+  --shadow-3: rgba(0, 0, 0, 0.5);
+  --shadow-4: rgba(0, 0, 0, 0.6);
   --diff-added-line: var(--color-emerald-950);
   --diff-added-text: var(--color-emerald-700);
   --diff-removed-line: var(--color-ruby-950);
@@ -262,10 +268,10 @@
   --surface-canvas: var(--color-midnight-0);
   --surface-shell: var(--color-midnight-3_5);
   --surface-panel: var(--surface-shell);
+  --surface-dialog: var(--surface-canvas);
   --surface-card: var(--color-midnight-5);
   --surface-card-subdued: var(--color-midnight-2_5);
   --surface-floating: var(--surface-card);
-  --surface-elevated: var(--color-midnight-15);
   --surface-button: var(--color-midnight-10);
   --surface-input: rgba(250, 253, 255, 0.04);
   --surface-toggle: rgba(250, 253, 255, 0.15);
@@ -279,6 +285,10 @@
   --separator-primary-translucent: rgba(250, 253, 255, 0.16);
   --separator-secondary: var(--color-midnight-10);
   --separator-secondary-translucent: rgba(250, 253, 255, 0.1);
+  --shadow-1: rgba(0, 0, 0, 0.4);
+  --shadow-2: rgba(0, 0, 0, 0.5);
+  --shadow-3: rgba(0, 0, 0, 0.6);
+  --shadow-4: rgba(0, 0, 0, 0.7);
 }
 @supports (color: color(display-p3 1 1 1)) {
   :root {
@@ -332,7 +342,7 @@
   align-items: center;
   gap: calc(0.25rem * 3);
   overflow: hidden;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   padding-inline: calc(0.25rem * 2);
   text-align: left;
   font-size: var(--text-body);
@@ -532,7 +542,7 @@
   border-color: var(--separator-secondary);
   background-color: var(--surface-button);
   color: var(--label);
-  box-shadow: 0px 1px 1px var(--color-shadow-3);
+  box-shadow: 0px 1px 1px var(--color-shadow-4), 0px 1px 6px -1px var(--color-shadow-2);
   &:hover {
     @media (hover: hover) {
       &:not(*:disabled) {
@@ -542,14 +552,24 @@
   }
   &:active {
     &:not(*:disabled) {
-      box-shadow: 0px 0px 1px var(--color-shadow-3);
+      --tw-translate-y: 1px;
+      translate: var(--tw-translate-x) var(--tw-translate-y);
     }
+  }
+  &:active {
+    &:not(*:disabled) {
+      box-shadow: 0px 0px 1px var(--color-shadow-4);
+    }
+  }
+  &[data-state="open"] {
+    --tw-translate-y: 1px;
+    translate: var(--tw-translate-x) var(--tw-translate-y);
   }
   &[data-state="open"] {
     background-color: var(--state-button-hover);
   }
   &[data-state="open"] {
-    box-shadow: 0px 0px 1px var(--color-shadow-3);
+    box-shadow: 0px 0px 1px var(--color-shadow-4);
   }
 }
 :where(.mosaic-base :focus-visible) {
@@ -589,11 +609,29 @@
   inherits: false;
   initial-value: solid;
 }
+@property --tw-translate-x {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-translate-y {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
+@property --tw-translate-z {
+  syntax: "*";
+  inherits: false;
+  initial-value: 0;
+}
 @layer properties {
   @supports ((-webkit-hyphens: none) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color:rgb(from red r g b)))) {
     *, ::before, ::after, ::backdrop {
       --tw-font-weight: initial;
       --tw-border-style: solid;
+      --tw-translate-x: 0;
+      --tw-translate-y: 0;
+      --tw-translate-z: 0;
     }
   }
 }

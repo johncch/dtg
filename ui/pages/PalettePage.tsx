@@ -1,19 +1,24 @@
-import { useEffect, useRef, useState } from "react";
-import { colorFromOklab, formatAuthored, formatColor, needsMapping, oklchToOklab, type Oklab } from "../../src/color-math.js";
+import { Plus, SlidersHorizontal, Target, X } from "lucide-react";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
+import { colorFromOklab, formatAuthored, oklabToOklch, oklchToOklab, toOklab, type Oklab } from "../../src/color-math.js";
 import type { ConstantTarget, Edit } from "../../src/edit.js";
-import type { Color } from "../../src/color-math.js";
+import { addToPalette, harmonizePalette, harmonyHues, rollPalette, type Harmony, type RollStyle } from "../../src/palette-roll.js";
 import type { SnapshotConstant } from "../../src/snapshot.js";
 import type { Change } from "../../src/working-copy.js";
-import { EditableChip } from "../ColorChip.js";
+import { ColorChip, EditableChip } from "../ColorChip.js";
 import { ColorTip } from "../ColorTip.js";
+import { GripIcon } from "../GripIcon.js";
+import { LockIcon } from "../LockIcon.js";
+import { Hint } from "../Hint.js";
 import { EDITABLE } from "../mode.js";
 import { colorNameOf } from "../names.js";
 import { paintCss } from "../paint.js";
+import { PaletteExplorer } from "../PaletteExplorer.js";
+import type { PaletteEntry } from "../PalettePlots.js";
 import { Popup, type PopupPanel } from "../Popup.js";
 import { useTrying } from "../preview.js";
+import { TrashIcon } from "../TrashIcon.js";
 import { labelColorOn } from "../Strip.js";
-
-type PaletteEntry = { name: string; path: string; written: string; color: Color };
 
 /** A group of constants: `group` is its path in `systems`. */
 type Palette = { group: string; entries: PaletteEntry[] };
@@ -35,17 +40,25 @@ export function palettesOf(constants: SnapshotConstant[]): Palette[] {
 /** Where a new entry's name comes from when the color names cannot be loaded. */
 const UNNAMED = "color";
 
-/**
- * Any hue, at a lightness and chroma that read as a color rather than a gray
- * or a near-black. Chroma comes down until sRGB holds it, so the new entry
- * is written as hex.
- */
-function randomColor(): Oklab {
-  const L = 0.5 + Math.random() * 0.35;
-  const H = Math.random() * 360;
-  let C = 0.06 + Math.random() * 0.14;
-  while (C > 0 && needsMapping(colorFromOklab(oklchToOklab([L, C, H])), "srgb")) C -= 0.005;
-  return oklchToOklab([L, Math.max(C, 0), H]);
+const ROLL_STYLES: { value: RollStyle; label: string }[] = [
+  { value: "anything", label: "Anything" },
+  { value: "tone", label: "Same lightness and chroma" },
+];
+const HARMONIES: { value: Harmony; label: string }[] = [
+  { value: "analogous", label: "Analogous" },
+  { value: "complementary", label: "Complementary" },
+  { value: "triad", label: "Triad" },
+  { value: "even", label: "Evenly spaced" },
+];
+const ROLL_STYLE_KEY = "dtg.palette.roll-style";
+
+function storedRollStyle(): RollStyle {
+  try {
+    const stored = localStorage.getItem(ROLL_STYLE_KEY);
+    return ROLL_STYLES.find((style) => style.value === stored)?.value ?? "anything";
+  } catch {
+    return "anything";
+  }
 }
 
 const CONSTANT_KEY = /^[A-Za-z][\w-]*$/;
@@ -54,7 +67,7 @@ const CONSTANT_KEY = /^[A-Za-z][\w-]*$/;
 function takenIn(group: string, written: string[]): string[] {
   const prefix = `${group}.`;
   const held = written.filter((path) => path.startsWith(prefix)).map((path) => path.slice(prefix.length).split(".")[0]);
-  return [...new Set(["alias", "emit", ...held])];
+  return [...new Set(["alias", "emit", "description", ...held])];
 }
 
 /** A color's name as a constant's key: "Blue Whale" → `blue-whale`, numbered when the set already has it. */
@@ -69,6 +82,31 @@ function keyFor(name: string, taken: string[]): string {
   let key = base;
   for (let n = 2; taken.includes(key); n++) key = `${base}-${n}`;
   return key;
+}
+
+type SwatchSize = "small" | "medium" | "large";
+const SWATCH_SIZES: { value: SwatchSize; label: string }[] = [
+  { value: "small", label: "List" },
+  { value: "medium", label: "Grid" },
+  { value: "large", label: "Strip" },
+];
+const SWATCH_SIZE_KEY = "dtg.palette.swatch-size";
+
+function storedSwatchSize(): SwatchSize {
+  try {
+    const stored = localStorage.getItem(SWATCH_SIZE_KEY);
+    return SWATCH_SIZES.find((size) => size.value === stored)?.value ?? "large";
+  } catch {
+    return "large";
+  }
+}
+
+function storeSwatchSize(size: SwatchSize) {
+  try {
+    localStorage.setItem(SWATCH_SIZE_KEY, size);
+  } catch {
+    // An embedded or private page may refuse storage; the size then lasts until reload.
+  }
 }
 
 function isTextField(target: EventTarget | null): boolean {
@@ -102,29 +140,223 @@ export function PalettePage({
   written: string[];
   changes: Change[];
 }) {
-  const { commitStep } = useTrying();
+  const { commitStep, refusal } = useTrying();
   const { added, isLocked, toggle } = useLocks(changes);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [swatchSize, setSwatchSize] = useState(storedSwatchSize);
+  const [busy, setBusy] = useState(false);
+  const [rollStyle, setRollStyle] = useState(storedRollStyle);
+  /** The harmony last applied, whose arms the wheel shows until the colors are rolled. */
+  const [shownHarmony, setShownHarmony] = useState<{ base: string; offsets: number[] } | null>(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const toolsId = useId();
+  const toolsToggle = useRef<HTMLButtonElement>(null);
+  const toolsClose = useRef<HTMLButtonElement>(null);
+  const previousToolsOpen = useRef(toolsOpen);
+  const operating = useRef(false);
+  const row = useRef<HTMLDivElement>(null);
+  /** The order shown while a color is dragged; the definition changes only when it is dropped. */
+  const [dragOrder, setDragOrder] = useState<string[] | null>(null);
+  const [dragged, setDragged] = useState<string | null>(null);
+  const moveTo = (path: string, order: string[]) => {
+    const index = order.indexOf(path);
+    const after = index === 0 ? null : order[index - 1].slice(palette.group.length + 1);
+    commitStep([{ action: "move", target: { kind: "constant", path }, after }]);
+  };
+  const entryElements = () => [...(row.current?.querySelectorAll<HTMLElement>("[data-path]") ?? [])];
+  /** Where an entry is laid out, in the viewport: its place in the row, whatever transform is moving it. */
+  const layoutBox = (element: HTMLElement) => {
+    const rowBox = row.current!.getBoundingClientRect();
+    const left = rowBox.left + element.offsetLeft - row.current!.offsetLeft;
+    const top = rowBox.top + element.offsetTop - row.current!.offsetTop;
+    return { left, top, right: left + element.offsetWidth, bottom: top + element.offsetHeight };
+  };
+  const dragging = useRef<{ path: string; grabbed: { x: number; y: number }; origin: { left: number; top: number }; pointer: { x: number; y: number } } | null>(null);
+  const boxesBeforeReorder = useRef(new Map<string, { left: number; top: number }>());
+  const followPointer = () => {
+    const drag = dragging.current;
+    const element = drag && entryElements().find((entry) => entry.dataset.path === drag.path);
+    if (!drag || !element) return;
+    const box = layoutBox(element);
+    const x = drag.pointer.x - drag.grabbed.x - (box.left - drag.origin.left);
+    const y = drag.pointer.y - drag.grabbed.y - (box.top - drag.origin.top);
+    element.style.transform = `translate(${x}px, ${y}px)`;
+  };
+  const slide = (element: HTMLElement, from: string) => {
+    const duration = matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 180;
+    return element.animate([{ transform: from }, { transform: "none" }], { duration, easing: "ease-out" });
+  };
+  useLayoutEffect(() => {
+    followPointer();
+    for (const element of entryElements()) {
+      const before = boxesBeforeReorder.current.get(element.dataset.path!);
+      if (!before || element.dataset.path === dragging.current?.path) continue;
+      const box = layoutBox(element);
+      if (before.left !== box.left || before.top !== box.top) {
+        slide(element, `translate(${before.left - box.left}px, ${before.top - box.top}px)`);
+      }
+    }
+    boxesBeforeReorder.current.clear();
+  }, [dragOrder]);
+  useEffect(() => { setDragOrder(null); }, [palette.entries, refusal]);
+  const startDrag = (path: string, pointer: { x: number; y: number }) => {
+    const original = palette.entries.map((entry) => entry.path);
+    const element = entryElements().find((entry) => entry.dataset.path === path);
+    if (!element) return;
+    let order = original;
+    dragging.current = { path, grabbed: pointer, origin: layoutBox(element), pointer };
+    setDragged(path);
+    setDragOrder(order);
+    const onMove = (event: PointerEvent) => {
+      dragging.current!.pointer = { x: event.clientX, y: event.clientY };
+      followPointer();
+      // Places are tested where entries are laid out, not where they are drawn: one sliding out from under the pointer would otherwise swap straight back.
+      const over = entryElements().find((entry) => {
+        const box = layoutBox(entry);
+        return event.clientX >= box.left && event.clientX < box.right && event.clientY >= box.top && event.clientY < box.bottom;
+      })?.dataset.path;
+      if (over == null || over === path) return;
+      const next = order.filter((other) => other !== path);
+      next.splice(order.indexOf(over), 0, path);
+      order = next;
+      for (const entry of entryElements()) boxesBeforeReorder.current.set(entry.dataset.path!, layoutBox(entry));
+      setDragOrder(next);
+    };
+    const onEnd = (event: PointerEvent) => {
+      removeEventListener("pointermove", onMove);
+      removeEventListener("pointerup", onEnd);
+      removeEventListener("pointercancel", onEnd);
+      dragging.current = null;
+      const dropped = entryElements().find((entry) => entry.dataset.path === path);
+      const moved = event.type === "pointerup" && order.some((other, index) => other !== original[index]);
+      if (dropped) {
+        const from = dropped.style.transform;
+        const drawn = dropped.getBoundingClientRect();
+        dropped.style.transform = "";
+        if (moved) slide(dropped, from);
+        else boxesBeforeReorder.current.set(path, { left: drawn.left, top: drawn.top });
+      }
+      if (moved) moveTo(path, order);
+      else {
+        for (const entry of entryElements()) {
+          if (entry !== dropped) boxesBeforeReorder.current.set(entry.dataset.path!, layoutBox(entry));
+        }
+        setDragOrder(null);
+      }
+      setTimeout(() => setDragged((current) => (current === path && !dragging.current ? null : current)), 180);
+    };
+    addEventListener("pointermove", onMove);
+    addEventListener("pointerup", onEnd);
+    addEventListener("pointercancel", onEnd);
+  };
+  const nudge = (path: string, by: -1 | 1) => {
+    const order = palette.entries.map((entry) => entry.path);
+    const index = order.indexOf(path);
+    const to = index + by;
+    if (to < 0 || to >= order.length) return;
+    order.splice(index, 1);
+    order.splice(to, 0, path);
+    moveTo(path, order);
+  };
+  const shownEntries = dragOrder
+    ? dragOrder.flatMap((path) => palette.entries.find((entry) => entry.path === path) ?? [])
+    : palette.entries;
   const taken = takenIn(palette.group, written);
+  const add = async (color?: Oklab, after?: string) => {
+    if (operating.current) return;
+    operating.current = true;
+    setBusy(true);
+    try {
+      const lab = color ?? addToPalette(
+        palette.entries.map((entry) => ({ path: entry.path, lab: toOklab(entry.color), locked: isLocked(entry.path) })),
+        rollStyle,
+        selected,
+      );
+      const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, taken);
+      const path = `${palette.group}.${key}`;
+      commitStep([{ action: "add", target: { kind: "constant", path }, value: formatAuthored(lab), after }]);
+    } finally {
+      operating.current = false;
+      setBusy(false);
+    }
+  };
   /**
    * Every unlocked color gets a new random one. A color the file does not
    * have yet is named after its color, so it is renamed along with it; once
    * saved, its name is frozen, since other lines may point at it.
    */
-  const roll = async () => {
-    const edits: Edit[] = [];
-    const names = [...taken];
-    for (const entry of palette.entries) {
-      if (isLocked(entry.path)) continue;
-      const lab = randomColor();
-      const target: ConstantTarget = { kind: "constant", path: entry.path };
-      edits.push({ action: "set", target, value: formatAuthored(lab) });
-      if (!added(entry.path)) continue;
-      const others = names.filter((name) => name !== entry.name);
-      const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, others);
-      if (key === entry.name) continue;
-      edits.push({ action: "rename", target, name: key });
-      names.splice(names.indexOf(entry.name), 1, key);
+  const roll = async (style = rollStyle) => {
+    if (operating.current) return;
+    setShownHarmony(null);
+    operating.current = true;
+    setBusy(true);
+    try {
+      const edits: Edit[] = [];
+      const names = [...taken];
+      // A style falls back on the first locked color as its base; selecting it shows which color that was.
+      const base = style === "anything" ? selected : (selectedEntry ?? firstLocked)?.path ?? null;
+      let nextSelected = base;
+      const rolled = rollPalette(
+        palette.entries.map((entry) => ({ path: entry.path, lab: toOklab(entry.color), locked: isLocked(entry.path) })),
+        style,
+        base,
+      );
+      for (const entry of palette.entries) {
+        const lab = rolled.get(entry.path);
+        if (!lab) continue;
+        const target: ConstantTarget = { kind: "constant", path: entry.path };
+        edits.push({ action: "set", target, value: formatAuthored(lab) });
+        if (!added(entry.path)) continue;
+        const others = names.filter((name) => name !== entry.name);
+        const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, others);
+        if (key === entry.name) continue;
+        edits.push({ action: "rename", target, name: key });
+        names.splice(names.indexOf(entry.name), 1, key);
+        if (base === entry.path) nextSelected = `${palette.group}.${key}`;
+      }
+      if (edits.length > 0) commitStep(edits);
+      setSelected(nextSelected);
+    } finally {
+      operating.current = false;
+      setBusy(false);
     }
+  };
+  const chooseRollStyle = (style: RollStyle) => {
+    setRollStyle(style);
+    try {
+      localStorage.setItem(ROLL_STYLE_KEY, style);
+    } catch {
+      // The choice still holds for this visit.
+    }
+    roll(style);
+  };
+  const selectedEntry = palette.entries.find((entry) => entry.path === selected);
+  const firstLocked = palette.entries.find((entry) => isLocked(entry.path));
+  const harmonyBase = selectedEntry ?? firstLocked ?? palette.entries[0];
+  const harmonyBaseLabel = !harmonyBase ? "none"
+    : harmonyBase === selectedEntry ? harmonyBase.name
+      : `${harmonyBase.name} (${harmonyBase === firstLocked ? "first locked" : "first color"})`;
+  const rollColors = palette.entries.map((entry) => ({ path: entry.path, lab: toOklab(entry.color), locked: isLocked(entry.path) }));
+  // The arms stay around the base they were drawn for, whatever is selected since.
+  const hueOfEntry = (entry: PaletteEntry) => oklabToOklch(toOklab(entry.color))[2];
+  const armsBase = shownHarmony && palette.entries.find((entry) => entry.path === shownHarmony.base);
+  // Kept as angles from the base, so the arms turn with it as one piece and are not worked out afresh from colors that have since moved.
+  const harmonyGuides = shownHarmony && armsBase ? shownHarmony.offsets.map((offset) => (hueOfEntry(armsBase) + offset + 360) % 360) : [];
+  const harmonize = (harmony: Harmony) => {
+    if (operating.current || !harmonyBase) return;
+    const moved = harmonizePalette(rollColors, harmony, harmonyBase.path);
+    setShownHarmony({
+      base: harmonyBase.path,
+      offsets: harmonyHues(rollColors, harmony, harmonyBase.path).map((hue) => hue - hueOfEntry(harmonyBase)),
+    });
+    const edits: Edit[] = [];
+    for (const entry of palette.entries) {
+      const lab = moved.get(entry.path);
+      if (!lab) continue;
+      const value = formatAuthored(lab, entry.color.alpha);
+      if (value !== entry.written) edits.push({ action: "set", target: { kind: "constant", path: entry.path }, value });
+    }
+    setSelected(harmonyBase.path);
     if (edits.length > 0) commitStep(edits);
   };
   const latestRoll = useRef(roll);
@@ -135,12 +367,20 @@ export function PalettePage({
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== " " || event.repeat || event.metaKey || event.ctrlKey || event.altKey) return;
       if (isTextField(event.target) || document.querySelector(".popover")) return;
+      if (event.target instanceof Element && event.target.closest(".palette-tools-toggle, .palette-tools-close, .palette-entry-add, .palette-empty-add, .palette-roll-style, .palette-harmony, .palette-visual-control")) return;
       event.preventDefault();
       latestRoll.current();
     };
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, []);
+
+
+  useEffect(() => {
+    if (previousToolsOpen.current === toolsOpen) return;
+    previousToolsOpen.current = toolsOpen;
+    (toolsOpen ? toolsClose : toolsToggle).current?.focus();
+  }, [toolsOpen]);
 
   return (
     <>
@@ -151,129 +391,322 @@ export function PalettePage({
             palette
           </span>
         </h1>
+        <div className="palette-view-controls palette-swatch-size" role="group" aria-label="Palette layout">
+          {SWATCH_SIZES.map(({ value, label }) => (
+            <button
+              key={value}
+              type="button"
+              className="palette-view-mode"
+              aria-pressed={swatchSize === value}
+              onClick={() => { setSwatchSize(value); storeSwatchSize(value); }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <Hint text="Settings">
+          <button
+            ref={toolsToggle}
+            type="button"
+            className="palette-tools-toggle"
+            aria-label="Palette settings"
+            aria-expanded={toolsOpen}
+            aria-controls={toolsId}
+            data-state={toolsOpen ? "open" : "closed"}
+            onClick={() => setToolsOpen(!toolsOpen)}
+          >
+            <SlidersHorizontal size={16} aria-hidden />
+          </button>
+        </Hint>
         {EDITABLE && (
           <button
             type="button"
-            className="btn"
-            disabled={!palette.entries.some((entry) => !isLocked(entry.path))}
+            className="btn btn-primary"
+            disabled={busy || !palette.entries.some((entry) => !isLocked(entry.path))}
             title="Give every unlocked color a new random color"
-            onClick={roll}
+            onClick={() => roll()}
           >
-            randomize
+            Randomize
           </button>
         )}
       </div>
       {note && <p className="note">{note}</p>}
-      <p className="desc">
-        {!EDITABLE
-          ? "A group of constants, looked at together."
-          : "A group of constants, looked at together. Space rolls every unlocked color; a color the file has starts locked, one added since the last save starts unlocked and takes the name of each color it rolls to. Saving freezes a name."}
-      </p>
-      <div className="palette-row">
-        {palette.entries.map((entry) => (
-          <PaletteEntry
-            key={entry.path}
-            entry={entry}
-            taken={taken}
-            locked={isLocked(entry.path)}
-            onToggleLock={() => toggle(entry.path)}
-          />
-        ))}
-        {EDITABLE && <AddColor group={palette.group} taken={taken} />}
-      </div>
+      {refusal && <p className="ref-error" role="alert">{refusal}</p>}
+      {EDITABLE && palette.entries.length === 0 && (
+        <p>
+          <button type="button" className="btn palette-empty-add" disabled={busy} onClick={() => add()}>
+            Add a color
+          </button>
+        </p>
+      )}
+      {swatchSize === "small" ? (
+        <table>
+          <thead>
+            <tr>
+              <th>Path</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {palette.entries.map((entry) => (
+              <tr key={entry.path}>
+                <td>
+                  <code>{entry.path}</code>
+                </td>
+                <td>
+                  <ColorChip
+                    color={entry.color}
+                    label={entry.written}
+                    edit={{ kind: "constant", path: entry.path }}
+                    onUnlock={isLocked(entry.path) ? () => toggle(entry.path) : undefined}
+                  />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : (
+        <div ref={row} className={`palette-row palette-row-${swatchSize}${dragged ? " is-reordering" : ""}`}>
+          {shownEntries.map((entry) => (
+            <PaletteEntry
+              key={entry.path}
+              entry={entry}
+              taken={taken}
+              locked={isLocked(entry.path)}
+              large={swatchSize === "large"}
+              onToggleLock={() => toggle(entry.path)}
+              onAddAfter={() => add(undefined, entry.name)}
+              dragging={entry.path === dragged}
+              onDragStart={(pointer) => startDrag(entry.path, pointer)}
+              onNudge={(by) => nudge(entry.path, by)}
+              selected={entry.path === selected}
+              onToggleSelect={() => {
+                if (entry.path === selected) {
+                  setSelected(null);
+                  return;
+                }
+                setSelected(entry.path);
+                setToolsOpen(true);
+              }}
+              onRename={(name) => { if (selected === entry.path) setSelected(`${palette.group}.${name}`); }}
+            />
+          ))}
+        </div>
+      )}
+      <section
+        id={toolsId}
+        className="palette-tools"
+        aria-label="Palette settings"
+        hidden={!toolsOpen}
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && !document.querySelector(".popover")) {
+            event.preventDefault();
+            setToolsOpen(false);
+          }
+        }}
+      >
+        {toolsOpen && (
+          <>
+            <button
+              ref={toolsClose}
+              type="button"
+              className="editor-close palette-tools-close"
+              aria-label="Close palette settings"
+              onClick={() => setToolsOpen(false)}
+            >
+              <X size={16} aria-hidden />
+            </button>
+            <h2 className="palette-tools-title">Settings</h2>
+            <div className="palette-tools-body">
+              {EDITABLE && (
+                <section className="palette-tools-section">
+                  <h3>Randomize</h3>
+                  <div className="palette-tools-fields">
+                    <label htmlFor={`${toolsId}-style`}>Style</label>
+                    <select
+                      id={`${toolsId}-style`}
+                      className="palette-roll-style"
+                      value={rollStyle}
+                      disabled={busy}
+                      onChange={(event) => chooseRollStyle(event.target.value as RollStyle)}
+                    >
+                      {ROLL_STYLES.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </div>
+                </section>
+              )}
+              {EDITABLE && (
+                <section className="palette-tools-section">
+                  <h3>Harmonize</h3>
+                  <div className="palette-tools-fields">
+                    <span>Base</span>
+                    <span>{harmonyBaseLabel}</span>
+                  </div>
+                  <div className="palette-harmonies">
+                    {HARMONIES.map(({ value, label }) => (
+                      <button
+                        key={value}
+                        type="button"
+                        className="btn btn-small palette-harmony"
+                        disabled={busy || !palette.entries.some((entry) => entry !== harmonyBase && !isLocked(entry.path))}
+                        onClick={() => harmonize(value)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+              <section className="palette-tools-section">
+                <h3>Colors</h3>
+                <PaletteExplorer
+                  entries={palette.entries}
+                  selected={selected}
+                  onSelect={setSelected}
+                  onAdd={(channels) => add(oklchToOklab(channels))}
+                  isLocked={isLocked}
+                  guides={harmonyGuides}
+                />
+              </section>
+            </div>
+          </>
+        )}
+      </section>
     </>
   );
 }
 
-/** A random color at the end of the group, named after the nearest named color, to be picked from there. */
-function AddColor({ group, taken }: { group: string; taken: string[] }) {
-  const { commit } = useTrying();
-  const add = async () => {
-    const lab = randomColor();
-    const name = (await colorNameOf(colorFromOklab(lab))) ?? UNNAMED;
-    const key = keyFor(name, taken);
-    commit({
-      action: "add",
-      target: { kind: "constant", path: `${group}.${key}` },
-      value: formatAuthored(lab),
-    });
-  };
-  return (
-    <button type="button" className="palette-add" aria-label={`Add a color to ${group}`} onClick={add}>
-      +
-    </button>
-  );
-}
-
-/** The color opens the picker; under it, the name opens a rename, the lock keeps it out of a roll, and × removes the entry. */
 function PaletteEntry({
   entry,
   taken,
   locked,
+  large,
   onToggleLock,
+  onAddAfter,
+  dragging,
+  onDragStart,
+  onNudge,
+  selected,
+  onToggleSelect,
+  onRename,
 }: {
   entry: PaletteEntry;
   taken: string[];
   locked: boolean;
+  /** The swatch is big enough to carry its labels and controls on the color. */
+  large: boolean;
   onToggleLock: () => void;
+  onAddAfter: () => void;
+  dragging: boolean;
+  onDragStart: (pointer: { x: number; y: number }) => void;
+  onNudge: (by: -1 | 1) => void;
+  selected: boolean;
+  onToggleSelect: () => void;
+  onRename: (name: string) => void;
 }) {
   const { commit } = useTrying();
   const target: ConstantTarget = { kind: "constant", path: entry.path };
-  const swatch = (
-    <>
-      <span className="palette-entry-fill" style={{ background: paintCss(entry.color) }} />
-      <span className="palette-entry-value" style={{ color: labelColorOn(entry.color) }}>
-        {formatColor(entry.color, "srgb")}
-      </span>
-    </>
+  const swatch = <span className="palette-entry-fill" style={{ background: paintCss(entry.color) }} />;
+  const value = <span className="palette-entry-value">{entry.written}</span>;
+  const onColor = { "--palette-entry-on": labelColorOn(entry.color) } as CSSProperties;
+  const hintSide = "left";
+  const selectControl = (
+    <button
+      type="button"
+      className="palette-entry-select"
+      aria-label={selected ? `${entry.name} is the base; clear it` : `Set ${entry.name} as the base`}
+      aria-pressed={selected}
+      onClick={onToggleSelect}
+    >
+      <Target size={14} aria-hidden />
+    </button>
+  );
+  const select = <Hint text={selected ? "Base" : "Set base"}>{selectControl}</Hint>;
+  const handle = (
+    <Hint text="Drag to reorder" side={hintSide}>
+      <button
+        type="button"
+        className="palette-entry-handle"
+        aria-label={`Move ${entry.name}; Left and Right arrows move it too`}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          onDragStart({ x: event.clientX, y: event.clientY });
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowLeft") onNudge(-1);
+          if (event.key === "ArrowRight") onNudge(1);
+        }}
+      >
+        <GripIcon />
+      </button>
+    </Hint>
   );
   if (!EDITABLE) {
     return (
-      <div className="palette-entry">
-        <ColorTip color={entry.color}>
-          <span className="palette-entry-color">{swatch}</span>
+      <div className={`palette-entry${selected ? " is-selected" : ""}`} style={onColor}>
+        <ColorTip color={entry.color} inside={large}>
+          <div className="palette-entry-color">{swatch}</div>
         </ColorTip>
         <div className="palette-entry-foot">
+          {select}
+          {value}
           <span className="palette-entry-name">{entry.name}</span>
         </div>
       </div>
     );
   }
   return (
-    <div className="palette-entry">
-      <EditableChip color={entry.color} value={entry.written} target={target} className="palette-entry-color">
+    <div className={`palette-entry${selected ? " is-selected" : ""}${dragging ? " is-dragging" : ""}`} style={onColor} data-path={entry.path}>
+      <EditableChip color={entry.color} value={entry.written} target={target} className="palette-entry-color" tipInside={large} onUnlock={locked ? onToggleLock : undefined}>
         {swatch}
       </EditableChip>
       <div className="palette-entry-foot">
+        <span className="palette-entry-actions">
+          <Hint text={locked ? "Unlock" : "Lock"} side={hintSide}>
+            <button
+              type="button"
+              className={locked ? "palette-entry-lock palette-entry-locked" : "palette-entry-lock"}
+              aria-label={locked ? `Unlock ${entry.name}` : `Lock ${entry.name}`}
+              aria-pressed={locked}
+              onClick={onToggleLock}
+            >
+              <LockIcon locked={locked} />
+            </button>
+          </Hint>
+          {handle}
+          <Hint text={locked ? "Unlock to delete" : "Delete"} side={hintSide}>
+            <button
+              type="button"
+              className="palette-entry-remove"
+              aria-label={`Remove ${entry.name}`}
+              // Not `disabled`: a disabled button gets no pointer events, so its hint would never show.
+              aria-disabled={locked}
+              onClick={() => { if (!locked) commit({ action: "remove", target }); }}
+            >
+              <TrashIcon />
+            </button>
+          </Hint>
+        </span>
+        {select}
+        {value}
         <Popup title="Rename" className="palette-entry-name" label={entry.name} focus="field">
-          {(panel) => <Rename target={target} name={entry.name} taken={taken} panel={panel} />}
+          {(panel) => <Rename target={target} name={entry.name} taken={taken} panel={panel} onRename={onRename} />}
         </Popup>
-        <button
-          type="button"
-          className={locked ? "palette-entry-lock palette-entry-locked" : "palette-entry-lock"}
-          aria-label={locked ? `Unlock ${entry.name}` : `Lock ${entry.name}`}
-          aria-pressed={locked}
-          title={locked ? "Locked: a roll leaves it alone" : "Unlocked: a roll gives it a new color"}
-          onClick={onToggleLock}
-        >
-          <LockIcon locked={locked} />
-        </button>
-        <button
-          type="button"
-          className="palette-entry-remove"
-          aria-label={`Remove ${entry.name}`}
-          title="Remove"
-          onClick={() => commit({ action: "remove", target })}
-        >
-          ×
-        </button>
       </div>
+      <span className="palette-entry-gap">
+        <Hint text="Add color">
+          <button type="button" className="palette-entry-add" aria-label={`Add a color after ${entry.name}`} onClick={onAddAfter}>
+            <Plus aria-hidden />
+          </button>
+        </Hint>
+      </span>
     </div>
   );
 }
 
 /** A new name for the entry, kept on dismiss like every other edit; one that cannot be used is dropped. */
-function Rename({ target, name, taken, panel }: { target: ConstantTarget; name: string; taken: string[]; panel: PopupPanel }) {
+function Rename({ target, name, taken, panel, onRename }: { target: ConstantTarget; name: string; taken: string[]; panel: PopupPanel; onRename: (name: string) => void }) {
   const { commit } = useTrying();
   const [text, setText] = useState(name);
   const wanted = text.trim();
@@ -290,7 +723,10 @@ function Rename({ target, name, taken, panel }: { target: ConstantTarget; name: 
   latest.current = rename;
   useEffect(
     () => () => {
-      if (latest.current) commit({ action: "rename", target, name: latest.current });
+      if (latest.current && !panel.escaped()) {
+        commit({ action: "rename", target, name: latest.current });
+        onRename(latest.current);
+      }
     },
     [],
   );
@@ -318,14 +754,5 @@ function Rename({ target, name, taken, panel }: { target: ConstantTarget; name: 
       />
       {problem && <p className="ref-error">{problem}</p>}
     </form>
-  );
-}
-
-function LockIcon({ locked }: { locked: boolean }) {
-  return (
-    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden fill="none" stroke="currentColor" strokeWidth="1.3">
-      <rect x="2" y="5.5" width="8" height="5.5" rx="1" fill={locked ? "currentColor" : "none"} />
-      <path d={locked ? "M4 5.5V3.75a2 2 0 0 1 4 0V5.5" : "M4 5.5V3.75a2 2 0 0 1 3.9-.6"} />
-    </svg>
   );
 }

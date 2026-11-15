@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import {
+  formatHex,
   formatIn,
+  HEX_SPACE,
   maxChroma,
   NO_HUE_BELOW_CHROMA,
   oklabToLinear,
@@ -254,7 +256,7 @@ function keepingHue(next: Oklch, current: Oklch): Oklch {
 /** The color as numbers: a notation to read it in, then that notation's boxes. */
 function Values({ value, onChange }: { value: Oklch; onChange: (next: Oklch) => void }) {
   const [format, setFormat] = useState(savedFormat);
-  const gamut = format === "hex" ? "srgb" : NOTATIONS[format].gamut;
+  const gamut = format === "hex" ? HEX_SPACE : NOTATIONS[format].gamut;
   const approximate = isExactIn(value, gamut) ? undefined : gamut === "srgb" ? SRGB_ONLY : P3_ONLY;
 
   return (
@@ -369,7 +371,7 @@ function HexField({
   note: string | undefined;
   onChange: (next: Oklch) => void;
 }) {
-  const hex = formatIn(oklchToOklab(value), "srgb");
+  const hex = formatHex(oklchToOklab(value));
   const [draft, setDraft] = useState<{ text: string; standsFor: string } | null>(null);
   return (
     <input
@@ -385,7 +387,7 @@ function HexField({
         try {
           const typed = oklabToOklch(toOklab(parseColor(text.startsWith("#") ? text : `#${text}`, "hex")));
           const next = keepingHue(typed, value);
-          setDraft({ text, standsFor: formatIn(oklchToOklab(next), "srgb") });
+          setDraft({ text, standsFor: formatHex(oklchToOklab(next)) });
           onChange(next);
         } catch {
           setDraft({ text, standsFor: hex });

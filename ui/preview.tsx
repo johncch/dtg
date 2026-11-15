@@ -6,6 +6,8 @@ import { useStore } from "./store.js";
 type Trying = {
   /** Draw the app as if `edit` had been made, or pass null to stop. Nothing is kept. */
   preview(edit: Edit | null): void;
+  /** The same for several edits at once, as a drag that moves many colors makes. */
+  previewStep(edits: Edit[] | null): void;
   /** Make `edit` an unsaved change in the working copy. */
   commit(edit: Edit): void;
   /** Make several edits unsaved changes as one step, which one undo takes back. */
@@ -14,7 +16,7 @@ type Trying = {
   refusal: string | null;
 };
 
-const TryingContext = createContext<Trying>({ preview: () => {}, commit: () => {}, commitStep: () => {}, refusal: null });
+const TryingContext = createContext<Trying>({ preview: () => {}, previewStep: () => {}, commit: () => {}, commitStep: () => {}, refusal: null });
 
 export function useTrying(): Trying {
   return useContext(TryingContext);
@@ -40,7 +42,7 @@ export function TryingProvider({
   const store = useStore();
   const [tried, setTried] = useState<Drawn | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const wanted = useRef<Edit | null>(null);
+  const wanted = useRef<Edit[] | null>(null);
   const frame = useRef<number | null>(null);
   const latestBase = useRef(base);
 
@@ -57,10 +59,10 @@ export function TryingProvider({
     if (frame.current != null) return;
     frame.current = requestAnimationFrame(() => {
       frame.current = null;
-      const edit = wanted.current;
-      if (edit == null) return;
+      const edits = wanted.current;
+      if (edits == null) return;
       try {
-        setTried(previewOf(latestBase.current.snapshot, [edit]));
+        setTried(previewOf(latestBase.current.snapshot, edits));
         setRefusal(null);
       } catch (e) {
         setRefusal((e as Error).message);
@@ -83,14 +85,16 @@ export function TryingProvider({
       setRefusal(null);
       store.commit(edits).catch(() => setTried(null));
     };
+    const previewStep = (edits: Edit[] | null) => {
+      wanted.current = edits;
+      if (edits == null) {
+        setTried(null);
+        setRefusal(null);
+      } else schedule();
+    };
     return {
-      preview(edit) {
-        wanted.current = edit;
-        if (edit == null) {
-          setTried(null);
-          setRefusal(null);
-        } else schedule();
-      },
+      preview: (edit) => previewStep(edit && [edit]),
+      previewStep,
       commit: (edit) => commitStep([edit]),
       commitStep,
       refusal,

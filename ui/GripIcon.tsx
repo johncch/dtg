@@ -1,0 +1,5 @@
+import { MoveHorizontal } from "lucide-react";
+
+export function GripIcon() {
+  return <MoveHorizontal size={12} aria-hidden />;
+}

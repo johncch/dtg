@@ -1,5 +1,5 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { useState, type ReactElement, type ReactNode } from "react";
+import { useRef, useState, type ReactElement, type ReactNode } from "react";
 import {
   channelsIn,
   formatColor,
@@ -34,12 +34,15 @@ const REACH_LABEL: Record<Reach["where"], string> = {
   beyond: "outside P3",
 };
 
+const INSIDE_INSET = 128;
+
 /** Hovering the child shows the color large, with its OKLCH value and which displays can show it. */
 export function ColorTip({
   color,
   reference,
   suppressed = false,
   side = "top",
+  inside = false,
   children,
 }: {
   color: Color;
@@ -49,14 +52,29 @@ export function ColorTip({
   suppressed?: boolean;
   /** Where it opens; it flips to the opposite side when that runs off the screen. */
   side?: "top" | "right";
+  /** Opens over the top of the child, for one large enough to hold it. */
+  inside?: boolean;
   children: ReactElement;
 }) {
   const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [triggerHeight, setTriggerHeight] = useState(0);
   return (
-    <Tooltip.Root open={open && !suppressed} onOpenChange={setOpen}>
-      <Tooltip.Trigger asChild>{children}</Tooltip.Trigger>
+    <Tooltip.Root
+      open={open && !suppressed}
+      onOpenChange={(next) => {
+        if (next && inside) setTriggerHeight(trigger.current?.offsetHeight ?? 0);
+        setOpen(next);
+      }}
+    >
+      <Tooltip.Trigger asChild ref={trigger}>{children}</Tooltip.Trigger>
       <Tooltip.Portal>
-        <Tooltip.Content className="tip" side={side} sideOffset={6} collisionPadding={8}>
+        <Tooltip.Content
+          className="tip"
+          side={inside ? "bottom" : side}
+          sideOffset={inside ? INSIDE_INSET - triggerHeight : 6}
+          collisionPadding={8}
+        >
           <ColorFacts color={color} reference={reference} />
         </Tooltip.Content>
       </Tooltip.Portal>

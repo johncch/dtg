@@ -33,6 +33,15 @@ describe("adding a constant", () => {
     assert.ok(edited.includes(`    ruby: "#c50101" # red\n    violet: "#7c3aed"\n`));
   });
 
+  test("adds one after the sibling it names", () => {
+    const edited = applyEdits(SRC, [{ action: "add", target: constant("colors.violet"), value: "#7c3aed", after: "theme" }]);
+    assert.ok(edited.includes(`    theme: "#03a2e8"\n    violet: "#7c3aed"\n    ruby: "#c50101" # red\n`));
+    const flow = applyEdits(SRC, [{ action: "add", target: constant("grounds.mist"), value: "#eef2f4", after: "paper" }]);
+    assert.ok(flow.includes(`grounds: { paper: "#fafdff", mist: "#eef2f4", ink: "#001a28" }`));
+    const loose = applyEdits(SRC, [{ action: "add", target: constant("yellow"), value: "#fead3c", after: "colors" }]);
+    assert.ok(loose.includes(`    ruby: "#c50101" # red\n  yellow: "#fead3c"\n  grounds:`));
+  });
+
   test("adds one to a flow group", () => {
     const edited = applyEdits(SRC, [{ action: "add", target: constant("grounds.mist"), value: "#eef2f4" }]);
     assert.ok(edited.includes(`grounds: { paper: "#fafdff", ink: "#001a28", mist: "#eef2f4" }`));
@@ -122,6 +131,30 @@ describe("renaming a constant", () => {
       { action: "rename", target: ruby, to: crimson },
       { action: "set", target: ruby, from: null, to: "#ff0000" },
     ]);
+  });
+});
+
+describe("moving a constant", () => {
+  test("moves it after the sibling named, its line comment with it", () => {
+    const first = applyEdits(SRC, [{ action: "move", target: constant("colors.ruby"), after: null }]);
+    assert.ok(first.includes(`  colors:\n    ruby: "#c50101" # red\n    theme: "#03a2e8"\n  grounds:`));
+    const back = applyEdits(first, [{ action: "move", target: constant("colors.ruby"), after: "theme" }]);
+    assert.equal(back, SRC);
+  });
+
+  test("moves one in a flow group", () => {
+    const edited = applyEdits(SRC, [{ action: "move", target: constant("grounds.paper"), after: "ink" }]);
+    assert.ok(edited.includes(`grounds: { ink: "#001a28", paper: "#fafdff" }`));
+  });
+
+  test("cannot follow a sibling the group does not have", () => {
+    assert.throws(() => applyEdits(SRC, [{ action: "move", target: constant("colors.ruby"), after: "nope" }]), /to follow/);
+  });
+
+  test("a moved constant is a change", () => {
+    const ruby = constant("colors.ruby");
+    const copy = withEdit(openFile(SRC), { action: "move", target: ruby, after: null });
+    assert.deepEqual(changesOf(copy), [{ action: "move", target: ruby }]);
   });
 });
 

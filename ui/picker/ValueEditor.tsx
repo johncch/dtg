@@ -457,7 +457,7 @@ export function TargetValueEditor({
 
 /** The sources a value can be edited from, by what is written at a target. */
 export function sourcesFor(target: EditTarget): Source[] {
-  if (target.kind === "ref") return ["palette", "systems", "roles"];
+  if (target.kind === "ref") return ["palette", "systems", "roles", "picker"];
   if (target.kind === "constant") return ["picker"];
   return ["picker", "palette"];
 }

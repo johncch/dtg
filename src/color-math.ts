@@ -317,6 +317,9 @@ export function oklabDeltaE(hexA: string, hexB: string): number {
 
 export type Gamut = "srgb" | "display-p3";
 
+/** What a hex in a definition means. Hex that browsers or Figma read is sRGB whatever this says. */
+export const HEX_SPACE: Gamut = "srgb";
+
 export type Oklab = [number, number, number];
 export type Oklch = [number, number, number];
 
@@ -444,6 +447,10 @@ export function encodeIn(lab: Oklab, gamut: Gamut): [Rgb, boolean] {
   ];
 }
 
+export function formatHex(lab: Oklab): string {
+  return rgbToHex(encodeIn(lab, HEX_SPACE)[0].map((c) => c * 255) as Rgb);
+}
+
 export function formatIn(lab: Oklab, gamut: Gamut): string {
   const [channels] = encodeIn(lab, gamut);
   if (gamut === "srgb") return rgbToHex(channels.map((c) => c * 255) as Rgb);
@@ -487,7 +494,7 @@ export type Color = {
 
 export function colorFromHex(hex: string, alpha = 1): Color {
   return {
-    space: "srgb",
+    space: HEX_SPACE,
     coords: hexToRgb(hex).map((c) => c / 255) as Rgb,
     alpha,
   };
@@ -565,7 +572,7 @@ export function channelsIn(color: Color, gamut: Gamut): Rgb {
  * `oklch()` when it does not, or when it carries an alpha hex has no place for.
  */
 export function formatAuthored(lab: Oklab, alpha = 1): string {
-  if (alpha >= 1 && inGamut(lab, "srgb")) return formatIn(lab, "srgb");
+  if (alpha >= 1 && inGamut(lab, HEX_SPACE)) return formatHex(lab);
   const [L, C, H] = oklabToOklch(lab);
   const short = (n: number, digits: number) => String(Number(n.toFixed(digits)));
   const body = `${short(L, 4)} ${short(C, 4)} ${short(C < NO_HUE_BELOW_CHROMA ? 0 : H, 2)}`;

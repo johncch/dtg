@@ -120,8 +120,8 @@ core:
     secondary: [night(30), sky(40)]
 ```
 
-A ref is a constant by path, a step, another role, or `transparent(name
-pct)`. A role is one ref per mode, and nothing else. `emit` publishes steps
+A ref is a constant by path, a step, another role, a literal color, or
+`transparent(name pct)`. A role is one ref per mode, and nothing else. `emit` publishes steps
 no role asks for, `defaults` shares params across systems of one algorithm,
 `alias` and `omit` shape public names. The full grammar and the reasoning
 behind it are in [`docs/how-this-works.md`](docs/how-this-works.md).

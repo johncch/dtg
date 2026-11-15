@@ -58,6 +58,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.1.2",
     "color-name-list": "^14.51.0",
+    "lucide-react": "^1.72.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "typescript": "^5.7.0",

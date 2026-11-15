@@ -110,14 +110,21 @@ Canonical. The README carries the user-facing version of the same rules.
   - `transparent(paper 70)` — a constant at an opacity, constants only.
     It is written like a system and read by the same parser, so no system
     can be named `transparent`
+  - a literal — `"#000000"`, `oklch(0 0 0)`, `color(display-p3 1 0 0)` —
+    emitted as its value. The same parser reads it, so no system can be
+    named `oklch`, `oklab` or `color` either
 - **One meaning each: `.` navigates, parentheses hand off.** Inside them,
   spaces separate, as in CSS's own color functions — a comma would end the
   item in a `[ ]` list and force quotes around every ref. A constant
   path and a role path are the same shape, so the two namespaces must not
   collide; the resolver errors if they do.
-- **Raw hex is legal only inside `palette` and `systems`.** The semantic tier points and
-  derives; every color traces back to an anchor. This is the core invariant:
-  a literal is a value that has forgotten its reason.
+- **A literal is legal anywhere a color is.** A role may hold one, and it
+  emits as its value, not a reference: nothing upstream moves it, and the
+  editor can't reach it through the palette. Naming it in the palette makes
+  it a constant. dtg warns when the same literal appears twice, or matches a
+  constant, since repetition is a constant waiting to be named. Settled
+  2026-10-28, reversing the earlier rule that the semantic tier only points
+  and derives: asking for a name before a color can be used was a detour.
 - `none`, CSS's missing component, reads as `0` in any slot. It's a
   spelling: `oklch(70% 0 none)` and `oklch(70% 0 0)` are the same gray, and
   whether a color has a hue is decided by its chroma (see Color spaces).
@@ -460,8 +467,9 @@ doing so is in `project-algorithms.md`.
 6. **Constants emit, systems publish what they list, roles reference.** A
    palette color always emits. A system step exists because a ref demands
    it or the system's `emit` lists it — never because of which algorithm it
-   is. A role emits as a reference to what it points at. `transparent()`
-   demands only the unflattened form, not the opaque step.
+   is. A role emits as a reference to what it points at, and a literal
+   emits its value. `transparent()` demands only the unflattened form, not
+   the opaque step.
 7. **Repetition is a promotion signal.** A derivation appearing twice is a
    named system trying to be born. New functions and algorithms arrive when a
    caller exists, never for symmetry. No generic `alpha()` until something
@@ -590,6 +598,53 @@ Anything outside those three is a real defect. Promoting this check into a
       nearest color name on each roll, and once saved its name stays. Every
       palette color emits, since apps use them directly, unless its group
       says `emit: false`; an unsaved roll never reaches the outputs anyway.
+- [x] Palette groups have a circular visualization prototype with two views:
+      a 2D HC disk and a fixed-camera 3D HCL volume. Hue runs clockwise from
+      0° at the top/back; chroma is radius in both views, and lightness is
+      height in 3D. Neutral colors sit at the center or on the center axis.
+      Switching views animates the disk's tilt and the points' height over
+      650ms, preserving selection and authored colors. A second switch
+      reverses from the current position; reduced-motion preferences skip
+      the transition. Plot editing waits until the transition finishes.
+      The colored disk is a fixed L 0.72 reference mapped to sRGB, not a
+      literal lightness-zero slice; points keep their actual colors. Stems
+      connect each 3D point to its HC position on the base. A legend selects
+      any color; count badges cycle overlapping points. Selection never
+      changes the camera or reference background. In 2D, dragging edits H
+      and C while preserving L. In 3D, vertical dragging edits only L;
+      switching to 2D edits H/C. Clicking a swatch opens the original picker.
+      Adding immediately enters an unlocked color in the working copy.
+      Randomize and Space roll unlocked colors independently of selection.
+      A plot drag is one undo step; Save writes the constants. The same
+      locks prevent plot dragging, Randomize and Spread; locked points
+      show a lock and can still be selected. The original picker remains
+      available for editing an authored value directly.
+      Add, Randomize, Spread and the visualization sit in a panel spanning the right pane,
+      docked to its bottom, with its own header and scrolling area.
+      Its top edge resizes by dragging or with Up/Down, Home and End keys.
+      The height starts at 65% of the viewport (up to 600px), stays within
+      the viewport, and is kept when the panel closes and reopens.
+      The sidebar stays visible and usable while it is open.
+      A Colors section holds Add, Randomize and Spread, followed by the view
+      controls and visualization. Add replaces the swatch row's +
+      button; it adds an unlocked color and selects it in the visualization.
+      It starts closed, opens with “palette tools,” and closes with × or Escape;
+      this is browser UI state. Space still rolls colors while it is closed.
+      Spread deterministically increases the nearest-neighbor distance of
+      unlocked colors in full OKLab, using locked colors as fixed anchors.
+      It prefers smaller moves, aiming for a distance of 0.16 and allowing
+      each color to move at most 0.12 per invocation. A bounded local search
+      tests candidates after authored rounding, rejecting moves that reduce
+      a color's current nearest-neighbor distance. Colors already separated
+      by 0.16 stay put; locked-to-locked distances do not stop other colors
+      spreading. sRGB colors stay in sRGB; wider candidates must fit the
+      project gamut. Names, selection and opacity stay; one undo takes the
+      whole action back. An unchanged result adds no undo step and reports
+      that no further separation was found within the current limits.
+      Double-clicking empty disk space adds an opaque color at that hue
+      and chroma. In 3D, this targets the base disk. Lightness comes from
+      the color selected before the first click, or the palette's median;
+      with no colors, it is 0.65. Dots, axes and labels do not add.
 - [x] `dtg docs`: the editor as static files, read-only, for a site's
       `public/` folder or GitHub Pages. `emit` became `build` alongside it,
       so each command names what it makes.
