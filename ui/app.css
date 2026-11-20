@@ -76,6 +76,17 @@ tr.target { background: var(--caution-bg); }
 tr.group-row td { padding-top: 16px; font-weight: 600; }
 tr.group-row a { color: inherit; text-decoration: none; }
 tr.group-row a:hover { text-decoration: underline; }
+tr.role-add td { padding-top: 4px; padding-bottom: 4px; }
+tr.role-add button { display: inline-flex; align-items: center; gap: 6px; margin-left: -6px; padding: 3px 6px; border-radius: var(--radius-sm); font-size: var(--text-subhead); color: var(--muted); cursor: pointer; }
+tr.role-add button:hover { background: var(--hover); color: var(--fg); }
+.role-name-input { margin: -4px 0 -4px -9px; }
+.role-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 8px; }
+.role-head .ref-error { flex-basis: 100%; }
+button.role-remove { flex: none; width: 24px; height: 24px; margin: -4px 0; display: grid; place-items: center; padding: 0; border-radius: var(--radius-sm); color: var(--muted); cursor: pointer; opacity: 0; }
+tr:hover button.role-remove, button.role-remove:focus-visible { opacity: 1; }
+button.role-remove:hover { background: var(--hover); color: var(--fg); }
+button.role-remove[aria-disabled="true"] { opacity: 0; cursor: default; background: none; }
+tr:hover button.role-remove[aria-disabled="true"] { opacity: 0.3; }
 .note { font-size: var(--text-body); color: var(--fg); margin: 0 0 8px; max-width: 70ch; white-space: pre-line; }
 .role-note { font-size: var(--text-caption); color: var(--muted); margin-top: 2px; max-width: 32ch; }
 .params { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 24px; }

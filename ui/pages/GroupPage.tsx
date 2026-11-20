@@ -7,6 +7,7 @@ import { paintCss } from "../paint.js";
 import { Popup } from "../Popup.js";
 import { EDITABLE } from "../mode.js";
 import { sourcesFor, TargetValueEditor } from "../picker/ValueEditor.js";
+import { NewRoleRow, RoleName, RoleRemove } from "../RoleNaming.js";
 import { Link, useScrollToHash } from "../router.js";
 import { INHERIT, rolePath } from "../../src/selector.js";
 import { stepAnchor } from "../Strip.js";
@@ -31,8 +32,9 @@ export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: stri
         </thead>
         <tbody>
           {roles.map((role) => (
-            <RoleRow key={role.role} snapshot={snapshot} role={role} id={role.role} targeted={role.role === hash} />
+            <RoleRow key={role.role} snapshot={snapshot} role={role} siblings={roles} id={role.role} targeted={role.role === hash} />
           ))}
+          <NewRoleRow siblings={roles} columns={snapshot.modes.length + 1} />
         </tbody>
       </table>
     </>
@@ -82,10 +84,12 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
                     key={role.role}
                     snapshot={snapshot}
                     role={role}
+                    siblings={shown.filter((other) => other.group === group)}
                     id={group === "" ? role.role : undefined}
                     targeted={group === "" && role.role === hash}
                   />
                 ))}
+              <NewRoleRow siblings={shown.filter((role) => role.group === group)} columns={snapshot.modes.length + 1} />
             </Fragment>
           ))}
         </tbody>
@@ -97,11 +101,14 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
 function RoleRow({
   snapshot,
   role,
+  siblings,
   id,
   targeted,
 }: {
   snapshot: Snapshot;
   role: SnapshotRole;
+  /** The roles of its group, its own among them. */
+  siblings: SnapshotRole[];
   /** Set where a link can land on the row: on a group's page, or a section's for a role in no group. */
   id?: string;
   targeted: boolean;
@@ -109,7 +116,10 @@ function RoleRow({
   return (
     <tr id={id} className={targeted ? "target" : undefined}>
       <td>
-        <code>{role.role}</code>
+        <div className="role-head">
+          <RoleName role={role} siblings={siblings} />
+          <RoleRemove role={role} roles={snapshot.roles} />
+        </div>
         {role.note && <div className="role-note">{role.note}</div>}
       </td>
       {role.perMode.map((entry, index) => {

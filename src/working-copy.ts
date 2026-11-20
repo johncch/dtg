@@ -1,4 +1,4 @@
-import { applyEdits, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type SystemTarget } from "./edit.js";
+import { applyEdits, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget } from "./edit.js";
 
 /**
  * The definition as it is on disk, the edits made since that are not yet
@@ -62,13 +62,14 @@ export function discard(copy: WorkingCopy): WorkingCopy {
  * One color whose working state differs from the file's. A constant can
  * also be added (`from` null), renamed, or removed, and `target` then names
  * it as the file has it. A moved constant is named as it is now. A system is
- * added or removed whole, its value `{ "algorithm", "params" }` as JSON.
+ * added or removed whole, its value `{ "algorithm", "params" }` as JSON; a
+ * role is added or removed whole, its value its refs as a JSON list.
  */
 export type Change =
   | { action: "set"; target: EditTarget; from: string | null; to: string }
-  | { action: "rename"; target: ConstantTarget | SystemTarget; to: ConstantTarget | SystemTarget }
+  | { action: "rename"; target: EntryTarget; to: EntryTarget }
   | { action: "move"; target: ConstantTarget }
-  | { action: "remove"; target: ConstantTarget | SystemTarget; from: string };
+  | { action: "remove"; target: EntryTarget; from: string };
 
 const sameTarget = (a: EditTarget, b: EditTarget) =>
   JSON.stringify(a) === JSON.stringify(b);
@@ -143,10 +144,10 @@ export function changesOf(copy: WorkingCopy): Change[] {
     }
     const from = readValue(copy.diskText, inFile)!;
     if (now == null) {
-      push({ action: "remove", target: inFile as ConstantTarget | SystemTarget, from });
+      push({ action: "remove", target: inFile as EntryTarget, from });
       continue;
     }
-    if (!sameTarget(now, inFile)) push({ action: "rename", target: inFile as ConstantTarget | SystemTarget, to: now as ConstantTarget | SystemTarget });
+    if (!sameTarget(now, inFile)) push({ action: "rename", target: inFile as EntryTarget, to: now as EntryTarget });
     if (moved) push({ action: "move", target: now as ConstantTarget });
     if (value != null && value !== from) push({ action: "set", target: now, from, to: value });
   }

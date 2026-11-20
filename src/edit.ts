@@ -12,11 +12,16 @@ export type EditTarget =
   /** A param written once in `defaults` and shared by every system of that algorithm. */
   | { kind: "default"; algorithm: string; path: string }
   /** `role` is the role's dotted path within its section; `mode` its place in `modes`. */
-  | { kind: "ref"; section: string; role: string; mode: number };
+  | { kind: "ref"; section: string; role: string; mode: number }
+  /** A whole role, by its dotted path within its section. */
+  | { kind: "role"; section: string; role: string };
 
 export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
 export type SystemTarget = Extract<EditTarget, { kind: "system" }>;
+export type RoleTarget = Extract<EditTarget, { kind: "role" }>;
 type EmitTarget = Extract<EditTarget, { kind: "emit" }>;
+/** What is added, renamed and removed whole. */
+export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
 
 /**
  * Setting writes a value; for a ref, `INHERIT` is a value too: the mode says
@@ -27,17 +32,20 @@ type EmitTarget = Extract<EditTarget, { kind: "emit" }>;
  * first), or removed. A system is added and removed whole, and renamed
  * within its group: its value is `{ "algorithm", "params" }` as JSON, and
  * setting it writes both, leaving the system's other keys as they are.
+ * A role is added at the end of its group, renamed within it, and removed
+ * whole: its value is its refs, one per mode, as a JSON list.
  */
 export type Edit =
   | { action: "set"; target: EditTarget; value: string }
-  | { action: "add"; target: ConstantTarget | SystemTarget; value: string; after?: string }
-  | { action: "rename"; target: ConstantTarget | SystemTarget; name: string }
+  | { action: "add"; target: EntryTarget; value: string; after?: string }
+  | { action: "rename"; target: EntryTarget; name: string }
   | { action: "move"; target: ConstantTarget; after: string | null }
-  | { action: "remove"; target: ConstantTarget | SystemTarget };
+  | { action: "remove"; target: EntryTarget };
 
-/** Where a constant or a system is after it is renamed. */
-export function renamedTarget<Target extends ConstantTarget | SystemTarget>(target: Target, name: string): Target {
-  return { ...target, path: [...target.path.split(".").slice(0, -1), name].join(".") };
+/** Where a constant, a system or a role is after it is renamed. */
+export function renamedTarget<Target extends EntryTarget>(target: Target, name: string): Target {
+  const renamed = (path: string) => [...path.split(".").slice(0, -1), name].join(".");
+  return target.kind === "role" ? { ...target, role: renamed(target.role) } : { ...target, path: renamed(target.path) };
 }
 
 function keysOf(target: EditTarget, doc: Document): (string | number)[] {
@@ -52,6 +60,8 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
       return ["systems", ...target.system.split("."), "params", ...target.path.split(".")];
     case "default":
       return ["defaults", target.algorithm, ...target.path.split(".")];
+    case "role":
+      return [target.section, ...target.role.split(".")];
     case "ref": {
       const role = [target.section, ...target.role.split(".")];
       const written = doc.getIn(role, true);
@@ -76,6 +86,8 @@ export function describeTarget(target: EditTarget): string {
       return `the shared ${target.algorithm} ${target.path}`;
     case "ref":
       return `${target.role}, mode ${target.mode + 1}`;
+    case "role":
+      return target.role;
   }
 }
 
@@ -119,8 +131,13 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       text =
         edit.target.kind === "system"
           ? withSystemAdded(text, edit.target, edit.value)
-          : withConstantAdded(text, edit.target, edit.value, edit.after);
+          : edit.target.kind === "role"
+            ? withRoleAdded(text, edit.target, edit.value)
+            : withConstantAdded(text, edit.target, edit.value, edit.after);
       continue;
+    }
+    if (edit.target.kind === "role") {
+      throw new Error(`${describeTarget(edit.target)} is edited one ref at a time`);
     }
     if (edit.target.kind === "system") {
       text = withSystemSet(text, edit.target, edit.value);
@@ -180,6 +197,10 @@ export function readValue(yamlText: string, target: EditTarget): string | null {
   if (target.kind === "emit") {
     const emit = writtenAt(yamlText, target);
     return isSeq(emit) ? JSON.stringify(emit.toJSON()) : null;
+  }
+  if (target.kind === "role") {
+    const refs = refsOf(writtenAt(yamlText, target));
+    return refs == null ? null : JSON.stringify(refs);
   }
   if (structureAt(yamlText, target)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
   const node = nodeAt(yamlText, target);
@@ -369,6 +390,25 @@ function withEmitSet(text: string, target: EmitTarget, value: string): string {
   return text.slice(0, emit.range[0]) + structureSource(value) + text.slice(writtenEnd(emit));
 }
 
+/**
+ * A new role at the end of its group, or of its section for one in no group:
+ * a ref list, or the ref itself in a definition without modes.
+ */
+function withRoleAdded(text: string, target: RoleTarget, value: string): string {
+  const keys = [target.section, ...target.role.split(".")];
+  const refs = JSON.parse(value) as string[];
+  const written = refs.map((ref) => (ref === INHERIT || plainSafe(ref) ? ref : JSON.stringify(ref)));
+  const source = parseDocument(text).has("modes") ? `[${written.join(", ")}]` : written[0];
+  return withEntryAdded(text, keys.slice(0, -1), keys.at(-1)!, source, target, "as a role or a group");
+}
+
+/** A role's refs as written — a ref list, a block holding one under `refs`, or the ref itself — or null for anything else. */
+function refsOf(node: unknown): unknown[] | null {
+  const refs = isMap(node) ? node.get("refs", true) : node;
+  if (isSeq(refs)) return refs.toJSON() as unknown[];
+  return isScalar(refs) && refs.value != null ? [refs.value] : null;
+}
+
 function isSystem(node: unknown): node is YAMLMap {
   return isMap(node) && node.has("algorithm");
 }
@@ -450,26 +490,34 @@ function keySource(name: string): string {
 
 type Entry = { doc: Document; keys: string[]; set: YAMLMap; pair: Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node> };
 
-/** The constant, system or emit list a target names, with the map it is in. Throws when the file has no such entry. */
-function entryAt(text: string, target: ConstantTarget | SystemTarget | EmitTarget): Entry {
+/** The constant, system, role or emit list a target names, with the map it is in. Throws when the file has no such entry. */
+function entryAt(text: string, target: EntryTarget | EmitTarget): Entry {
   const doc = parseDocument(text);
   const keys = keysOf(target, doc) as string[];
   const set = doc.getIn(keys.slice(0, -1), true);
   const pair = isMap(set) ? set.items.find((item) => isScalar(item.key) && item.key.value === keys.at(-1)) : undefined;
-  const written = target.kind === "system" ? isSystem(pair?.value) : target.kind === "emit" ? isSeq(pair?.value) : isScalar(pair?.value);
+  const written =
+    target.kind === "system"
+      ? isSystem(pair?.value)
+      : target.kind === "emit"
+        ? isSeq(pair?.value)
+        : target.kind === "role"
+          ? refsOf(pair?.value) != null
+          : isScalar(pair?.value);
   if (!isMap(set) || !pair || !written || !isScalar(pair.key) || !pair.key.range) {
     throw new Error(`nothing written for ${describeTarget(target)} to edit`);
   }
   return { doc, keys, set, pair: pair as Entry["pair"] };
 }
 
-function withEntryRenamed(text: string, target: ConstantTarget | SystemTarget, name: string): string {
+function withEntryRenamed(text: string, target: EntryTarget, name: string): string {
   const { set, pair } = entryAt(text, target);
   if (set.items.some((item) => isScalar(item.key) && item.key.value === name)) {
     throw new Error(`${describeTarget(renamedTarget(target, name))} is already written`);
   }
-  const from = target.path;
-  const to = renamedTarget(target, name).path;
+  const pathOf = (entry: EntryTarget) => (entry.kind === "role" ? entry.role : entry.path);
+  const from = pathOf(target);
+  const to = pathOf(renamedTarget(target, name));
   const spans: { start: number; end: number; source: string }[] = [
     { start: pair.key.range[0], end: pair.key.range[1], source: keySource(name) },
   ];
@@ -484,14 +532,15 @@ function withEntryRenamed(text: string, target: ConstantTarget | SystemTarget, n
 /**
  * Every value that points at the constant `from`, with what it says once the
  * constant is `to`: a role's ref, `transparent(from …)`, or a color param.
- * For a system, every ref into it, `from(…)`. Only where refs and params are
+ * For a system, every ref into it, `from(…)`; for a role, every other
+ * role's ref to it, plain or `transparent(from …)`. Only where refs and params are
  * written — an `alias` or a changelog note that happens to read the same is
  * left alone.
  */
 function pointersAt(
   node: unknown,
   keys: string[],
-  kind: "constant" | "system",
+  kind: EntryTarget["kind"],
   from: string,
   to: string,
 ): { node: Scalar; renamed: string }[] {
@@ -509,6 +558,7 @@ function pointersAt(
     if (top === "systems" || top === "defaults" || !node.value.startsWith(`${from}(`)) return [];
     return [{ node, renamed: to + node.value.slice(from.length) }];
   }
+  if (kind === "role" && (top === "systems" || top === "defaults")) return [];
   if (top === "systems" && !keys.includes("params")) return [];
   if (node.value === from) return [{ node, renamed: to }];
   const faded = /^transparent\(\s*(\S+)(\s[^)]*)?\)$/.exec(node.value);
@@ -548,7 +598,7 @@ function withConstantMoved(text: string, target: ConstantTarget, after: string |
  * The entry and its lines go. A group left with nothing is written as `{}`,
  * so it stays a group to add to rather than becoming an empty value.
  */
-function withEntryRemoved(text: string, target: ConstantTarget | SystemTarget | EmitTarget): string {
+function withEntryRemoved(text: string, target: EntryTarget | EmitTarget): string {
   const { doc, keys, set, pair } = entryAt(text, target);
   const index = set.items.indexOf(pair);
   const valueEnd = writtenEnd(pair.value as Node);
