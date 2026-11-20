@@ -18,7 +18,7 @@ import { AddRow, ENTRY_NAME, ENTRY_NAME_RULE, GroupName, openNameOf } from "../E
 import { PaletteExplorer } from "../PaletteExplorer.js";
 import type { PaletteEntry } from "../PalettePlots.js";
 import { Popup, type PopupPanel } from "../Popup.js";
-import { useTrying } from "../preview.js";
+import { firstError, useTrying } from "../preview.js";
 import { navigate } from "../router.js";
 import { TrashIcon } from "../TrashIcon.js";
 import { labelColorOn } from "../Strip.js";
@@ -141,6 +141,7 @@ function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel 
   const { commit } = useTrying();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
   // Refs name constants, systems and roles alike, so a palette cannot share its name with any of them.
   const taken = [
     ...working.constants.map((constant) => constant.path),
@@ -157,8 +158,13 @@ function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel 
         setBusy(true);
         const lab = randomColor();
         const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, RESERVED);
+        const refusal = commit({ action: "add", target: { kind: "constant", path: `${name}.${key}` }, value: formatAuthored(lab) });
+        if (refusal) {
+          setRefused(firstError(refusal));
+          setBusy(false);
+          return;
+        }
         awaitedPalette = name;
-        commit({ action: "add", target: { kind: "constant", path: `${name}.${key}` }, value: formatAuthored(lab) });
         panel.dismiss();
       }}
     >
@@ -176,10 +182,13 @@ function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel 
           autoComplete="off"
           data-1p-ignore
           placeholder="brand"
-          onChange={(event) => setName(event.target.value.trim())}
+          onChange={(event) => {
+            setName(event.target.value.trim());
+            setRefused(null);
+          }}
         />
       </label>
-      {problem && <p className="ref-error ref-problem">{problem}</p>}
+      {(problem ?? refused) && <p className="ref-error ref-problem">{problem ?? refused}</p>}
       <div className="system-form-actions">
         <button type="submit" className="btn btn-primary" disabled={name === "" || problem != null || busy}>
           Add palette

@@ -8,15 +8,15 @@ type Trying = {
   preview(edit: Edit | null): void;
   /** The same for several edits at once, as a drag that moves many colors makes. */
   previewStep(edits: Edit[] | null): void;
-  /** Make `edit` an unsaved change in the working copy. */
-  commit(edit: Edit): void;
-  /** Make several edits unsaved changes as one step, which one undo takes back. */
-  commitStep(edits: Edit[]): void;
+  /** Make `edit` an unsaved change in the working copy. Returns why it was refused, or null when it was kept. */
+  commit(edit: Edit): string | null;
+  /** Make several edits unsaved changes as one step, which one undo takes back. Returns as `commit` does. */
+  commitStep(edits: Edit[]): string | null;
   /** Why the edit being tried cannot be drawn, or null when it can. */
   refusal: string | null;
 };
 
-const TryingContext = createContext<Trying>({ preview: () => {}, previewStep: () => {}, commit: () => {}, commitStep: () => {}, refusal: null });
+const TryingContext = createContext<Trying>({ preview: () => {}, previewStep: () => {}, commit: () => null, commitStep: () => null, refusal: null });
 
 export function useTrying(): Trying {
   return useContext(TryingContext);
@@ -80,10 +80,11 @@ export function TryingProvider({
       } catch (e) {
         setTried(null);
         setRefusal((e as Error).message);
-        return;
+        return (e as Error).message;
       }
       setRefusal(null);
       store.commit(edits).catch(() => setTried(null));
+      return null;
     };
     const previewStep = (edits: Edit[] | null) => {
       wanted.current = edits;

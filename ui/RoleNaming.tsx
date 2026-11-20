@@ -5,7 +5,7 @@ import { INHERIT, rolePath } from "../src/selector.js";
 import type { Snapshot, SnapshotRole } from "../src/snapshot.js";
 import { AddRow, copyName, ENTRY_NAME, ENTRY_NAME_RULE, EntryDuplicate, EntryGrip, EntryName, EntryRemove, GroupName, openNameOf, pathProblem } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";
-import { useTrying } from "./preview.js";
+import { firstError, useTrying } from "./preview.js";
 import { navigate } from "./router.js";
 
 const targetOf = (role: Pick<SnapshotRole, "section" | "group" | "role">): RoleTarget => ({
@@ -63,6 +63,7 @@ export function NewGroup({ working, section }: { working: Snapshot; section: str
 function GroupForm({ working, section, panel }: { working: Snapshot; section: string; panel: PopupPanel }) {
   const { commit } = useTrying();
   const [name, setName] = useState("");
+  const [refused, setRefused] = useState<string | null>(null);
   const inSection = working.roles.filter((role) => role.section === section);
   // The first role holds what the section's last role does, or the first palette color where the section has none.
   const last = inSection.at(-1);
@@ -82,9 +83,13 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
         event.preventDefault();
         if (name === "" || problem || refs == null) return;
         const target = targetOf({ section, group: name, role: "new-role" });
+        const refusal = commit({ action: "add", target, value: JSON.stringify(refs) });
+        if (refusal) {
+          setRefused(firstError(refusal));
+          return;
+        }
         openNameOf(onItsGroupPage(JSON.stringify(target)));
         awaitedGroup = name;
-        commit({ action: "add", target, value: JSON.stringify(refs) });
         panel.dismiss();
       }}
     >
@@ -102,10 +107,13 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
           autoComplete="off"
           data-1p-ignore
           placeholder="border"
-          onChange={(event) => setName(event.target.value.trim())}
+          onChange={(event) => {
+            setName(event.target.value.trim());
+            setRefused(null);
+          }}
         />
       </label>
-      {problem && <p className="ref-error ref-problem">{problem}</p>}
+      {(problem ?? refused) && <p className="ref-error ref-problem">{problem ?? refused}</p>}
       <div className="system-form-actions">
         <button type="submit" className="btn btn-primary" disabled={name === "" || problem != null}>
           Add group
