@@ -5,9 +5,11 @@ import type { Algorithm, ParamKind } from "../src/contract.js";
 import type { Edit, SystemTarget } from "../src/edit.js";
 import { builtinAlgorithms } from "../src/resolve.js";
 import type { Snapshot, SnapshotSystem } from "../src/snapshot.js";
+import { rolePath } from "../src/selector.js";
 import { previewOf } from "./engine.js";
+import { ENTRY_NAME, usedByRefusal } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";
-import { useTrying } from "./preview.js";
+import { firstError, useTrying } from "./preview.js";
 import { navigate } from "./router.js";
 
 const DEFAULT_START = "#808080";
@@ -121,15 +123,11 @@ export function SystemSettings({ system, working }: { system: SnapshotSystem; wo
 }
 
 const NEW_NAME = /^[A-Za-z][\w-]*(\.[A-Za-z][\w-]*)*$/;
-const RENAMED = /^[A-Za-z][\w-]*$/;
 
-function firstProblem(error: unknown): string {
-  const message = (error as Error).message;
-  return message.split("\n").find((line) => line.startsWith("- "))?.slice(2) ?? message;
-}
+const firstProblem = (error: unknown) => firstError((error as Error).message);
 
 function rolesUsing(system: SnapshotSystem): string[] {
-  return [...new Set(system.steps.flatMap((step) => step.usedBy.map((use) => [use.group, use.role].filter(Boolean).join("."))))];
+  return [...new Set(system.steps.flatMap((step) => step.usedBy.map(rolePath)))];
 }
 
 type Attempt =
@@ -163,7 +161,7 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
         edits.push({ action: "set", target, value: JSON.stringify({ algorithm, params: recipe.params }) });
       }
       if (name !== editing.system.split(".").at(-1)) {
-        if (!RENAMED.test(name)) return { status: "refused", problem: "A name is letters, digits, - and _, starting with a letter." };
+        if (!ENTRY_NAME.test(name)) return { status: "refused", problem: "A name is letters, digits, - and _, starting with a letter." };
         edits.push({ action: "rename", target, name });
         opens = [...group, name].join(".");
       }
@@ -181,7 +179,7 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
     if (!editing) return;
     const roles = rolesUsing(editing);
     if (roles.length > 0) {
-      setRemoval(`Used by ${roles.slice(0, 3).join(", ")}${roles.length > 3 ? ` and ${roles.length - 3} more` : ""}. Point ${roles.length === 1 ? "it" : "them"} elsewhere first.`);
+      setRemoval(usedByRefusal(roles));
       return;
     }
     const edit: Edit = { action: "remove", target: { kind: "system", path: editing.system } };
@@ -242,7 +240,7 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
           {recipe.dropped.length > 0 && <>Drops {recipe.dropped.join(", ")}.</>}
         </p>
       )}
-      {attempt.status === "refused" && <p className="ref-error system-form-problem">{attempt.problem}</p>}
+      {attempt.status === "refused" && <p className="ref-error ref-problem">{attempt.problem}</p>}
       <div className="system-form-actions">
         <button type="submit" className="btn btn-primary" disabled={attempt.status !== "ready"}>
           {editing ? "Apply" : "Add system"}
@@ -253,7 +251,7 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
           </button>
         )}
       </div>
-      {removal && <p className="ref-error system-form-problem">{removal}</p>}
+      {removal && <p className="ref-error ref-problem">{removal}</p>}
     </form>
   );
 }

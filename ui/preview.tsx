@@ -103,3 +103,9 @@ export function TryingProvider({
 
   return <TryingContext.Provider value={trying}>{children(tried ?? base)}</TryingContext.Provider>;
 }
+
+/** The first of a refusal's errors: the reason, before everything that fails because of it. */
+export function firstError(refusal: string): string {
+  const first = refusal.split("\n").find((line) => line.startsWith("- "));
+  return first ? first.slice(2) : refusal;
+}

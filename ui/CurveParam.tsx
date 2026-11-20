@@ -7,7 +7,7 @@ import type { SnapshotSystem } from "../src/snapshot.js";
 import { EDITABLE } from "./mode.js";
 import { paintCss } from "./paint.js";
 import { Popup, type PopupPanel } from "./Popup.js";
-import { useTrying } from "./preview.js";
+import { firstError, useTrying } from "./preview.js";
 
 type Range = { min: number; max: number };
 
@@ -185,11 +185,6 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
       }}
     />
   );
-}
-
-function firstError(refusal: string): string {
-  const first = refusal.split("\n").find((line) => line.startsWith("- "));
-  return first ? first.slice(2) : refusal;
 }
 
 const PAD = 10;

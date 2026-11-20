@@ -14,6 +14,9 @@ import { TrashIcon } from "./TrashIcon.js";
 export const ENTRY_NAME = /^[A-Za-z][\w-]*$/;
 export const ENTRY_NAME_RULE = "Letters, digits, - and _, starting with a letter.";
 
+export const groupOf = (path: string) => path.split(".").slice(0, -1).join(".");
+export const nameOf = (path: string) => path.split(".").at(-1)!;
+
 /** The entry just added, whose row opens its name for typing once the working copy has it. */
 let naming: string | null = null;
 
@@ -89,7 +92,7 @@ function Retyped({
           if (event.key === "Escape") setTyped(null);
         }}
       />
-      {problem && <span className="ref-error system-form-problem entry-name-problem">{problem}</span>}
+      {problem && <span className="ref-error ref-problem entry-name-problem">{problem}</span>}
     </span>
   );
 }
@@ -129,7 +132,7 @@ export function EntryName({
 
 /** A group's own name, the last part of its path: retyping it renames the group where it is. */
 export function GroupName({ path, taken, onRename }: { path: string; taken: string[]; onRename: (name: string) => void }) {
-  const name = path.split(".").at(-1)!;
+  const name = nameOf(path);
   return (
     <Retyped
       keys={[]}
@@ -155,6 +158,12 @@ export function pathProblem(path: string, others: string[]): string | null {
   return null;
 }
 
+/** Why an entry that `users` point at cannot go. */
+export function usedByRefusal(users: string[]): string {
+  const shown = users.length > 3 ? `${users.slice(0, 3).join(", ")} and ${users.length - 3} more` : users.join(", ");
+  return `Used by ${shown}. Point ${users.length === 1 ? "it" : "them"} elsewhere first.`;
+}
+
 /** Removes an entry, unless something still uses it or the page gives another reason it must stay. */
 export function EntryRemove({
   label,
@@ -172,8 +181,7 @@ export function EntryRemove({
   onRemove: () => void;
 }) {
   if (!EDITABLE) return null;
-  const shown = users.length > 3 ? `${users.slice(0, 3).join(", ")} and ${users.length - 3} more` : users.join(", ");
-  const refusal = users.length > 0 ? `Used by ${shown}. Point them elsewhere first.` : stays;
+  const refusal = users.length > 0 ? usedByRefusal(users) : stays;
   return (
     <Hint text={refusal ?? hint}>
       <button

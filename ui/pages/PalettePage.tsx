@@ -6,7 +6,7 @@ import { addToPalette, harmonizePalette, harmonyHues, randomColor, rollPalette, 
 import type { Snapshot, SnapshotConstant } from "../../src/snapshot.js";
 import type { Change } from "../../src/working-copy.js";
 import { EditableChip } from "../ColorChip.js";
-import { CONSTANT_COLUMNS, ConstantRow } from "../ConstantRow.js";
+import { CONSTANT_COLUMNS, ConstantRow, RESERVED } from "../ConstantRow.js";
 import { ColorTip } from "../ColorTip.js";
 import { GripIcon } from "../GripIcon.js";
 import { LockIcon } from "../LockIcon.js";
@@ -14,7 +14,7 @@ import { Hint } from "../Hint.js";
 import { EDITABLE } from "../mode.js";
 import { colorNameOf } from "../names.js";
 import { paintCss } from "../paint.js";
-import { AddRow, GroupName, openNameOf } from "../EntryRow.js";
+import { AddRow, ENTRY_NAME, ENTRY_NAME_RULE, GroupName, openNameOf } from "../EntryRow.js";
 import { PaletteExplorer } from "../PaletteExplorer.js";
 import type { PaletteEntry } from "../PalettePlots.js";
 import { Popup, type PopupPanel } from "../Popup.js";
@@ -64,13 +64,11 @@ function storedRollStyle(): RollStyle {
   }
 }
 
-export const CONSTANT_KEY = /^[A-Za-z][\w-]*$/;
-
 /** The names a new or renamed constant in `group` cannot take: whatever the group already holds, and the keys a group reserves. */
 function takenIn(group: string, written: string[]): string[] {
   const prefix = `${group}.`;
   const held = written.filter((path) => path.startsWith(prefix)).map((path) => path.slice(prefix.length).split(".")[0]);
-  return [...new Set(["alias", "emit", "description", ...held])];
+  return [...new Set([...RESERVED, ...held])];
 }
 
 /** A color's name as a constant's key: "Blue Whale" → `blue-whale`, numbered when the set already has it. */
@@ -100,7 +98,7 @@ function PaletteName({ palette, written }: { palette: Palette; written: string[]
   return (
     <GroupName
       path={palette.group}
-      taken={beside}
+      taken={[...RESERVED, ...beside]}
       onRename={(name) => {
         awaitedPalette = `${under}${name}`;
         commit({ action: "rename", target: { kind: "group", root: "palette", path: palette.group }, name });
@@ -149,7 +147,7 @@ function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel 
     ...working.systems.map((system) => system.system),
     ...working.roles.map((role) => role.group || role.role),
   ].some((path) => path.split(".")[0] === name);
-  const problem = name === "" ? null : !CONSTANT_KEY.test(name) ? "Letters, digits, - and _, starting with a letter." : taken ? `${name} is already written.` : null;
+  const problem = name === "" ? null : !ENTRY_NAME.test(name) ? ENTRY_NAME_RULE : taken ? `${name} is already written.` : null;
   return (
     <form
       className="ref-editor"
@@ -158,7 +156,7 @@ function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel 
         if (name === "" || problem || busy) return;
         setBusy(true);
         const lab = randomColor();
-        const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, takenIn(name, []));
+        const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, RESERVED);
         awaitedPalette = name;
         commit({ action: "add", target: { kind: "constant", path: `${name}.${key}` }, value: formatAuthored(lab) });
         panel.dismiss();
@@ -181,7 +179,7 @@ function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel 
           onChange={(event) => setName(event.target.value.trim())}
         />
       </label>
-      {problem && <p className="ref-error system-form-problem">{problem}</p>}
+      {problem && <p className="ref-error ref-problem">{problem}</p>}
       <div className="system-form-actions">
         <button type="submit" className="btn btn-primary" disabled={name === "" || problem != null || busy}>
           Add palette
@@ -833,7 +831,7 @@ function Rename({ target, name, taken, panel, onRename }: { target: ConstantTarg
   const problem =
     wanted === name
       ? null
-      : !CONSTANT_KEY.test(wanted)
+      : !ENTRY_NAME.test(wanted)
         ? "A name starts with a letter and holds letters, digits, - and _."
         : taken.includes(wanted)
           ? `${wanted} is taken.`

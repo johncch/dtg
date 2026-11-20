@@ -20,12 +20,13 @@ const targetOf = (role: Pick<SnapshotRole, "section" | "group" | "role">): RoleT
  */
 const onItsGroupPage = (key: string) => `${key} on its group's page`;
 
-function freshName(taken: string[]): string {
-  if (!taken.includes("new-role")) return "new-role";
-  let count = 2;
-  while (taken.includes(`new-role-${count}`)) count += 1;
-  return `new-role-${count}`;
-}
+/** The keys a group of roles keeps for itself, which no role or group in it can be named. */
+const RESERVED = ["alias", "omit", "description"];
+
+const freshName = (taken: string[]) => (taken.includes("new-role") ? copyName("new-role", taken) : "new-role");
+
+/** A role's refs, one per mode, as an edit that adds a role takes them. */
+const refsOf = (role: SnapshotRole) => role.perMode.map((entry) => (entry.inherited ? INHERIT : entry.ref));
 
 let awaitedGroup: string | null = null;
 
@@ -66,8 +67,12 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
   // The first role holds what the section's last role does, or the first palette color where the section has none.
   const last = inSection.at(-1);
   const start = working.constants[0]?.path;
-  const refs = last ? last.perMode.map((entry) => (entry.inherited ? INHERIT : entry.ref)) : start ? working.modes.map(() => start) : null;
-  const taken = working.roles.some((role) => role.group.split(".")[0] === name) || inSection.some((role) => role.group === "" && role.role === name);
+  const refs = last ? refsOf(last) : start ? working.modes.map(() => start) : null;
+  // Refs name constants, systems and roles alike, so a group cannot share its name with any of them.
+  const taken =
+    RESERVED.includes(name) ||
+    [...working.constants.map((constant) => constant.path), ...working.systems.map((system) => system.system), ...working.roles.map((role) => role.group)].some((path) => path.split(".")[0] === name) ||
+    inSection.some((role) => role.group === "" && role.role === name);
   const problem =
     name === "" ? null : !ENTRY_NAME.test(name) ? ENTRY_NAME_RULE : taken ? `${name} is already written.` : refs == null ? "Add a palette color first, for the group's first role to hold." : null;
   return (
@@ -100,7 +105,7 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
           onChange={(event) => setName(event.target.value.trim())}
         />
       </label>
-      {problem && <p className="ref-error system-form-problem">{problem}</p>}
+      {problem && <p className="ref-error ref-problem">{problem}</p>}
       <div className="system-form-actions">
         <button type="submit" className="btn btn-primary" disabled={name === "" || problem != null}>
           Add group
@@ -125,7 +130,7 @@ export function NewRoleRow({ siblings, columns }: { siblings: SnapshotRole[]; co
         commit({
           action: "add",
           target,
-          value: JSON.stringify(last.perMode.map((entry) => (entry.inherited ? INHERIT : entry.ref))),
+          value: JSON.stringify(refsOf(last)),
         });
       }}
     />
@@ -162,7 +167,7 @@ export function RoleDuplicate({ role, siblings }: { role: SnapshotRole; siblings
         commit({
           action: "add",
           target,
-          value: JSON.stringify(role.perMode.map((entry) => (entry.inherited ? INHERIT : entry.ref))),
+          value: JSON.stringify(refsOf(role)),
           after: role.role,
         });
       }}
@@ -203,13 +208,16 @@ export function RoleName({ role, roles, onGroupPage }: { role: SnapshotRole; rol
   const { commit } = useTrying();
   const target = targetOf(role);
   const key = JSON.stringify(target);
-  const others = roles.filter((other) => other.section === role.section && other !== role).map(rolePath);
   return (
     <EntryName
       keys={onGroupPage ? [key, onItsGroupPage(key)] : [key]}
       path={rolePath(role)}
       shown={role.role}
-      problemOf={(path) => pathProblem(path, others)}
+      problemOf={(path) => {
+        const reserved = path.split(".").find((part) => RESERVED.includes(part));
+        if (reserved) return `${reserved} is a word a group keeps for itself.`;
+        return pathProblem(path, roles.filter((other) => other.section === role.section && other !== role).map(rolePath));
+      }}
       onRepath={(path) => {
         const parts = path.split(".");
         const group = parts.slice(0, -1).join(".");
@@ -243,7 +251,7 @@ export function RoleGroupName({ snapshot, group }: { snapshot: Snapshot; group: 
   return (
     <GroupName
       path={group}
-      taken={[...beside, ...elsewhere]}
+      taken={[...RESERVED, ...beside, ...elsewhere]}
       onRename={(name) => {
         awaitedGroup = `${under}${name}`;
         commit({ action: "rename", target: { kind: "group", root: section, path: group }, name });

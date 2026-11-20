@@ -12,7 +12,6 @@ function nameOf(target: EditTarget, modes: string[]): string {
     case "role":
       return target.role;
     case "group":
-      return target.path;
     case "constant":
     case "system":
       return target.path;

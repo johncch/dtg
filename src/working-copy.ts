@@ -59,9 +59,10 @@ export function discard(copy: WorkingCopy): WorkingCopy {
 }
 
 /**
- * One color whose working state differs from the file's. A constant can
- * also be added (`from` null), renamed, or removed, and `target` then names
- * it as the file has it. A moved constant is named as it is now. A system is
+ * One thing whose working state differs from the file's: a value set, or an
+ * entry added (`from` null), renamed, moved or removed. A renamed or removed
+ * entry is named by `target` as the file has it; a moved one as it is now. A
+ * rename covers a group's, and an entry placed at another path. A system is
  * added or removed whole, its value `{ "algorithm", "params" }` as JSON; a
  * role is added or removed whole, its value its refs as a JSON list.
  */

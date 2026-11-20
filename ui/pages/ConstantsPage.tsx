@@ -2,24 +2,12 @@ import { Fragment, useState } from "react";
 import { colorFromOklab, formatAuthored } from "../../src/color-math.js";
 import { randomColor } from "../../src/palette-roll.js";
 import type { SnapshotConstant } from "../../src/snapshot.js";
-import { CONSTANT_COLUMNS, constantAnchor, ConstantRow } from "../ConstantRow.js";
-import { AddRow, openNameOf } from "../EntryRow.js";
+import { CONSTANT_COLUMNS, constantAnchor, ConstantRow, RESERVED } from "../ConstantRow.js";
+import { AddRow, groupOf, openNameOf } from "../EntryRow.js";
 import { colorNameOf } from "../names.js";
 import { useTrying } from "../preview.js";
 import { Link, useScrollToHash } from "../router.js";
 import { keyFor, UNNAMED } from "./PalettePage.js";
-
-const groupOf = (path: string) => path.split(".").slice(0, -1).join(".");
-
-/** The names a constant at `path` cannot be renamed to: its siblings', and for one in no group whatever else refs can name. */
-function takenBeside(path: string, constants: SnapshotConstant[], named: string[]): string[] {
-  const group = groupOf(path);
-  const prefix = group === "" ? "" : `${group}.`;
-  const siblings = constants
-    .filter((other) => other.path !== path && other.path.startsWith(prefix))
-    .map((other) => other.path.slice(prefix.length).split(".")[0]);
-  return ["alias", "emit", "description", ...siblings, ...(group === "" ? named : [])];
-}
 
 /** Closes the colors in no group: adds a random one, named after itself, and opens its name. */
 function NewConstantRow({ taken }: { taken: string[] }) {
@@ -78,7 +66,7 @@ export function ConstantsPage({
           {loose.map((constant) => (
             <ConstantRow key={constant.path} constant={constant} constants={constants} named={named} siblings={loose} onPalettePage={false} targeted={constantAnchor(constant.path) === hash} />
           ))}
-          <NewConstantRow taken={takenBeside("", constants, named)} />
+          <NewConstantRow taken={[...RESERVED, ...constants.map((constant) => constant.path.split(".")[0]), ...named]} />
           {groups.map((group) => (
             <Fragment key={group}>
               <tr className="group-row">

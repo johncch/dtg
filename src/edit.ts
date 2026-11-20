@@ -579,7 +579,7 @@ function keySource(name: string): string {
 
 type Entry = { doc: Document; keys: string[]; set: YAMLMap; pair: Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node> };
 
-/** The constant, system, role or emit list a target names, with the map it is in. Throws when the file has no such entry. */
+/** The constant, system, role, group or emit list a target names, with the map it is in. Throws when the file has no such entry. */
 function entryAt(text: string, target: EntryTarget | EmitTarget | GroupTarget): Entry {
   const doc = parseDocument(text);
   const keys = keysOf(target, doc) as string[];
@@ -607,7 +607,6 @@ function withEntryRenamed(text: string, target: EntryTarget | GroupTarget, name:
     throw new Error(`${describeTarget(renamedTarget(target, name))} is already written`);
   }
   const pathOf = (entry: EntryTarget | GroupTarget) => (entry.kind === "role" ? entry.role : entry.path);
-  // A group's refs are those into what it holds: constants in `palette`, roles in a section.
   const kind = target.kind === "group" ? (target.root === "palette" ? "constant" : "role") : target.kind;
   return withPointersRewritten(
     text,
@@ -661,6 +660,9 @@ function pointersAt(
   return [];
 }
 
+/** What a group says about itself, beside the entries it holds. */
+const GROUP_KEYS = { role: ["alias", "omit", "description"], constant: ["alias", "emit", "description"] };
+
 /**
  * The group's entries in a new order. Each entry's own text moves, a block
  * entry with the comment on its line; whatever is written between entries
@@ -670,8 +672,8 @@ function withEntryMoved(text: string, target: ConstantTarget | RoleTarget, after
   const { set, pair } = entryAt(text, target);
   const items: Pair[] = set.items;
   const others = items.filter((item) => item !== pair);
-  // What a group says about itself is written before its roles, and the first role goes after it.
-  const aboutGroup = (item: Pair) => target.kind === "role" && isScalar(item.key) && ["alias", "omit", "description"].includes(String(item.key.value));
+  // What a group says about itself is written before its entries, and the first entry goes after it.
+  const aboutGroup = (item: Pair) => isScalar(item.key) && GROUP_KEYS[target.kind].includes(String(item.key.value));
   const first = others.findIndex((item) => !aboutGroup(item));
   const at = after == null ? (first === -1 ? others.length : first) : others.findIndex((item) => isScalar(item.key) && item.key.value === after) + 1;
   if (after != null && at === 0) {
@@ -700,7 +702,7 @@ function withEntryMoved(text: string, target: ConstantTarget | RoleTarget, after
 function withGroupedRemoved(text: string, target: RoleTarget | ConstantTarget): string {
   const entry = entryAt(text, target);
   let { keys, set, pair } = entry;
-  const aboutGroup = target.kind === "role" ? ["alias", "omit", "description"] : ["alias", "emit", "description"];
+  const aboutGroup = GROUP_KEYS[target.kind];
   const holdsOnlyThis = () => set.items.every((item) => item === pair || (isScalar(item.key) && aboutGroup.includes(String(item.key.value))));
   while (keys.length > 2 && holdsOnlyThis()) {
     keys = keys.slice(0, -1);

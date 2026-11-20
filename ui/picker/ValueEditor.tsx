@@ -17,7 +17,7 @@ import { ColorFacts, ColorTip } from "../ColorTip.js";
 import { useProjectGamut } from "../gamut.js";
 import { paintCss } from "../paint.js";
 import type { PopupPanel } from "../Popup.js";
-import { useTrying } from "../preview.js";
+import { firstError, useTrying } from "../preview.js";
 import { useValueInFile } from "../working.js";
 import { Picker } from "./Picker.js";
 import {
@@ -504,12 +504,6 @@ function colorOf(
 
 function transparentRef(path: string, opacity: number): string {
   return formatRef("transparent", `${path} ${opacity}`);
-}
-
-/** The first of a refusal's errors: the reason, before everything that fails because of it. */
-function firstError(refusal: string): string {
-  const first = refusal.split("\n").find((line) => line.startsWith("- "));
-  return first ? first.slice(2) : refusal;
 }
 
 /** Named colors by group, the ungrouped ones first; choosing one names it. */

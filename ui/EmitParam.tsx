@@ -3,7 +3,7 @@ import type { SnapshotSystem } from "../src/snapshot.js";
 import { emitEdit } from "./emit-list.js";
 import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";
-import { useTrying } from "./preview.js";
+import { firstError, useTrying } from "./preview.js";
 
 /** A system's `emit` list as it is written; clicking it opens the whole list as text, tried live on the page. */
 export function EmitParam({ system }: { system: SnapshotSystem }) {
@@ -70,13 +70,7 @@ function EmitEditor({ system, panel }: { system: SnapshotSystem; panel: PopupPan
         onChange={(event) => setText(event.target.value)}
       />
       <p className="ref-error">Steps to publish even when no role uses them, separated by commas.</p>
-      {edit && refusal && <p className="ref-error system-form-problem">{firstError(refusal)}</p>}
+      {edit && refusal && <p className="ref-error ref-problem">{firstError(refusal)}</p>}
     </form>
   );
-}
-
-/** The first of a refusal's errors: the reason, before everything that fails because of it. */
-function firstError(refusal: string): string {
-  const first = refusal.split("\n").find((line) => line.startsWith("- "));
-  return first ? first.slice(2) : refusal;
 }

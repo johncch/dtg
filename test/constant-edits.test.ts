@@ -154,6 +154,13 @@ describe("moving a constant", () => {
     assert.equal(back, SRC);
   });
 
+  test("moved first, it still follows what the group says about itself", () => {
+    const described = SRC.replace(`  colors:\n`, `  colors:\n    description: Brand\n`);
+    assert.notEqual(described, SRC);
+    const edited = applyEdits(described, [{ action: "move", target: constant("colors.ruby"), after: null }]);
+    assert.ok(edited.includes(`  colors:\n    description: Brand\n    ruby: "#c50101" # red\n    theme: "#03a2e8"\n`));
+  });
+
   test("moves one in a flow group", () => {
     const edited = applyEdits(SRC, [{ action: "move", target: constant("grounds.paper"), after: "ink" }]);
     assert.ok(edited.includes(`grounds: { ink: "#001a28", paper: "#fafdff" }`));

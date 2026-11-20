@@ -2,7 +2,8 @@ import { Fragment } from "react";
 import type { ConstantTarget } from "../src/edit.js";
 import type { SnapshotConstant } from "../src/snapshot.js";
 import { ColorChip } from "./ColorChip.js";
-import { copyName, EntryDuplicate, EntryGrip, EntryName, EntryRemove, entryRowProps, openNameOf, pathProblem } from "./EntryRow.js";
+import { rolePath } from "../src/selector.js";
+import { copyName, EntryDuplicate, EntryGrip, EntryName, EntryRemove, entryRowProps, groupOf, nameOf, openNameOf, pathProblem } from "./EntryRow.js";
 import { Hint } from "./Hint.js";
 import { LockIcon } from "./LockIcon.js";
 import { useTrying } from "./preview.js";
@@ -15,9 +16,8 @@ export function constantAnchor(path: string): string {
 
 export const CONSTANT_COLUMNS = ["Path", "Emits", "Value", "Used by"];
 
-const RESERVED = ["alias", "emit", "description"];
-const groupOf = (path: string) => path.split(".").slice(0, -1).join(".");
-const nameOf = (path: string) => path.split(".").at(-1)!;
+/** The keys a group of palette colors keeps for itself, which no color in it can be named. */
+export const RESERVED = ["alias", "emit", "description"];
 
 /** A palette color's row, the same wherever palette colors are listed. */
 export function ConstantRow({
@@ -97,7 +97,7 @@ export function ConstantRow({
                 label={constant.path}
                 users={[
                   ...new Set([
-                    ...constant.usedBy.map((use) => (use.group ? `${use.group}.${use.role}` : use.role)),
+                    ...constant.usedBy.map(rolePath),
                     ...constant.paramOf.map(({ system, param }) => `${system} ${param}`),
                   ]),
                 ]}
