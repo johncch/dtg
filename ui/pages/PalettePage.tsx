@@ -13,6 +13,7 @@ import { Hint } from "../Hint.js";
 import { EDITABLE } from "../mode.js";
 import { colorNameOf } from "../names.js";
 import { paintCss } from "../paint.js";
+import { GroupName } from "../EntryRow.js";
 import { PaletteExplorer } from "../PaletteExplorer.js";
 import type { PaletteEntry } from "../PalettePlots.js";
 import { Popup, type PopupPanel } from "../Popup.js";
@@ -87,13 +88,33 @@ export function keyFor(name: string, taken: string[]): string {
 
 let awaitedPalette: string | null = null;
 
+/** A palette's page title: its path, whose last part a double click renames, every ref and param naming its colors following. */
+function PaletteName({ palette, written }: { palette: Palette; written: string[] }) {
+  const { commit } = useTrying();
+  const parent = palette.group.split(".").slice(0, -1).join(".");
+  const under = parent === "" ? "" : `${parent}.`;
+  const beside = written
+    .filter((path) => path.startsWith(under) && !path.startsWith(`${palette.group}.`))
+    .map((path) => path.slice(under.length).split(".")[0]);
+  return (
+    <GroupName
+      path={palette.group}
+      taken={beside}
+      onRename={(name) => {
+        awaitedPalette = `${under}${name}`;
+        commit({ action: "rename", target: { kind: "group", root: "palette", path: palette.group }, name });
+      }}
+    />
+  );
+}
+
 /** Opens the page of a palette an edit just made, once the working copy has it. */
 export function OpenAwaitedPalette({ working }: { working: Snapshot }) {
   useLayoutEffect(() => {
     if (awaitedPalette == null || !working.constants.some((constant) => constant.path.startsWith(`${awaitedPalette}.`))) return;
     const name = awaitedPalette;
     awaitedPalette = null;
-    navigate({ page: "palette", name });
+    navigate({ page: "palette", name }, { replace: true });
   }, [working.constants]);
   return null;
 }
@@ -470,8 +491,8 @@ export function PalettePage({
   return (
     <>
       <div className="palette-head">
-        <h1>
-          {palette.group}{" "}
+        <h1 className="entry-head palette-title">
+          <PaletteName palette={palette} written={written} />
           <span className="title-kind">
             palette
           </span>

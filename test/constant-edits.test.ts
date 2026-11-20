@@ -59,10 +59,16 @@ describe("adding a constant", () => {
     assert.ok(paths(edited).includes("brand.x"));
   });
 
-  test("cannot add two groups deep where the file has neither", () => {
+  test("adding two groups deep where the file has neither writes both", () => {
+    const edited = applyEdits(SRC, [{ action: "add", target: constant("brand.deep.x"), value: "#000000" }]);
+    assert.ok(edited.includes(`  brand:\n    deep:\n      x: "#000000"\n\nsystems:`));
+    assert.ok(paths(edited).includes("brand.deep.x"));
+  });
+
+  test("cannot add under a constant, which is not a group", () => {
     assert.throws(
-      () => applyEdits(SRC, [{ action: "add", target: constant("nope.deeper.x"), value: "#000000" }]),
-      /nothing written for nope\.deeper\.x/,
+      () => applyEdits(SRC, [{ action: "add", target: constant("blue.x"), value: "#000000" }]),
+      /nothing written for blue\.x to be added to/,
     );
   });
 

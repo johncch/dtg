@@ -21,77 +21,138 @@ export function openNameOf(key: string): void {
   naming = key;
 }
 
-/** An entry's name; in the editor a double click opens it for renaming, kept on Enter or on leaving the field. */
-export function EntryName({
+/**
+ * A name that a double click opens for retyping, kept on Enter or on leaving
+ * the field. The field lies over the name's place in the row at a width of
+ * its own, so opening it moves nothing, and a long name scrolls inside it.
+ */
+function Retyped({
   keys,
-  name,
-  label = name,
-  taken,
-  whenTaken,
-  onRename,
+  shown,
+  written,
+  selectFrom = 0,
+  problemOf,
+  onKeep,
 }: {
   /** What `openNameOf` can call this row by. */
   keys: string[];
-  /** The part that is retyped. */
-  name: string;
-  /** What is shown: the name, or the path it ends. */
-  label?: string;
-  taken: string[];
-  whenTaken: (name: string) => string;
-  onRename: (name: string) => void;
+  /** What the row shows. */
+  shown: string;
+  /** What the field opens holding. */
+  written: string;
+  /** Where in `written` the selection starts when the field opens; it runs to the end. */
+  selectFrom?: number;
+  problemOf: (typed: string) => string | null;
+  onKeep: (typed: string) => void;
 }) {
   const [typed, setTyped] = useState<string | null>(null);
   useLayoutEffect(() => {
     if (naming == null || !keys.includes(naming)) return;
     naming = null;
-    setTyped(name);
+    setTyped(written);
   }, [keys.join("\n")]);
 
-  if (!EDITABLE) return <code>{label}</code>;
-  const before = label.endsWith(name) ? label.slice(0, -name.length) : "";
+  if (!EDITABLE) return <code>{shown}</code>;
   if (typed == null) {
     return (
-      <code title="Double-click to rename" onDoubleClick={() => setTyped(name)}>
-        {before}
-        {name}
-      </code>
+      <span className="entry-name">
+        <code title="Double-click to rename" onDoubleClick={() => setTyped(written)}>
+          {shown}
+        </code>
+      </span>
     );
   }
-  const problem = !ENTRY_NAME.test(typed) ? ENTRY_NAME_RULE : typed !== name && taken.includes(typed) ? whenTaken(typed) : null;
+  const problem = typed === written ? null : problemOf(typed);
   const keep = () => {
     if (problem) return false;
-    if (typed !== name) onRename(typed);
+    if (typed !== written) onKeep(typed);
     setTyped(null);
     return true;
   };
-  // The name stays in the row, unseen, holding its place; the field lies over it, so opening it moves nothing.
   return (
-    <code>
-      {before}
-      <span className="entry-name-editing">
-        <span className="entry-name-held">{name}</span>
-        <input
-          type="text"
-          className="ref-input entry-name-input"
-          aria-label={`Name of ${label}`}
-          value={typed}
-          style={{ width: `${Math.max(typed.length + 1, 8)}ch` }}
-          spellCheck={false}
-          autoComplete="off"
-          data-1p-ignore
-          autoFocus
-          onFocus={(event) => event.target.select()}
-          onChange={(event) => setTyped(event.target.value.trim())}
-          onBlur={() => keep() || setTyped(null)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") keep();
-            if (event.key === "Escape") setTyped(null);
-          }}
-        />
-        {problem && <span className="ref-error system-form-problem entry-name-problem">{problem}</span>}
-      </span>
-    </code>
+    <span className="entry-name entry-name-editing">
+      <code className="entry-name-held">{shown}</code>
+      <input
+        type="text"
+        className="ref-input entry-name-input"
+        aria-label={`Name of ${shown}`}
+        value={typed}
+        spellCheck={false}
+        autoComplete="off"
+        data-1p-ignore
+        autoFocus
+        onFocus={(event) => event.target.setSelectionRange(selectFrom, event.target.value.length)}
+        onChange={(event) => setTyped(event.target.value.trim())}
+        onBlur={() => keep() || setTyped(null)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") keep();
+          if (event.key === "Escape") setTyped(null);
+        }}
+      />
+      {problem && <span className="ref-error system-form-problem entry-name-problem">{problem}</span>}
+    </span>
   );
+}
+
+/**
+ * An entry's name, retyped as its whole dotted path: changing the last part
+ * renames it, and changing what comes before moves it to that group. The
+ * field opens with the last part selected, so typing renames.
+ */
+export function EntryName({
+  keys,
+  path,
+  shown,
+  problemOf,
+  onRepath,
+}: {
+  keys: string[];
+  /** The entry's dotted path, as refs write it. */
+  path: string;
+  /** What the row shows: the path, or its last part under a group's heading. */
+  shown: string;
+  /** Why the entry cannot be at a path, for one whose every part is a name. */
+  problemOf: (path: string) => string | null;
+  onRepath: (path: string) => void;
+}) {
+  return (
+    <Retyped
+      keys={keys}
+      shown={shown}
+      written={path}
+      selectFrom={path.lastIndexOf(".") + 1}
+      problemOf={(typed) => (typed.split(".").every((part) => ENTRY_NAME.test(part)) ? problemOf(typed) : `${ENTRY_NAME_RULE} Dots separate groups.`)}
+      onKeep={onRepath}
+    />
+  );
+}
+
+/** A group's own name, the last part of its path: retyping it renames the group where it is. */
+export function GroupName({ path, taken, onRename }: { path: string; taken: string[]; onRename: (name: string) => void }) {
+  const name = path.split(".").at(-1)!;
+  return (
+    <Retyped
+      keys={[]}
+      shown={path}
+      written={name}
+      problemOf={(typed) => (!ENTRY_NAME.test(typed) ? ENTRY_NAME_RULE : taken.includes(typed) ? `${typed} is already written.` : null)}
+      onKeep={onRename}
+    />
+  );
+}
+
+/**
+ * Why an entry cannot be placed at `path` among `others`, the paths already
+ * written beside it: one of them has the path, or is where a group would
+ * have to be, or `path` is a group that holds some of them.
+ */
+export function pathProblem(path: string, others: string[]): string | null {
+  if (others.includes(path)) return `${path} is already written.`;
+  const parts = path.split(".");
+  const blocking = parts.map((_, depth) => parts.slice(0, depth).join(".")).find((group) => group !== "" && others.includes(group));
+  if (blocking) return `${blocking} is not a group.`;
+  if (others.some((other) => other.startsWith(`${path}.`))) return `${path} is a group.`;
+  return null;
 }
 
 /** Removes an entry, unless something still uses it or the page gives another reason it must stay. */

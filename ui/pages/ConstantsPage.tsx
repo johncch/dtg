@@ -4,7 +4,7 @@ import type { ConstantTarget } from "../../src/edit.js";
 import { randomColor } from "../../src/palette-roll.js";
 import type { SnapshotConstant } from "../../src/snapshot.js";
 import { ColorChip } from "../ColorChip.js";
-import { AddRow, EntryGrip, EntryName, EntryRemove, entryRowProps, openNameOf } from "../EntryRow.js";
+import { AddRow, EntryGrip, EntryName, EntryRemove, entryRowProps, openNameOf, pathProblem } from "../EntryRow.js";
 import { colorNameOf } from "../names.js";
 import { useTrying } from "../preview.js";
 import { Link, useScrollToHash } from "../router.js";
@@ -144,11 +144,18 @@ function ConstantRow({
           )}
           <EntryName
             keys={[constant.path]}
-            name={name}
-            label={constant.path}
-            taken={takenBeside(constant.path, constants, named)}
-            whenTaken={(typed) => `${[...constant.path.split(".").slice(0, -1), typed].join(".")} is already written.`}
-            onRename={(typed) => commit({ action: "rename", target, name: typed })}
+            path={constant.path}
+            shown={constant.path}
+            problemOf={(path) => {
+              const first = path.split(".")[0];
+              if (["alias", "emit", "description"].includes(path.split(".").at(-1)!)) return `${path.split(".").at(-1)} is a word a group keeps for itself.`;
+              if (first !== constant.path.split(".")[0] && named.includes(first)) return `${first} is already written.`;
+              return pathProblem(path, constants.filter((other) => other !== constant).map((other) => other.path));
+            }}
+            onRepath={(path) => {
+              if (groupOf(path) === groupOf(constant.path)) commit({ action: "rename", target, name: nameOf(path) });
+              else commit({ action: "place", target, path });
+            }}
           />
           {loose && (
             <span className="entry-actions">

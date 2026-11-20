@@ -8,7 +8,7 @@ import { Popup } from "../Popup.js";
 import { EDITABLE } from "../mode.js";
 import { sourcesFor, TargetValueEditor } from "../picker/ValueEditor.js";
 import { entryRowProps } from "../EntryRow.js";
-import { NewRoleRow, RoleGrip, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
+import { NewRoleRow, RoleGrip, RoleGroupName, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
 import { Link, useScrollToHash } from "../router.js";
 import { INHERIT, rolePath } from "../../src/selector.js";
 import { stepAnchor } from "../Strip.js";
@@ -19,7 +19,9 @@ export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: stri
   const roles = snapshot.roles.filter((role) => role.group === group);
   return (
     <>
-      <h1>{group}</h1>
+      <h1 className="entry-head">
+        <RoleGroupName snapshot={snapshot} group={group} />
+      </h1>
       {snapshot.groupNotes.roles[group] && <p className="note">{snapshot.groupNotes.roles[group]}</p>}
       <p className="sub">{roles.length} roles</p>
       <table>
@@ -121,7 +123,7 @@ function RoleRow({
       <td>
         <div className="entry-head">
           <RoleGrip role={role} siblings={siblings} />
-          <RoleName role={role} siblings={siblings} onGroupPage={onGroupPage} />
+          <RoleName role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
           <span className="entry-actions">
             <RoleRemove role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
           </span>

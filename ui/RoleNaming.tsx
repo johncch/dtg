@@ -3,7 +3,7 @@ import { useLayoutEffect, useState } from "react";
 import type { RoleTarget } from "../src/edit.js";
 import { INHERIT, rolePath } from "../src/selector.js";
 import type { Snapshot, SnapshotRole } from "../src/snapshot.js";
-import { AddRow, ENTRY_NAME, ENTRY_NAME_RULE, EntryGrip, EntryName, EntryRemove, openNameOf } from "./EntryRow.js";
+import { AddRow, ENTRY_NAME, ENTRY_NAME_RULE, EntryGrip, EntryName, EntryRemove, GroupName, openNameOf, pathProblem } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { useTrying } from "./preview.js";
 import { navigate } from "./router.js";
@@ -35,7 +35,7 @@ export function OpenAwaitedGroup({ working }: { working: Snapshot }) {
     if (awaitedGroup == null || !working.roles.some((role) => role.group === awaitedGroup)) return;
     const name = awaitedGroup;
     awaitedGroup = null;
-    navigate({ page: "group", name });
+    navigate({ page: "group", name }, { replace: true });
   }, [working.roles]);
   return null;
 }
@@ -175,17 +175,59 @@ export function RoleRemove({ role, roles, onGroupPage }: { role: SnapshotRole; r
   );
 }
 
-export function RoleName({ role, siblings, onGroupPage }: { role: SnapshotRole; siblings: SnapshotRole[]; onGroupPage: boolean }) {
+/**
+ * A role's name. Under its group's heading the row shows the last part; the
+ * field holds the whole path, and a path in another group moves the role there.
+ */
+export function RoleName({ role, roles, onGroupPage }: { role: SnapshotRole; roles: SnapshotRole[]; onGroupPage: boolean }) {
   const { commit } = useTrying();
   const target = targetOf(role);
   const key = JSON.stringify(target);
+  const others = roles.filter((other) => other.section === role.section && other !== role).map(rolePath);
   return (
     <EntryName
       keys={onGroupPage ? [key, onItsGroupPage(key)] : [key]}
-      name={role.role}
-      taken={siblings.map((other) => other.role)}
-      whenTaken={(name) => `${rolePath({ ...role, role: name })} is already a role.`}
-      onRename={(name) => commit({ action: "rename", target, name })}
+      path={rolePath(role)}
+      shown={role.role}
+      problemOf={(path) => pathProblem(path, others)}
+      onRepath={(path) => {
+        const parts = path.split(".");
+        const group = parts.slice(0, -1).join(".");
+        if (group === role.group) {
+          commit({ action: "rename", target, name: parts.at(-1)! });
+          return;
+        }
+        // On its group's page the role leaves the page, so the page follows it; the section's page shows it wherever it goes.
+        if (onGroupPage && group !== "") awaitedGroup = group;
+        commit({ action: "place", target, path });
+        if (onGroupPage && group === "") navigate({ page: "roles", section: role.section }, { replace: true });
+      }}
+    />
+  );
+}
+
+/** A group's page title: its path, whose last part a double click renames, every ref into the group following. */
+export function RoleGroupName({ snapshot, group }: { snapshot: Snapshot; group: string }) {
+  const { commit } = useTrying();
+  const section = snapshot.roles.find((role) => role.group === group)?.section;
+  if (section == null) return <>{group}</>;
+  const parent = group.split(".").slice(0, -1).join(".");
+  const under = parent === "" ? "" : `${parent}.`;
+  const beside = snapshot.roles
+    .filter((role) => role.section === section)
+    .map(rolePath)
+    .filter((path) => path.startsWith(under) && !path.startsWith(`${group}.`))
+    .map((path) => path.slice(under.length).split(".")[0]);
+  // A name in no group is one a ref can start with, shared with the palette and the systems.
+  const elsewhere = parent === "" ? [...snapshot.constants.map((constant) => constant.path), ...snapshot.systems.map((system) => system.system)].map((path) => path.split(".")[0]) : [];
+  return (
+    <GroupName
+      path={group}
+      taken={[...beside, ...elsewhere]}
+      onRename={(name) => {
+        awaitedGroup = `${under}${name}`;
+        commit({ action: "rename", target: { kind: "group", root: section, path: group }, name });
+      }}
     />
   );
 }

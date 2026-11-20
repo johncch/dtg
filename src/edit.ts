@@ -14,11 +14,14 @@ export type EditTarget =
   /** `role` is the role's dotted path within its section; `mode` its place in `modes`. */
   | { kind: "ref"; section: string; role: string; mode: number }
   /** A whole role, by its dotted path within its section. */
-  | { kind: "role"; section: string; role: string };
+  | { kind: "role"; section: string; role: string }
+  /** A group of roles or of constants, by its dotted path within `root`: a section, or `palette`. */
+  | { kind: "group"; root: string; path: string };
 
 export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
 export type SystemTarget = Extract<EditTarget, { kind: "system" }>;
 export type RoleTarget = Extract<EditTarget, { kind: "role" }>;
+export type GroupTarget = Extract<EditTarget, { kind: "group" }>;
 type EmitTarget = Extract<EditTarget, { kind: "emit" }>;
 /** What is added, renamed and removed whole. */
 export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
@@ -34,16 +37,26 @@ export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
  * setting it writes both, leaving the system's other keys as they are.
  * A role is added at the end of its group, renamed and moved within it, and
  * removed whole: its value is its refs, one per mode, as a JSON list.
+ * Placing a constant or a role moves it to another dotted path in its
+ * section or in `palette`, writing the groups on the way that are not there
+ * and taking a group it leaves empty; every ref to it follows. Renaming a
+ * group rewrites every ref into it.
  */
 export type Edit =
   | { action: "set"; target: EditTarget; value: string }
   | { action: "add"; target: EntryTarget; value: string; after?: string }
-  | { action: "rename"; target: EntryTarget; name: string }
+  | { action: "rename"; target: EntryTarget | GroupTarget; name: string }
+  | { action: "place"; target: ConstantTarget | RoleTarget; path: string }
   | { action: "move"; target: ConstantTarget | RoleTarget; after: string | null }
   | { action: "remove"; target: EntryTarget };
 
-/** Where a constant, a system or a role is after it is renamed. */
-export function renamedTarget<Target extends EntryTarget>(target: Target, name: string): Target {
+/** Where a constant or a role is after it is placed at `path`. */
+export function placedTarget<Target extends ConstantTarget | RoleTarget>(target: Target, path: string): Target {
+  return target.kind === "role" ? { ...target, role: path } : { ...target, path };
+}
+
+/** Where a constant, a system, a role or a group is after it is renamed. */
+export function renamedTarget<Target extends EntryTarget | GroupTarget>(target: Target, name: string): Target {
   const renamed = (path: string) => [...path.split(".").slice(0, -1), name].join(".");
   return target.kind === "role" ? { ...target, role: renamed(target.role) } : { ...target, path: renamed(target.path) };
 }
@@ -62,6 +75,8 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
       return ["defaults", target.algorithm, ...target.path.split(".")];
     case "role":
       return [target.section, ...target.role.split(".")];
+    case "group":
+      return [target.root, ...target.path.split(".")];
     case "ref": {
       const role = [target.section, ...target.role.split(".")];
       const written = doc.getIn(role, true);
@@ -88,6 +103,8 @@ export function describeTarget(target: EditTarget): string {
       return `${target.role}, mode ${target.mode + 1}`;
     case "role":
       return target.role;
+    case "group":
+      return `the group ${target.path}`;
   }
 }
 
@@ -119,6 +136,10 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       text = withEntryRenamed(text, edit.target, edit.name);
       continue;
     }
+    if (edit.action === "place") {
+      text = withEntryPlaced(text, edit.target, edit.path);
+      continue;
+    }
     if (edit.action === "move") {
       text = withEntryMoved(text, edit.target, edit.after);
       continue;
@@ -136,7 +157,7 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
             : withConstantAdded(text, edit.target, edit.value, edit.after);
       continue;
     }
-    if (edit.target.kind === "role") {
+    if (edit.target.kind === "role" || edit.target.kind === "group") {
       throw new Error(`${describeTarget(edit.target)} is edited one ref at a time`);
     }
     if (edit.target.kind === "system") {
@@ -202,6 +223,7 @@ export function readValue(yamlText: string, target: EditTarget): string | null {
     const refs = refsOf(writtenAt(yamlText, target));
     return refs == null ? null : JSON.stringify(refs);
   }
+  if (target.kind === "group") return isGroup(writtenAt(yamlText, target)) ? "{}" : null;
   if (structureAt(yamlText, target)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
   const node = nodeAt(yamlText, target);
   if (node) return node.value == null ? INHERIT : String(node.value);
@@ -344,12 +366,30 @@ function withRefsAdded(text: string, last: LastRef, sources: string[]): string {
  * group. A group `palette` does not have yet is written with it, at the end.
  */
 function withConstantAdded(text: string, target: ConstantTarget, value: string, after?: string): string {
-  const keys = ["palette", ...target.path.split(".")];
-  if (keys.length > 2 && parseDocument(text).getIn(keys.slice(0, -1), true) == null) {
-    const entry = `${keySource(keys.at(-1)!)}: ${JSON.stringify(value)}`;
-    return withEntryAdded(text, keys.slice(0, -2), keys.at(-2)!, `{ ${entry} }`, target, "and is not a group", undefined, [entry]);
+  return withEntryAddedDeep(text, ["palette", ...target.path.split(".")], JSON.stringify(value), target, "and is not a color", after);
+}
+
+/**
+ * A new entry at a dotted path, in the map that path names. The groups on
+ * the way that the file does not have are written with it, at the end of the
+ * deepest one it has; the map the path starts in has to be there.
+ */
+function withEntryAddedDeep(text: string, keys: string[], source: string, target: EditTarget, alreadyWritten: string, after?: string): string {
+  const doc = parseDocument(text);
+  let held = keys.length - 1;
+  while (held > 1 && doc.getIn(keys.slice(0, held), true) == null) held -= 1;
+  const holder = doc.getIn(keys.slice(0, held), true);
+  if (isMap(holder) && holder.has("refs")) {
+    throw new Error(`${keys.slice(1, held).join(".")} is a role, not a group for ${describeTarget(target)} to go in`);
   }
-  return withEntryAdded(text, keys.slice(0, -1), keys.at(-1)!, JSON.stringify(value), target, "and is not a color", after);
+  const name = keys.at(-1)!;
+  const missing = keys.slice(held, -1);
+  if (missing.length === 0) return withEntryAdded(text, keys.slice(0, -1), name, source, target, alreadyWritten, after);
+  const entry = `${keySource(name)}: ${source}`;
+  const [first, ...deeper] = missing;
+  const block = deeper.reduceRight<string[]>((lines, key) => [`${keySource(key)}:`, ...lines.map((line) => `  ${line}`)], [entry]);
+  const flow = deeper.reduceRight((inner, key) => `{ ${keySource(key)}: ${inner} }`, `{ ${entry} }`);
+  return withEntryAdded(text, keys.slice(0, held), first, flow, target, alreadyWritten, undefined, block);
 }
 
 /**
@@ -406,14 +446,49 @@ function withRoleAdded(text: string, target: RoleTarget, value: string): string 
   const keys = [target.section, ...target.role.split(".")];
   const refs = JSON.parse(value) as string[];
   const written = refs.map((ref) => (ref === INHERIT || plainSafe(ref) ? ref : JSON.stringify(ref)));
-  const doc = parseDocument(text);
-  const source = doc.has("modes") ? `[${written.join(", ")}]` : written[0];
-  const name = keys.at(-1)!;
-  if (keys.length > 2 && doc.getIn(keys.slice(0, -1), true) == null) {
-    const entry = `${keySource(name)}: ${source}`;
-    return withEntryAdded(text, keys.slice(0, -2), keys.at(-2)!, `{ ${entry} }`, target, "as a role or a group", undefined, [entry]);
-  }
-  return withEntryAdded(text, keys.slice(0, -1), name, source, target, "as a role or a group");
+  const source = parseDocument(text).has("modes") ? `[${written.join(", ")}]` : written[0];
+  return withEntryAddedDeep(text, keys, source, target, "as a role or a group");
+}
+
+/** A map of roles or of constants, as against a role written as a block. */
+function isGroup(node: unknown): node is YAMLMap {
+  return isMap(node) && !node.has("refs");
+}
+
+/**
+ * The entry at another dotted path, with every ref to it rewritten. Its value
+ * goes as it is written when that is on one line, and as a flow value
+ * otherwise; it lands at the end of the group it joins.
+ */
+function withEntryPlaced(text: string, target: ConstantTarget | RoleTarget, path: string): string {
+  const placed = placedTarget(target, path);
+  const pathOf = (entry: ConstantTarget | RoleTarget) => (entry.kind === "role" ? entry.role : entry.path);
+  const pointed = withPointersRewritten(text, [], target.kind, pathOf(target), path, false);
+  const value = entryAt(pointed, target).pair.value as Node;
+  const onOneLine = isScalar(value) || ((isMap(value) || isSeq(value)) && value.flow === true);
+  const source = onOneLine ? pointed.slice(value.range![0], value.range![1]) : structureSource(JSON.stringify(value.toJSON()))!;
+  const keys = keysOf(placed, parseDocument(pointed)) as string[];
+  const added = withEntryAddedDeep(pointed, keys, source, placed, target.kind === "role" ? "as a role or a group" : "and is not a color");
+  return withGroupedRemoved(added, target);
+}
+
+/** The text with each span written over, and every value pointing at `from` saying `to`. */
+function withPointersRewritten(
+  text: string,
+  spans: { start: number; end: number; source: string }[],
+  kind: EntryTarget["kind"],
+  from: string,
+  to: string,
+  wholeGroup: boolean,
+): string {
+  const rewritten = pointersAt(parseDocument(text).contents, [], kind, from, to, wholeGroup).map(({ node, renamed }) => ({
+    start: node.range![0],
+    end: node.range![1],
+    source: sourceFor(renamed, node),
+  }));
+  return [...spans, ...rewritten]
+    .sort((a, b) => b.start - a.start)
+    .reduce((written, { start, end, source }) => written.slice(0, start) + source + written.slice(end), text);
 }
 
 /** A role's refs as written — a ref list, a block holding one under `refs`, or the ref itself — or null for anything else. */
@@ -505,7 +580,7 @@ function keySource(name: string): string {
 type Entry = { doc: Document; keys: string[]; set: YAMLMap; pair: Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node> };
 
 /** The constant, system, role or emit list a target names, with the map it is in. Throws when the file has no such entry. */
-function entryAt(text: string, target: EntryTarget | EmitTarget): Entry {
+function entryAt(text: string, target: EntryTarget | EmitTarget | GroupTarget): Entry {
   const doc = parseDocument(text);
   const keys = keysOf(target, doc) as string[];
   const set = doc.getIn(keys.slice(0, -1), true);
@@ -517,30 +592,31 @@ function entryAt(text: string, target: EntryTarget | EmitTarget): Entry {
         ? isSeq(pair?.value)
         : target.kind === "role"
           ? refsOf(pair?.value) != null
-          : isScalar(pair?.value);
+          : target.kind === "group"
+            ? isGroup(pair?.value)
+            : isScalar(pair?.value);
   if (!isMap(set) || !pair || !written || !isScalar(pair.key) || !pair.key.range) {
     throw new Error(`nothing written for ${describeTarget(target)} to edit`);
   }
   return { doc, keys, set, pair: pair as Entry["pair"] };
 }
 
-function withEntryRenamed(text: string, target: EntryTarget, name: string): string {
+function withEntryRenamed(text: string, target: EntryTarget | GroupTarget, name: string): string {
   const { set, pair } = entryAt(text, target);
   if (set.items.some((item) => isScalar(item.key) && item.key.value === name)) {
     throw new Error(`${describeTarget(renamedTarget(target, name))} is already written`);
   }
-  const pathOf = (entry: EntryTarget) => (entry.kind === "role" ? entry.role : entry.path);
-  const from = pathOf(target);
-  const to = pathOf(renamedTarget(target, name));
-  const spans: { start: number; end: number; source: string }[] = [
-    { start: pair.key.range[0], end: pair.key.range[1], source: keySource(name) },
-  ];
-  for (const { node, renamed } of pointersAt(parseDocument(text).contents, [], target.kind, from, to)) {
-    spans.push({ start: node.range![0], end: node.range![1], source: sourceFor(renamed, node) });
-  }
-  return spans
-    .sort((a, b) => b.start - a.start)
-    .reduce((written, { start, end, source }) => written.slice(0, start) + source + written.slice(end), text);
+  const pathOf = (entry: EntryTarget | GroupTarget) => (entry.kind === "role" ? entry.role : entry.path);
+  // A group's refs are those into what it holds: constants in `palette`, roles in a section.
+  const kind = target.kind === "group" ? (target.root === "palette" ? "constant" : "role") : target.kind;
+  return withPointersRewritten(
+    text,
+    [{ start: pair.key.range[0], end: pair.key.range[1], source: keySource(name) }],
+    kind,
+    pathOf(target),
+    pathOf(renamedTarget(target, name)),
+    target.kind === "group",
+  );
 }
 
 /**
@@ -549,7 +625,8 @@ function withEntryRenamed(text: string, target: EntryTarget, name: string): stri
  * For a system, every ref into it, `from(…)`; for a role, every other
  * role's ref to it, plain or `transparent(from …)`. Only where refs and params are
  * written — an `alias` or a changelog note that happens to read the same is
- * left alone.
+ * left alone. With `wholeGroup`, `from` is a group, and every value pointing
+ * at something in it is one.
  */
 function pointersAt(
   node: unknown,
@@ -557,14 +634,15 @@ function pointersAt(
   kind: EntryTarget["kind"],
   from: string,
   to: string,
+  wholeGroup = false,
 ): { node: Scalar; renamed: string }[] {
   if (isMap(node)) {
     return node.items.flatMap((pair) => {
       const key = isScalar(pair.key) ? String(pair.key.value) : "";
-      return pointersAt(pair.value, [...keys, key], kind, from, to);
+      return pointersAt(pair.value, [...keys, key], kind, from, to, wholeGroup);
     });
   }
-  if (isSeq(node)) return node.items.flatMap((item) => pointersAt(item, keys, kind, from, to));
+  if (isSeq(node)) return node.items.flatMap((item) => pointersAt(item, keys, kind, from, to, wholeGroup));
   if (!isScalar(node) || typeof node.value !== "string" || !node.range) return [];
   const [top] = keys;
   if (keys.includes("alias") || ["dtg", "modes", "palette", "changelog"].includes(top)) return [];
@@ -574,9 +652,12 @@ function pointersAt(
   }
   if (kind === "role" && (top === "systems" || top === "defaults")) return [];
   if (top === "systems" && !keys.includes("params")) return [];
-  if (node.value === from) return [{ node, renamed: to }];
+  const moved = (name: string) => (wholeGroup ? (name.startsWith(`${from}.`) ? to + name.slice(from.length) : null) : name === from ? to : null);
+  const plain = moved(node.value);
+  if (plain != null) return [{ node, renamed: plain }];
   const faded = /^transparent\(\s*(\S+)(\s[^)]*)?\)$/.exec(node.value);
-  if (faded?.[1] === from) return [{ node, renamed: `transparent(${to}${faded[2] ?? ""})` }];
+  const inside = faded && moved(faded[1]);
+  if (inside != null) return [{ node, renamed: `transparent(${inside}${faded![2] ?? ""})` }];
   return [];
 }
 

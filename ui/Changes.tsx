@@ -11,6 +11,8 @@ function nameOf(target: EditTarget, modes: string[]): string {
       return `${target.role} [${modes[target.mode]}]`;
     case "role":
       return target.role;
+    case "group":
+      return target.path;
     case "constant":
     case "system":
       return target.path;
@@ -40,6 +42,7 @@ export function Changes({ working }: { working: Snapshot }) {
   const describeEdit = (edit: Edit) => {
     const name = nameOf(edit.target, modes);
     if (edit.action === "rename") return `rename ${name} to ${edit.name}`;
+    if (edit.action === "place") return `move ${name} to ${edit.path}`;
     if (edit.action === "move") return `move ${name}`;
     if (edit.action === "remove") return `remove ${name}`;
     if (edit.action === "add" && edit.target.kind === "system") return `add system ${name}`;

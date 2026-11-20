@@ -1,4 +1,4 @@
-import { applyEdits, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget, type RoleTarget } from "./edit.js";
+import { applyEdits, placedTarget, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget, type GroupTarget, type RoleTarget } from "./edit.js";
 
 /**
  * The definition as it is on disk, the edits made since that are not yet
@@ -67,7 +67,7 @@ export function discard(copy: WorkingCopy): WorkingCopy {
  */
 export type Change =
   | { action: "set"; target: EditTarget; from: string | null; to: string }
-  | { action: "rename"; target: EntryTarget; to: EntryTarget }
+  | { action: "rename"; target: EntryTarget | GroupTarget; to: EntryTarget | GroupTarget }
   | { action: "move"; target: ConstantTarget | RoleTarget }
   | { action: "remove"; target: EntryTarget; from: string };
 
@@ -130,6 +130,7 @@ export function changesOf(copy: WorkingCopy): Change[] {
     if (edit.action === "add") color.added = true;
     if (edit.action === "set" || edit.action === "add") color.value = edit.value;
     else if (edit.action === "rename") color.now = renamedTarget(edit.target, edit.name);
+    else if (edit.action === "place") color.now = placedTarget(edit.target, edit.path);
     else if (edit.action === "move") color.moved = true;
     else color.now = null;
   });
@@ -147,7 +148,7 @@ export function changesOf(copy: WorkingCopy): Change[] {
       push({ action: "remove", target: inFile as EntryTarget, from });
       continue;
     }
-    if (!sameTarget(now, inFile)) push({ action: "rename", target: inFile as EntryTarget, to: now as EntryTarget });
+    if (!sameTarget(now, inFile)) push({ action: "rename", target: inFile as EntryTarget | GroupTarget, to: now as EntryTarget | GroupTarget });
     if (moved) push({ action: "move", target: now as ConstantTarget | RoleTarget });
     if (value != null && value !== from) push({ action: "set", target: now, from, to: value });
   }
