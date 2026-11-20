@@ -1,4 +1,4 @@
-import { applyEdits, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget } from "./edit.js";
+import { applyEdits, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget, type RoleTarget } from "./edit.js";
 
 /**
  * The definition as it is on disk, the edits made since that are not yet
@@ -68,7 +68,7 @@ export function discard(copy: WorkingCopy): WorkingCopy {
 export type Change =
   | { action: "set"; target: EditTarget; from: string | null; to: string }
   | { action: "rename"; target: EntryTarget; to: EntryTarget }
-  | { action: "move"; target: ConstantTarget }
+  | { action: "move"; target: ConstantTarget | RoleTarget }
   | { action: "remove"; target: EntryTarget; from: string };
 
 const sameTarget = (a: EditTarget, b: EditTarget) =>
@@ -148,7 +148,7 @@ export function changesOf(copy: WorkingCopy): Change[] {
       continue;
     }
     if (!sameTarget(now, inFile)) push({ action: "rename", target: inFile as EntryTarget, to: now as EntryTarget });
-    if (moved) push({ action: "move", target: now as ConstantTarget });
+    if (moved) push({ action: "move", target: now as ConstantTarget | RoleTarget });
     if (value != null && value !== from) push({ action: "set", target: now, from, to: value });
   }
   return changes.sort((a, b) => a.lastEdit - b.lastEdit).map(({ change }) => change);

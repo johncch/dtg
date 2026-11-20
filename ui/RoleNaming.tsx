@@ -3,12 +3,10 @@ import { useLayoutEffect, useState } from "react";
 import type { RoleTarget } from "../src/edit.js";
 import { INHERIT, rolePath } from "../src/selector.js";
 import type { Snapshot, SnapshotRole } from "../src/snapshot.js";
-import { Hint } from "./Hint.js";
-import { EDITABLE } from "./mode.js";
+import { AddRow, ENTRY_NAME, ENTRY_NAME_RULE, EntryGrip, EntryName, EntryRemove, openNameOf } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { useTrying } from "./preview.js";
 import { navigate } from "./router.js";
-import { TrashIcon } from "./TrashIcon.js";
 
 const targetOf = (role: Pick<SnapshotRole, "section" | "group" | "role">): RoleTarget => ({
   kind: "role",
@@ -17,11 +15,10 @@ const targetOf = (role: Pick<SnapshotRole, "section" | "group" | "role">): RoleT
 });
 
 /**
- * The role just added, whose row opens its name for typing once the working
- * copy has it. A new group's first role waits for its row on the group's own
- * page: the page being left draws the row too, for a moment.
+ * How a new group's first role is called for its name to open: its row is
+ * also drawn, for a moment, on the page being left, and must not open there.
  */
-let naming: { role: string; onGroupPage: boolean } | null = null;
+const onItsGroupPage = (key: string) => `${key} on its group's page`;
 
 function freshName(taken: string[]): string {
   if (!taken.includes("new-role")) return "new-role";
@@ -29,9 +26,6 @@ function freshName(taken: string[]): string {
   while (taken.includes(`new-role-${count}`)) count += 1;
   return `new-role-${count}`;
 }
-
-const NAME = /^[A-Za-z][\w-]*$/;
-const NAME_RULE = "Letters, digits, - and _, starting with a letter.";
 
 let awaitedGroup: string | null = null;
 
@@ -75,7 +69,7 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
   const refs = last ? last.perMode.map((entry) => (entry.inherited ? INHERIT : entry.ref)) : start ? working.modes.map(() => start) : null;
   const taken = working.roles.some((role) => role.group.split(".")[0] === name) || inSection.some((role) => role.group === "" && role.role === name);
   const problem =
-    name === "" ? null : !NAME.test(name) ? NAME_RULE : taken ? `${name} is already written.` : refs == null ? "Add a palette color first, for the group's first role to hold." : null;
+    name === "" ? null : !ENTRY_NAME.test(name) ? ENTRY_NAME_RULE : taken ? `${name} is already written.` : refs == null ? "Add a palette color first, for the group's first role to hold." : null;
   return (
     <form
       className="ref-editor"
@@ -83,7 +77,7 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
         event.preventDefault();
         if (name === "" || problem || refs == null) return;
         const target = targetOf({ section, group: name, role: "new-role" });
-        naming = { role: JSON.stringify(target), onGroupPage: true };
+        openNameOf(onItsGroupPage(JSON.stringify(target)));
         awaitedGroup = name;
         commit({ action: "add", target, value: JSON.stringify(refs) });
         panel.dismiss();
@@ -120,27 +114,39 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
 export function NewRoleRow({ siblings, columns }: { siblings: SnapshotRole[]; columns: number }) {
   const { commit } = useTrying();
   const last = siblings.at(-1);
-  if (!EDITABLE || !last) return null;
+  if (!last) return null;
   return (
-    <tr className="role-add">
-      <td colSpan={columns}>
-        <button
-          type="button"
-          onClick={() => {
-            const target = targetOf({ ...last, role: freshName(siblings.map((role) => role.role)) });
-            naming = { role: JSON.stringify(target), onGroupPage: false };
-            commit({
-              action: "add",
-              target,
-              value: JSON.stringify(last.perMode.map((entry) => (entry.inherited ? INHERIT : entry.ref))),
-            });
-          }}
-        >
-          <Plus size={14} aria-hidden />
-          New role
-        </button>
-      </td>
-    </tr>
+    <AddRow
+      label="New role"
+      columns={columns}
+      onAdd={() => {
+        const target = targetOf({ ...last, role: freshName(siblings.map((role) => role.role)) });
+        openNameOf(JSON.stringify(target));
+        commit({
+          action: "add",
+          target,
+          value: JSON.stringify(last.perMode.map((entry) => (entry.inherited ? INHERIT : entry.ref))),
+        });
+      }}
+    />
+  );
+}
+
+/** The `entryRowProps` group of a role's row: the roles it can change places with. */
+export function roleRowGroup(role: SnapshotRole): string {
+  return JSON.stringify([role.section, role.group]);
+}
+
+export function RoleGrip({ role, siblings }: { role: SnapshotRole; siblings: SnapshotRole[] }) {
+  const { commit } = useTrying();
+  return (
+    <EntryGrip
+      label={rolePath(role)}
+      group={roleRowGroup(role)}
+      name={role.role}
+      siblings={siblings.map((other) => other.role)}
+      onMove={(after) => commit({ action: "move", target: targetOf(role), after })}
+    />
   );
 }
 
@@ -150,88 +156,36 @@ export function NewRoleRow({ siblings, columns }: { siblings: SnapshotRole[]; co
  */
 export function RoleRemove({ role, roles, onGroupPage }: { role: SnapshotRole; roles: SnapshotRole[]; onGroupPage: boolean }) {
   const { commit } = useTrying();
-  if (!EDITABLE) return null;
   const path = rolePath(role);
-  const users = roles
-    .filter((other) => other.perMode.some((entry) => entry.ref === path || entry.ref.startsWith(`transparent(${path} `)))
-    .map(rolePath);
-  const shown = users.length > 3 ? `${users.slice(0, 3).join(", ")} and ${users.length - 3} more` : users.join(", ");
   const inSection = roles.filter((other) => other.section === role.section);
   const lastOfGroup = role.group !== "" && !inSection.some((other) => other !== role && `${other.group}.`.startsWith(`${role.group}.`));
-  const refusal =
-    users.length > 0 ? `Used by ${shown}. Point them elsewhere first.` : inSection.length === 1 ? `The only role in ${role.section}.` : null;
   return (
-    <Hint text={refusal ?? (lastOfGroup ? `Delete, and ${role.group} with it` : "Delete")}>
-      <button
-        type="button"
-        className="role-remove"
-        aria-label={`Remove ${path}`}
-        // Not `disabled`: a disabled button gets no pointer events, so its hint would never show.
-        aria-disabled={refusal != null}
-        onClick={() => {
-          if (refusal != null) return;
-          commit({ action: "remove", target: targetOf(role) });
-          if (lastOfGroup && onGroupPage) navigate({ page: "roles", section: role.section }, { replace: true });
-        }}
-      >
-        <TrashIcon />
-      </button>
-    </Hint>
+    <EntryRemove
+      label={path}
+      users={roles
+        .filter((other) => other.perMode.some((entry) => entry.ref === path || entry.ref.startsWith(`transparent(${path} `)))
+        .map(rolePath)}
+      stays={inSection.length === 1 ? `The only role in ${role.section}.` : null}
+      hint={lastOfGroup ? `Delete, and ${role.group} with it` : "Delete"}
+      onRemove={() => {
+        commit({ action: "remove", target: targetOf(role) });
+        if (lastOfGroup && onGroupPage) navigate({ page: "roles", section: role.section }, { replace: true });
+      }}
+    />
   );
 }
 
-/** A role's name; in the editor a double click opens it for renaming, kept on Enter or on leaving the field. */
 export function RoleName({ role, siblings, onGroupPage }: { role: SnapshotRole; siblings: SnapshotRole[]; onGroupPage: boolean }) {
   const { commit } = useTrying();
-  const [typed, setTyped] = useState<string | null>(null);
   const target = targetOf(role);
   const key = JSON.stringify(target);
-  useLayoutEffect(() => {
-    if (naming?.role !== key || (naming.onGroupPage && !onGroupPage)) return;
-    naming = null;
-    setTyped(role.role);
-  }, [key]);
-
-  if (!EDITABLE) return <code>{role.role}</code>;
-  if (typed == null) {
-    return (
-      <code className="role-name" title="Double-click to rename" onDoubleClick={() => setTyped(role.role)}>
-        {role.role}
-      </code>
-    );
-  }
-  const problem = !NAME.test(typed)
-    ? NAME_RULE
-    : typed !== role.role && siblings.some((other) => other.role === typed)
-      ? `${rolePath({ ...role, role: typed })} is already a role.`
-      : null;
-  const keep = () => {
-    if (problem) return false;
-    if (typed !== role.role) commit({ action: "rename", target, name: typed });
-    setTyped(null);
-    return true;
-  };
   return (
-    <>
-      <input
-        type="text"
-        className="ref-input role-name-input"
-        aria-label={`Name of ${rolePath(role)}`}
-        value={typed}
-        size={Math.max(typed.length + 1, 8)}
-        spellCheck={false}
-        autoComplete="off"
-        data-1p-ignore
-        autoFocus
-        onFocus={(event) => event.target.select()}
-        onChange={(event) => setTyped(event.target.value.trim())}
-        onBlur={() => keep() || setTyped(null)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") keep();
-          if (event.key === "Escape") setTyped(null);
-        }}
-      />
-      {problem && <p className="ref-error system-form-problem">{problem}</p>}
-    </>
+    <EntryName
+      keys={onGroupPage ? [key, onItsGroupPage(key)] : [key]}
+      name={role.role}
+      taken={siblings.map((other) => other.role)}
+      whenTaken={(name) => `${rolePath({ ...role, role: name })} is already a role.`}
+      onRename={(name) => commit({ action: "rename", target, name })}
+    />
   );
 }

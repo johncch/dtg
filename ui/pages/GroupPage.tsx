@@ -7,7 +7,8 @@ import { paintCss } from "../paint.js";
 import { Popup } from "../Popup.js";
 import { EDITABLE } from "../mode.js";
 import { sourcesFor, TargetValueEditor } from "../picker/ValueEditor.js";
-import { NewRoleRow, RoleName, RoleRemove } from "../RoleNaming.js";
+import { entryRowProps } from "../EntryRow.js";
+import { NewRoleRow, RoleGrip, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
 import { Link, useScrollToHash } from "../router.js";
 import { INHERIT, rolePath } from "../../src/selector.js";
 import { stepAnchor } from "../Strip.js";
@@ -116,11 +117,14 @@ function RoleRow({
   targeted: boolean;
 }) {
   return (
-    <tr id={id} className={targeted ? "target" : undefined}>
+    <tr id={id} className={targeted ? "target" : undefined} {...entryRowProps(roleRowGroup(role), role.role)}>
       <td>
-        <div className="role-head">
+        <div className="entry-head">
+          <RoleGrip role={role} siblings={siblings} />
           <RoleName role={role} siblings={siblings} onGroupPage={onGroupPage} />
-          <RoleRemove role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
+          <span className="entry-actions">
+            <RoleRemove role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
+          </span>
         </div>
         {role.note && <div className="role-note">{role.note}</div>}
       </td>

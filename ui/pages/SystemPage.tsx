@@ -28,7 +28,7 @@ export function SystemPage({ system, snapshot, working }: { system: SnapshotSyst
       <div className="system-head">
         <h1>
           {system.system}{" "}
-          <span className="muted" style={{ fontSize: "var(--text-body)" }}>
+          <span className="title-kind">
             {system.algorithm}
           </span>
         </h1>

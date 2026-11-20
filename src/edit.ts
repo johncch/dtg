@@ -32,14 +32,14 @@ export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
  * first), or removed. A system is added and removed whole, and renamed
  * within its group: its value is `{ "algorithm", "params" }` as JSON, and
  * setting it writes both, leaving the system's other keys as they are.
- * A role is added at the end of its group, renamed within it, and removed
- * whole: its value is its refs, one per mode, as a JSON list.
+ * A role is added at the end of its group, renamed and moved within it, and
+ * removed whole: its value is its refs, one per mode, as a JSON list.
  */
 export type Edit =
   | { action: "set"; target: EditTarget; value: string }
   | { action: "add"; target: EntryTarget; value: string; after?: string }
   | { action: "rename"; target: EntryTarget; name: string }
-  | { action: "move"; target: ConstantTarget; after: string | null }
+  | { action: "move"; target: ConstantTarget | RoleTarget; after: string | null }
   | { action: "remove"; target: EntryTarget };
 
 /** Where a constant, a system or a role is after it is renamed. */
@@ -120,11 +120,11 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       continue;
     }
     if (edit.action === "move") {
-      text = withConstantMoved(text, edit.target, edit.after);
+      text = withEntryMoved(text, edit.target, edit.after);
       continue;
     }
     if (edit.action === "remove") {
-      text = edit.target.kind === "role" ? withRoleRemoved(text, edit.target) : withEntryRemoved(text, edit.target);
+      text = edit.target.kind === "system" ? withEntryRemoved(text, edit.target) : withGroupedRemoved(text, edit.target);
       continue;
     }
     if (edit.action === "add") {
@@ -339,9 +339,16 @@ function withRefsAdded(text: string, last: LastRef, sources: string[]): string {
   return text.slice(0, lineEnd) + added + text.slice(lineEnd);
 }
 
-/** A new constant at the end of its group, or of `palette` for one in no group. */
+/**
+ * A new constant at the end of its group, or of `palette` for one in no
+ * group. A group `palette` does not have yet is written with it, at the end.
+ */
 function withConstantAdded(text: string, target: ConstantTarget, value: string, after?: string): string {
   const keys = ["palette", ...target.path.split(".")];
+  if (keys.length > 2 && parseDocument(text).getIn(keys.slice(0, -1), true) == null) {
+    const entry = `${keySource(keys.at(-1)!)}: ${JSON.stringify(value)}`;
+    return withEntryAdded(text, keys.slice(0, -2), keys.at(-2)!, `{ ${entry} }`, target, "and is not a group", undefined, [entry]);
+  }
   return withEntryAdded(text, keys.slice(0, -1), keys.at(-1)!, JSON.stringify(value), target, "and is not a color", after);
 }
 
@@ -578,11 +585,14 @@ function pointersAt(
  * entry with the comment on its line; whatever is written between entries
  * stays where it is.
  */
-function withConstantMoved(text: string, target: ConstantTarget, after: string | null): string {
+function withEntryMoved(text: string, target: ConstantTarget | RoleTarget, after: string | null): string {
   const { set, pair } = entryAt(text, target);
   const items: Pair[] = set.items;
   const others = items.filter((item) => item !== pair);
-  const at = after == null ? 0 : others.findIndex((item) => isScalar(item.key) && item.key.value === after) + 1;
+  // What a group says about itself is written before its roles, and the first role goes after it.
+  const aboutGroup = (item: Pair) => target.kind === "role" && isScalar(item.key) && ["alias", "omit", "description"].includes(String(item.key.value));
+  const first = others.findIndex((item) => !aboutGroup(item));
+  const at = after == null ? (first === -1 ? others.length : first) : others.findIndex((item) => isScalar(item.key) && item.key.value === after) + 1;
   if (after != null && at === 0) {
     throw new Error(`nothing written for ${describeTarget(target)} to follow`);
   }
@@ -602,15 +612,15 @@ function withConstantMoved(text: string, target: ConstantTarget, after: string |
 }
 
 /**
- * A group of roles is there while it holds one: removing its last role takes
- * the group with it, whatever it says about itself, and so on up to the
- * section, which stays.
+ * A group of roles or of constants is there while it holds one: removing its
+ * last takes the group with it, whatever it says about itself, and so on up
+ * to the section or to `palette`, which stays.
  */
-function withRoleRemoved(text: string, target: RoleTarget): string {
+function withGroupedRemoved(text: string, target: RoleTarget | ConstantTarget): string {
   const entry = entryAt(text, target);
   let { keys, set, pair } = entry;
-  const holdsOnlyThis = () =>
-    set.items.every((item) => item === pair || (isScalar(item.key) && ["alias", "omit", "description"].includes(String(item.key.value))));
+  const aboutGroup = target.kind === "role" ? ["alias", "omit", "description"] : ["alias", "emit", "description"];
+  const holdsOnlyThis = () => set.items.every((item) => item === pair || (isScalar(item.key) && aboutGroup.includes(String(item.key.value))));
   while (keys.length > 2 && holdsOnlyThis()) {
     keys = keys.slice(0, -1);
     const holder = entry.doc.getIn(keys.slice(0, -1), true) as YAMLMap;
@@ -621,8 +631,8 @@ function withRoleRemoved(text: string, target: RoleTarget): string {
 }
 
 /**
- * The entry and its lines go. A group left with nothing is written as `{}`,
- * so it stays a group to add to rather than becoming an empty value.
+ * The entry and its lines go. A map left with nothing is written as `{}`,
+ * so it stays a map to add to rather than becoming an empty value.
  */
 function withEntryRemoved(
   text: string,

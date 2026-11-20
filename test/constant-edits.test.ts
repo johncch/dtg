@@ -53,10 +53,16 @@ describe("adding a constant", () => {
     assert.ok(paths(edited).includes("yellow"));
   });
 
-  test("cannot add to a group the file does not have", () => {
+  test("adding to a group the file does not have writes the group, at the end of the palette", () => {
+    const edited = applyEdits(SRC, [{ action: "add", target: constant("brand.x"), value: "#000000" }]);
+    assert.ok(edited.includes(`  grounds: { paper: "#fafdff", ink: "#001a28" }\n  brand:\n    x: "#000000"\n\nsystems:`));
+    assert.ok(paths(edited).includes("brand.x"));
+  });
+
+  test("cannot add two groups deep where the file has neither", () => {
     assert.throws(
-      () => applyEdits(SRC, [{ action: "add", target: constant("nope.x"), value: "#000000" }]),
-      /nothing written for nope\.x/,
+      () => applyEdits(SRC, [{ action: "add", target: constant("nope.deeper.x"), value: "#000000" }]),
+      /nothing written for nope\.deeper\.x/,
     );
   });
 
@@ -169,15 +175,20 @@ describe("removing a constant", () => {
     assert.ok(applyEdits(SRC, [{ action: "remove", target: constant("grounds.ink") }]).includes(`grounds: { paper: "#fafdff" }`));
   });
 
-  test("leaves an emptied group as {}, still a group to add to", () => {
+  test("takes the group with its last constant, and adding to it writes it again", () => {
     const emptied = applyEdits(SRC, [
       { action: "remove", target: ruby },
       { action: "remove", target: theme },
     ]);
-    assert.ok(emptied.includes("  colors: {}\n  grounds:"));
-    assert.ok(!paths(emptied).some((path) => path.startsWith("colors.")));
+    assert.ok(emptied.includes(`  blue: "#0000ff" # loose\n  grounds:`));
+    assert.ok(!emptied.includes("colors"));
     const refilled = applyEdits(emptied, [{ action: "add", target: ruby, value: "#c50101" }]);
-    assert.ok(refilled.includes(`colors: { ruby: "#c50101" }`));
+    assert.ok(refilled.includes(`  colors:\n    ruby: "#c50101"\n`));
+  });
+
+  test("leaves the palette itself, emptied, as {}", () => {
+    const one = `dtg: 1\npalette:\n  blue: "#0000ff"\n`;
+    assert.equal(applyEdits(one, [{ action: "remove", target: constant("blue") }]), `dtg: 1\npalette: {}\n`);
   });
 
   test("is a change, unless the color was added since the file", () => {

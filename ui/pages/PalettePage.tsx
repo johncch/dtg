@@ -2,8 +2,8 @@ import { Plus, SlidersHorizontal, Target, X } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { colorFromOklab, formatAuthored, oklabToOklch, oklchToOklab, toOklab, type Oklab } from "../../src/color-math.js";
 import type { ConstantTarget, Edit } from "../../src/edit.js";
-import { addToPalette, harmonizePalette, harmonyHues, rollPalette, type Harmony, type RollStyle } from "../../src/palette-roll.js";
-import type { SnapshotConstant } from "../../src/snapshot.js";
+import { addToPalette, harmonizePalette, harmonyHues, randomColor, rollPalette, type Harmony, type RollStyle } from "../../src/palette-roll.js";
+import type { Snapshot, SnapshotConstant } from "../../src/snapshot.js";
 import type { Change } from "../../src/working-copy.js";
 import { ColorChip, EditableChip } from "../ColorChip.js";
 import { ColorTip } from "../ColorTip.js";
@@ -17,6 +17,7 @@ import { PaletteExplorer } from "../PaletteExplorer.js";
 import type { PaletteEntry } from "../PalettePlots.js";
 import { Popup, type PopupPanel } from "../Popup.js";
 import { useTrying } from "../preview.js";
+import { navigate } from "../router.js";
 import { TrashIcon } from "../TrashIcon.js";
 import { labelColorOn } from "../Strip.js";
 
@@ -38,7 +39,7 @@ export function palettesOf(constants: SnapshotConstant[]): Palette[] {
 }
 
 /** Where a new entry's name comes from when the color names cannot be loaded. */
-const UNNAMED = "color";
+export const UNNAMED = "color";
 
 const ROLL_STYLES: { value: RollStyle; label: string }[] = [
   { value: "anything", label: "Anything" },
@@ -61,7 +62,7 @@ function storedRollStyle(): RollStyle {
   }
 }
 
-const CONSTANT_KEY = /^[A-Za-z][\w-]*$/;
+export const CONSTANT_KEY = /^[A-Za-z][\w-]*$/;
 
 /** The names a new or renamed constant in `group` cannot take: whatever the group already holds, and the keys a group reserves. */
 function takenIn(group: string, written: string[]): string[] {
@@ -71,7 +72,7 @@ function takenIn(group: string, written: string[]): string[] {
 }
 
 /** A color's name as a constant's key: "Blue Whale" → `blue-whale`, numbered when the set already has it. */
-function keyFor(name: string, taken: string[]): string {
+export function keyFor(name: string, taken: string[]): string {
   const slug = name
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -82,6 +83,90 @@ function keyFor(name: string, taken: string[]): string {
   let key = base;
   for (let n = 2; taken.includes(key); n++) key = `${base}-${n}`;
   return key;
+}
+
+let awaitedPalette: string | null = null;
+
+/** Opens the page of a palette an edit just made, once the working copy has it. */
+export function OpenAwaitedPalette({ working }: { working: Snapshot }) {
+  useLayoutEffect(() => {
+    if (awaitedPalette == null || !working.constants.some((constant) => constant.path.startsWith(`${awaitedPalette}.`))) return;
+    const name = awaitedPalette;
+    awaitedPalette = null;
+    navigate({ page: "palette", name });
+  }, [working.constants]);
+  return null;
+}
+
+/** Beside the sidebar's Palette heading: names a new palette, which starts with one random color. */
+export function NewPalette({ working }: { working: Snapshot }) {
+  return (
+    <Popup
+      title="New palette"
+      className="nav-add"
+      label={
+        <>
+          <Plus size={14} aria-hidden />
+          <span className="sr-only">New palette</span>
+        </>
+      }
+      focus="field"
+    >
+      {(panel) => <PaletteForm working={working} panel={panel} />}
+    </Popup>
+  );
+}
+
+function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel }) {
+  const { commit } = useTrying();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  // Refs name constants, systems and roles alike, so a palette cannot share its name with any of them.
+  const taken = [
+    ...working.constants.map((constant) => constant.path),
+    ...working.systems.map((system) => system.system),
+    ...working.roles.map((role) => role.group || role.role),
+  ].some((path) => path.split(".")[0] === name);
+  const problem = name === "" ? null : !CONSTANT_KEY.test(name) ? "Letters, digits, - and _, starting with a letter." : taken ? `${name} is already written.` : null;
+  return (
+    <form
+      className="ref-editor"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (name === "" || problem || busy) return;
+        setBusy(true);
+        const lab = randomColor();
+        const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, takenIn(name, []));
+        awaitedPalette = name;
+        commit({ action: "add", target: { kind: "constant", path: `${name}.${key}` }, value: formatAuthored(lab) });
+        panel.dismiss();
+      }}
+    >
+      <div className="editor-head" {...panel.handle}>
+        <span className="ref-editor-heading">New palette</span>
+        {panel.close}
+      </div>
+      <label className="ref-control">
+        <span>palette</span>
+        <input
+          type="text"
+          className="ref-input"
+          value={name}
+          spellCheck={false}
+          autoComplete="off"
+          data-1p-ignore
+          placeholder="brand"
+          onChange={(event) => setName(event.target.value.trim())}
+        />
+      </label>
+      {problem && <p className="ref-error system-form-problem">{problem}</p>}
+      <div className="system-form-actions">
+        <button type="submit" className="btn btn-primary" disabled={name === "" || problem != null || busy}>
+          Add palette
+        </button>
+      </div>
+    </form>
+  );
 }
 
 type SwatchSize = "small" | "medium" | "large";
@@ -387,7 +472,7 @@ export function PalettePage({
       <div className="palette-head">
         <h1>
           {palette.group}{" "}
-          <span className="muted" style={{ fontSize: "var(--text-body)" }}>
+          <span className="title-kind">
             palette
           </span>
         </h1>
@@ -489,6 +574,7 @@ export function PalettePage({
                 setToolsOpen(true);
               }}
               onRename={(name) => { if (selected === entry.path) setSelected(`${palette.group}.${name}`); }}
+              lastOfPalette={palette.entries.length === 1}
             />
           ))}
         </div>
@@ -589,10 +675,13 @@ function PaletteEntry({
   selected,
   onToggleSelect,
   onRename,
+  lastOfPalette,
 }: {
   entry: PaletteEntry;
   taken: string[];
   locked: boolean;
+  /** Removing it removes the palette, and with it this page. */
+  lastOfPalette: boolean;
   /** The swatch is big enough to carry its labels and controls on the color. */
   large: boolean;
   onToggleLock: () => void;
@@ -675,14 +764,18 @@ function PaletteEntry({
             </button>
           </Hint>
           {handle}
-          <Hint text={locked ? "Unlock to delete" : "Delete"} side={hintSide}>
+          <Hint text={locked ? "Unlock to delete" : lastOfPalette ? "Delete, and the palette with it" : "Delete"} side={hintSide}>
             <button
               type="button"
               className="palette-entry-remove"
               aria-label={`Remove ${entry.name}`}
               // Not `disabled`: a disabled button gets no pointer events, so its hint would never show.
               aria-disabled={locked}
-              onClick={() => { if (!locked) commit({ action: "remove", target }); }}
+              onClick={() => {
+                if (locked) return;
+                commit({ action: "remove", target });
+                if (lastOfPalette) navigate({ page: "constants" }, { replace: true });
+              }}
             >
               <TrashIcon />
             </button>

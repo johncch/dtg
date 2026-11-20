@@ -13,7 +13,7 @@ import { ConstantsPage } from "./pages/ConstantsPage.js";
 import { DefinitionPage } from "./pages/DefinitionPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { GroupPage, RolesPage } from "./pages/GroupPage.js";
-import { PalettePage, palettesOf } from "./pages/PalettePage.js";
+import { NewPalette, OpenAwaitedPalette, PalettePage, palettesOf } from "./pages/PalettePage.js";
 import { SystemPage } from "./pages/SystemPage.js";
 import { Link, useRoute, type Route } from "./router.js";
 import { useSnapshot } from "./snapshot.js";
@@ -58,6 +58,7 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
           <PaletteColorsProvider value={working.constants}>
             <OpenAwaitedSystem working={working} />
             <OpenAwaitedGroup working={working} />
+            <OpenAwaitedPalette working={working} />
             <aside>
               <Nav snapshot={snapshot} working={working} />
               <div className="dock">
@@ -97,9 +98,12 @@ function Nav({ snapshot, working }: { snapshot: Snapshot; working: Snapshot }) {
       <nav>
         <Link to={{ page: "definition" }}>Definition</Link>
         {SAVABLE && <Link to={{ page: "settings" }}>Settings</Link>}
-        {snapshot.constants.length > 0 && (
+        {(snapshot.constants.length > 0 || EDITABLE) && (
           <>
-            <h2>Palette</h2>
+            <h2 className="nav-heading">
+              Palette
+              {EDITABLE && <NewPalette working={working} />}
+            </h2>
             <Link to={{ page: "constants" }}>All</Link>
             {palettesOf(snapshot.constants).map(({ group }) => (
               <Link key={group} to={{ page: "palette", name: group }}>
@@ -238,8 +242,11 @@ function Page({ route, snapshot, working }: { route: Route; snapshot: Snapshot; 
   if (route.page === "definition") return <DefinitionPage definition={snapshot.definition} warnings={snapshot.warnings} />;
   if (route.page === "settings" && SAVABLE) return <SettingsPage configPath={snapshot.configPath} snapshot={snapshot} />;
   if (route.page === "constants") {
-    return snapshot.constants.length > 0 ? (
-      <ConstantsPage constants={snapshot.constants} />
+    return snapshot.constants.length > 0 || EDITABLE ? (
+      <ConstantsPage
+        constants={snapshot.constants}
+        named={[...snapshot.systems.map((system) => system.system), ...snapshot.roles.map((role) => role.group || role.role)].map((path) => path.split(".")[0])}
+      />
     ) : (
       <NotFound what="constants — this definition declares none" />
     );

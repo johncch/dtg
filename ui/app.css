@@ -52,6 +52,7 @@ main { flex: 1; min-width: 0; padding: 24px 32px; }
 .page:has(.palette-row-large) { display: flex; flex-direction: column; min-height: calc(100vh - 48px); }
 .page:has(.palette-tools:not([hidden])) { margin-right: var(--palette-tools-width); }
 main h1 { font-size: var(--text-large-title); font-weight: 500; margin-bottom: 4px; }
+main h1 .title-kind { margin-left: 6px; font-size: var(--text-body); color: var(--muted); }
 main h2 { font-size: var(--text-title); font-weight: 500; margin: 24px 0 8px; }
 main h2 a { color: var(--fg); }
 .sub { color: var(--muted); font-size: var(--text-body); margin-bottom: 18px; }
@@ -76,18 +77,26 @@ tr.target { background: var(--caution-bg); }
 tr.group-row td { padding-top: 16px; font-weight: 600; }
 tr.group-row a { color: inherit; text-decoration: none; }
 tr.group-row a:hover { text-decoration: underline; }
-tr.role-add td { padding-top: 4px; padding-bottom: 4px; }
-tr.role-add button { display: inline-flex; align-items: center; gap: 6px; margin-left: -6px; padding: 3px 6px; border-radius: var(--radius-sm); font-size: var(--text-subhead); color: var(--muted); cursor: pointer; }
-tr.role-add button:hover { background: var(--hover); color: var(--fg); }
-.role-name-input { margin: -4px 0 -4px -9px; }
-.role-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 8px; }
-.role-head .ref-error { flex-basis: 100%; }
-button.role-remove { flex: none; width: 24px; height: 24px; margin: -4px 0; display: grid; place-items: center; padding: 0; border-radius: var(--radius-sm); color: var(--muted); cursor: pointer; opacity: 0; }
-tr:hover button.role-remove, button.role-remove:focus-visible { opacity: 1; }
-button.role-remove:hover { background: var(--hover); color: var(--fg); }
-button.role-remove[aria-disabled="true"] { opacity: 0; cursor: default; background: none; }
-tr:hover button.role-remove[aria-disabled="true"] { opacity: 0.3; }
-.note { font-size: var(--text-body); color: var(--fg); margin: 0 0 8px; max-width: 70ch; white-space: pre-line; }
+tr.entry-add td { padding-top: 4px; padding-bottom: 4px; }
+tr.entry-add button { display: inline-flex; align-items: center; gap: 6px; margin-left: -6px; padding: 3px 6px; border-radius: var(--radius-sm); font-size: var(--text-subhead); color: var(--muted); cursor: pointer; }
+tr.entry-add button:hover { background: var(--hover); color: var(--fg); }
+.entry-name-editing { position: relative; display: inline-block; }
+.entry-name-held { visibility: hidden; }
+.entry-name-editing .entry-name-input { position: absolute; left: -9px; top: 50%; transform: translateY(-50%); box-sizing: content-box; min-width: 100%; height: 26px; padding: 0 8px; border-width: 1px; font: inherit; z-index: 1; background-color: var(--panel); }
+.ref-error.entry-name-problem { width: max-content; white-space: nowrap; position: absolute; left: -9px; top: calc(100% + 10px); z-index: 1; padding: 4px 8px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--panel); white-space: nowrap; font-family: var(--font-sans, inherit); }
+.entry-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0 8px; }
+.entry-actions { display: flex; flex: none; margin-left: auto; }
+.entry-head:has(.entry-name-input) .entry-actions { visibility: hidden; }
+button.entry-remove, button.entry-grip { flex: none; width: 24px; height: 24px; margin: -4px 0; display: grid; place-items: center; padding: 0; border-radius: var(--radius-sm); color: var(--muted); cursor: pointer; opacity: 0; }
+tr:hover :is(button.entry-remove, button.entry-grip), :is(button.entry-remove, button.entry-grip):focus-visible { opacity: 1; }
+:is(button.entry-remove, button.entry-grip):hover { background: var(--hover); color: var(--fg); }
+/* Outside the table, in the page's margin. No ancestor inside the table may be positioned: the table clips what it contains. */
+button.entry-grip { position: absolute; width: 22px; margin: 0 0 0 -35px; justify-items: start; padding-left: 2px; cursor: grab; touch-action: none; }
+tr[data-dragged] td { background: var(--hover); }
+tr[data-drop="before"] td { box-shadow: inset 0 2px 0 var(--label-theme); }
+tr[data-drop="after"] td { box-shadow: inset 0 -2px 0 var(--label-theme); }
+button.entry-remove[aria-disabled="true"] { opacity: 0; cursor: default; background: none; }
+tr:hover button.entry-remove[aria-disabled="true"] { opacity: 0.3; }
 .role-note { font-size: var(--text-caption); color: var(--muted); margin-top: 2px; max-width: 32ch; }
 .params { display: flex; flex-wrap: wrap; gap: 16px; margin: 0 0 24px; }
 .params .param { font-size: var(--text-caption); color: var(--muted); }
