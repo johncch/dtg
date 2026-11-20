@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Edit } from "../src/edit.js";
 import { previewOf, type Drawn } from "./engine.js";
+import { openOnceThere, type Opening } from "./follow.js";
 import { useStore } from "./store.js";
 
 type Trying = {
@@ -8,15 +9,15 @@ type Trying = {
   preview(edit: Edit | null): void;
   /** The same for several edits at once, as a drag that moves many colors makes. */
   previewStep(edits: Edit[] | null): void;
-  /** Make `edit` an unsaved change in the working copy. */
-  commit(edit: Edit): void;
-  /** Make several edits unsaved changes as one step, which one undo takes back. */
-  commitStep(edits: Edit[]): void;
+  /** Make `edit` an unsaved change in the working copy, and open `opening` once it is one. Returns why it was refused, or null when it was kept. */
+  commit(edit: Edit, opening?: Opening): string | null;
+  /** Make several edits unsaved changes as one step, which one undo takes back. Otherwise as `commit`. */
+  commitStep(edits: Edit[], opening?: Opening): string | null;
   /** Why the edit being tried cannot be drawn, or null when it can. */
   refusal: string | null;
 };
 
-const TryingContext = createContext<Trying>({ preview: () => {}, previewStep: () => {}, commit: () => {}, commitStep: () => {}, refusal: null });
+const TryingContext = createContext<Trying>({ preview: () => {}, previewStep: () => {}, commit: () => null, commitStep: () => null, refusal: null });
 
 export function useTrying(): Trying {
   return useContext(TryingContext);
@@ -71,7 +72,7 @@ export function TryingProvider({
   }, []);
 
   const trying = useMemo<Trying>(() => {
-    const commitStep = (edits: Edit[]) => {
+    const commitStep = (edits: Edit[], opening?: Opening) => {
       wanted.current = null;
       // A step that leaves the definition unresolvable is refused here,
       // whole, rather than kept as a change nobody can see.
@@ -80,10 +81,15 @@ export function TryingProvider({
       } catch (e) {
         setTried(null);
         setRefusal((e as Error).message);
-        return;
+        return (e as Error).message;
       }
       setRefusal(null);
-      store.commit(edits).catch(() => setTried(null));
+      if (opening) openOnceThere(opening);
+      store.commit(edits).catch(() => {
+        setTried(null);
+        if (opening) openOnceThere(null);
+      });
+      return null;
     };
     const previewStep = (edits: Edit[] | null) => {
       wanted.current = edits;
@@ -95,11 +101,17 @@ export function TryingProvider({
     return {
       preview: (edit) => previewStep(edit && [edit]),
       previewStep,
-      commit: (edit) => commitStep([edit]),
+      commit: (edit, opening) => commitStep([edit], opening),
       commitStep,
       refusal,
     };
   }, [schedule, refusal, store]);
 
   return <TryingContext.Provider value={trying}>{children(tried ?? base)}</TryingContext.Provider>;
+}
+
+/** The first of a refusal's errors: the reason, before everything that fails because of it. */
+export function firstError(refusal: string): string {
+  const first = refusal.split("\n").find((line) => line.startsWith("- "));
+  return first ? first.slice(2) : refusal;
 }

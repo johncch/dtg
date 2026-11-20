@@ -9,8 +9,13 @@ function nameOf(target: EditTarget, modes: string[]): string {
   switch (target.kind) {
     case "ref":
       return `${target.role} [${modes[target.mode]}]`;
+    case "role":
+    case "group":
     case "constant":
+    case "system":
       return target.path;
+    case "emit":
+      return `${target.system} emit`;
     case "param":
       return `${target.system} ${target.path}`;
     case "default":
@@ -35,16 +40,25 @@ export function Changes({ working }: { working: Snapshot }) {
   const describeEdit = (edit: Edit) => {
     const name = nameOf(edit.target, modes);
     if (edit.action === "rename") return `rename ${name} to ${edit.name}`;
+    if (edit.action === "place") return `move ${name} to ${edit.path}`;
     if (edit.action === "move") return `move ${name}`;
     if (edit.action === "remove") return `remove ${name}`;
+    if (edit.action === "add" && edit.target.kind === "system") return `add system ${name}`;
+    if (edit.action === "set" && edit.target.kind === "system") return `${name} → ${(JSON.parse(edit.value) as { algorithm: string }).algorithm}`;
+    if (edit.action === "add" && edit.target.kind === "role") return `add role ${name}`;
     if (edit.action === "add") return `add ${name} ${edit.value}`;
     return `${name} → ${edit.value}`;
   };
   const describe = (step: Edit[]) => step.map(describeEdit).join(", ");
   const summary = (change: Change) => {
     const name = nameOf(change.target, modes);
-    if (change.action === "rename") return `${name}: renamed to ${change.to.path}`;
+    if (change.action === "rename") return `${name}: renamed to ${nameOf(change.to, modes)}`;
     if (change.action === "move") return `${name}: moved`;
+    if (change.target.kind === "system") {
+      if (change.action === "remove") return `${name}: system removed`;
+      return change.action === "set" && change.from != null ? `${name}: algorithm and params changed` : `${name}: system added`;
+    }
+    if (change.target.kind === "role") return change.action === "remove" ? `${name}: role removed` : `${name}: role added`;
     if (change.action === "remove") return `${name}: removed (was ${change.from})`;
     return `${name}: ${change.from ?? "added"} → ${change.to}`;
   };

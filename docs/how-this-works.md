@@ -520,7 +520,13 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   a value to write over, or for a constant also an `add`, `rename` or
   `remove`. A rename carries the constant's pointers with it: each ref,
   `transparent()` and color param naming it is rewritten in the same splice,
-  while an `alias` or changelog note that reads the same is not. Keeping `add` apart from `set` is what lets an unsaved edit to a
+  while an `alias` or changelog note that reads the same is not. Systems and
+  roles are added, renamed and removed whole the same way, and a system's
+  `emit` list is set whole. A constant or a role can be moved within its
+  group, or placed at another dotted path, which writes the groups on the
+  way that are not there. A group is not edited apart from what it holds: it
+  is written with its first entry and goes with its last, and renaming one
+  rewrites every ref into it. Keeping `add` apart from `set` is what lets an unsaved edit to a
   constant the file has since lost be dropped, rather than bring it back. The
   new value is spliced over the old one's exact span, so an edit is the
   one-line diff a person would have typed; re-serialising the YAML restyles
@@ -537,8 +543,9 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   changing underneath them. The dev server holds one working copy, draws the
   app from it, and writes the file only when asked to save. Edits come in
   steps, which is what one undo takes back: randomizing a palette set is
-  one step of many edits. What counts as a change follows a constant
-  through renames, so renaming one back is no change at all.
+  one step of many edits. What counts as a change follows an entry through
+  renames, its own and those of the group, system or role that holds it, so
+  renaming one back is no change at all.
 - `snapshot.ts` — the resolved definition as plain data for the pages to
   draw, built in the page from the working copy.
 - `ui/` (outside `src/`) — the browsing UI, a React app bundled by Vite into
@@ -616,31 +623,25 @@ Anything outside those three is a real defect. Promoting this check into a
       Adding immediately enters an unlocked color in the working copy.
       Randomize and Space roll unlocked colors independently of selection.
       A plot drag is one undo step; Save writes the constants. The same
-      locks prevent plot dragging, Randomize and Spread; locked points
+      locks prevent plot dragging, Randomize and Harmonize; locked points
       show a lock and can still be selected. The original picker remains
       available for editing an authored value directly.
-      Add, Randomize, Spread and the visualization sit in a panel spanning the right pane,
-      docked to its bottom, with its own header and scrolling area.
-      Its top edge resizes by dragging or with Up/Down, Home and End keys.
-      The height starts at 65% of the viewport (up to 600px), stays within
-      the viewport, and is kept when the panel closes and reopens.
-      The sidebar stays visible and usable while it is open.
-      A Colors section holds Add, Randomize and Spread, followed by the view
-      controls and visualization. Add replaces the swatch row's +
-      button; it adds an unlocked color and selects it in the visualization.
-      It starts closed, opens with “palette tools,” and closes with × or Escape;
-      this is browser UI state. Space still rolls colors while it is closed.
-      Spread deterministically increases the nearest-neighbor distance of
-      unlocked colors in full OKLab, using locked colors as fixed anchors.
-      It prefers smaller moves, aiming for a distance of 0.16 and allowing
-      each color to move at most 0.12 per invocation. A bounded local search
-      tests candidates after authored rounding, rejecting moves that reduce
-      a color's current nearest-neighbor distance. Colors already separated
-      by 0.16 stay put; locked-to-locked distances do not stop other colors
-      spreading. sRGB colors stay in sRGB; wider candidates must fit the
-      project gamut. Names, selection and opacity stay; one undo takes the
-      whole action back. An unchanged result adds no undo step and reports
-      that no further separation was found within the current limits.
+      The visualization, its view controls, Randomize's style and Harmonize
+      sit in a sidebar on the right with its own scrolling area. It starts
+      closed, opens with the settings button at the top right, and closes
+      with × or Escape; this is browser UI state. Randomize sits beside the
+      button, and Space still rolls colors while the sidebar is closed.
+      Hovering between two swatches, or past the last, shows a + that adds
+      an unlocked color at that place.
+      A layout control shows the palette as a Strip, a Grid or a List, kept
+      per browser. The List is the table the page of all colors draws, with
+      the same row: reorder, rename by dotted path, duplicate, remove, lock.
+      Randomize rolls any color, or with its style set, any hue at the base
+      color's lightness and chroma. Harmonize moves the unlocked colors'
+      hues onto a scheme around the base (analogous, complementary, triad,
+      evenly spaced), keeping each color's lightness and chroma. The base is
+      the color set as base, or the first locked one. Names, selection and
+      opacity stay; one undo takes the whole action back.
       Double-clicking empty disk space adds an opaque color at that hue
       and chroma. In 3D, this targets the base disk. Lightness comes from
       the color selected before the first click, or the palette's median;

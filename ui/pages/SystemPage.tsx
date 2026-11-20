@@ -6,13 +6,17 @@ import type { Snapshot, SnapshotStep, SnapshotSystem } from "../../src/snapshot.
 import { ColorChip } from "../ColorChip.js";
 import { ChoiceParam } from "../ChoiceParam.js";
 import { CurveParam } from "../CurveParam.js";
+import { EmitParam } from "../EmitParam.js";
+import { EDITABLE } from "../mode.js";
 import { NumberParam } from "../NumberParam.js";
 import { Probe } from "../Probe.js";
 import { useScrollToHash } from "../router.js";
+import { SystemSettings } from "../SystemEditor.js";
 import { stepAnchor, stepDeltaE, Strip } from "../Strip.js";
 import { UsedBy } from "../UsedBy.js";
 
-export function SystemPage({ system, snapshot }: { system: SnapshotSystem; snapshot: Snapshot }) {
+/** `snapshot` is what to draw; `working` is the working copy, which an edit to the system itself is made on. */
+export function SystemPage({ system, snapshot, working }: { system: SnapshotSystem; snapshot: Snapshot; working: Snapshot }) {
   const hash = useScrollToHash(system.system);
   const constants = useMemo(
     () => new Map(snapshot.constants.map((constant) => [constant.path, constant.color])),
@@ -21,12 +25,15 @@ export function SystemPage({ system, snapshot }: { system: SnapshotSystem; snaps
 
   return (
     <>
-      <h1>
-        {system.system}{" "}
-        <span className="muted" style={{ fontSize: "var(--text-body)" }}>
-          {system.algorithm}
-        </span>
-      </h1>
+      <div className="system-head">
+        <h1>
+          {system.system}{" "}
+          <span className="title-kind">
+            {system.algorithm}
+          </span>
+        </h1>
+        {EDITABLE && <SystemSettings key={system.system} system={working.systems.find((candidate) => candidate.system === system.system) ?? system} working={working} />}
+      </div>
       {system.note && <p className="note">{system.note}</p>}
       <p className="desc">{system.description}</p>
       <Params system={system} constants={constants} />
@@ -37,7 +44,7 @@ export function SystemPage({ system, snapshot }: { system: SnapshotSystem; snaps
           <Strip system={system} withDeltas />
         </div>
       </section>
-      <table>
+      <table className="steps-table">
         <thead>
           <tr>
             <th>Token</th>
@@ -66,7 +73,15 @@ export function SystemPage({ system, snapshot }: { system: SnapshotSystem; snaps
                   <StepValue step={step} />
                 </td>
                 <td>{delta ? <span className="de">{delta}</span> : <span className="muted">—</span>}</td>
-                <td>{step.usedBy.length > 0 ? <UsedBy uses={step.usedBy} /> : <span className="muted">—</span>}</td>
+                <td>
+                  <UsedBy uses={step.usedBy} />
+                  {system.emit.includes(step.selector) && (
+                    <span className="muted">
+                      {step.usedBy.length > 0 && ", "}
+                      emit
+                    </span>
+                  )}
+                </td>
               </tr>
             );
           })}
@@ -94,7 +109,6 @@ function StepValue({ step }: { step: SnapshotStep }) {
 
 function Params({ system, constants }: { system: SnapshotSystem; constants: ReadonlyMap<string, Color> }) {
   const entries = Object.entries(system.params);
-  if (entries.length === 0) return null;
   return (
     <div className="params">
       {entries.map(([key, value]) => (
@@ -105,6 +119,12 @@ function Params({ system, constants }: { system: SnapshotSystem; constants: Read
           </div>
         </div>
       ))}
+      <div className="param">
+        emit
+        <div className="param-value">
+          <EmitParam key={system.system} system={system} />
+        </div>
+      </div>
     </div>
   );
 }

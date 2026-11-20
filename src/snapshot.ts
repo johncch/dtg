@@ -209,6 +209,8 @@ export type SnapshotSystem = {
   /** What a ref into this system is made of, so the page can draw a control for each part. */
   selector: SelectorShape;
   steps: SnapshotStep[];
+  /** The selectors the system's `emit` lists; a step among them is published whether or not anything uses it. */
+  emit: string[];
 };
 
 export type SnapshotConstant = {
@@ -307,6 +309,7 @@ export function buildSnapshot({
         generated: step.generated ?? null,
         usedBy: lineage.get(formatRef(system.system, step.selector)) ?? [],
       })),
+      emit: system.emit,
     })),
     constants: resolved.statics.map((constant) => ({
       path: constant.path,

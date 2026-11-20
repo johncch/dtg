@@ -2,10 +2,11 @@ import { Plus, SlidersHorizontal, Target, X } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { colorFromOklab, formatAuthored, oklabToOklch, oklchToOklab, toOklab, type Oklab } from "../../src/color-math.js";
 import type { ConstantTarget, Edit } from "../../src/edit.js";
-import { addToPalette, harmonizePalette, harmonyHues, rollPalette, type Harmony, type RollStyle } from "../../src/palette-roll.js";
-import type { SnapshotConstant } from "../../src/snapshot.js";
+import { addToPalette, harmonizePalette, harmonyHues, randomColor, rollPalette, type Harmony, type RollStyle } from "../../src/palette-roll.js";
+import type { Snapshot, SnapshotConstant } from "../../src/snapshot.js";
 import type { Change } from "../../src/working-copy.js";
-import { ColorChip, EditableChip } from "../ColorChip.js";
+import { EditableChip } from "../ColorChip.js";
+import { CONSTANT_COLUMNS, ConstantRow, RESERVED } from "../ConstantRow.js";
 import { ColorTip } from "../ColorTip.js";
 import { GripIcon } from "../GripIcon.js";
 import { LockIcon } from "../LockIcon.js";
@@ -13,10 +14,11 @@ import { Hint } from "../Hint.js";
 import { EDITABLE } from "../mode.js";
 import { colorNameOf } from "../names.js";
 import { paintCss } from "../paint.js";
+import { AddRow, ENTRY_NAME, ENTRY_NAME_RULE, GroupName, openNameOf } from "../EntryRow.js";
 import { PaletteExplorer } from "../PaletteExplorer.js";
 import type { PaletteEntry } from "../PalettePlots.js";
 import { Popup, type PopupPanel } from "../Popup.js";
-import { useTrying } from "../preview.js";
+import { firstError, useTrying } from "../preview.js";
 import { TrashIcon } from "../TrashIcon.js";
 import { labelColorOn } from "../Strip.js";
 
@@ -38,7 +40,7 @@ export function palettesOf(constants: SnapshotConstant[]): Palette[] {
 }
 
 /** Where a new entry's name comes from when the color names cannot be loaded. */
-const UNNAMED = "color";
+export const UNNAMED = "color";
 
 const ROLL_STYLES: { value: RollStyle; label: string }[] = [
   { value: "anything", label: "Anything" },
@@ -61,17 +63,15 @@ function storedRollStyle(): RollStyle {
   }
 }
 
-const CONSTANT_KEY = /^[A-Za-z][\w-]*$/;
-
 /** The names a new or renamed constant in `group` cannot take: whatever the group already holds, and the keys a group reserves. */
 function takenIn(group: string, written: string[]): string[] {
   const prefix = `${group}.`;
   const held = written.filter((path) => path.startsWith(prefix)).map((path) => path.slice(prefix.length).split(".")[0]);
-  return [...new Set(["alias", "emit", "description", ...held])];
+  return [...new Set([...RESERVED, ...held])];
 }
 
 /** A color's name as a constant's key: "Blue Whale" → `blue-whale`, numbered when the set already has it. */
-function keyFor(name: string, taken: string[]): string {
+export function keyFor(name: string, taken: string[]): string {
   const slug = name
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -82,6 +82,104 @@ function keyFor(name: string, taken: string[]): string {
   let key = base;
   for (let n = 2; taken.includes(key); n++) key = `${base}-${n}`;
   return key;
+}
+
+/** A palette's page title: its path, whose last part a double click renames, every ref and param naming its colors following. */
+function PaletteName({ palette, written }: { palette: Palette; written: string[] }) {
+  const { commit } = useTrying();
+  const parent = palette.group.split(".").slice(0, -1).join(".");
+  const under = parent === "" ? "" : `${parent}.`;
+  const beside = written
+    .filter((path) => path.startsWith(under) && !path.startsWith(`${palette.group}.`))
+    .map((path) => path.slice(under.length).split(".")[0]);
+  return (
+    <GroupName
+      path={palette.group}
+      taken={[...RESERVED, ...beside]}
+      onRename={(name) => {
+        commit({ action: "rename", target: { kind: "group", root: "palette", path: palette.group }, name }, { page: { page: "palette", name: `${under}${name}` } });
+      }}
+    />
+  );
+}
+
+/** Beside the sidebar's Palette heading: names a new palette, which starts with one random color. */
+export function NewPalette({ working }: { working: Snapshot }) {
+  return (
+    <Popup
+      title="New palette"
+      className="nav-add"
+      label={
+        <>
+          <Plus size={14} aria-hidden />
+          <span className="sr-only">New palette</span>
+        </>
+      }
+      focus="field"
+    >
+      {(panel) => <PaletteForm working={working} panel={panel} />}
+    </Popup>
+  );
+}
+
+function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel }) {
+  const { commit } = useTrying();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [refused, setRefused] = useState<string | null>(null);
+  // Refs name constants, systems and roles alike, so a palette cannot share its name with any of them.
+  const taken = [
+    ...working.constants.map((constant) => constant.path),
+    ...working.systems.map((system) => system.system),
+    ...working.roles.map((role) => role.group || role.role),
+  ].some((path) => path.split(".")[0] === name);
+  const problem = name === "" ? null : !ENTRY_NAME.test(name) ? ENTRY_NAME_RULE : taken ? `${name} is already written.` : null;
+  return (
+    <form
+      className="ref-editor"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        if (name === "" || problem || busy) return;
+        setBusy(true);
+        const lab = randomColor();
+        const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, RESERVED);
+        const refusal = commit({ action: "add", target: { kind: "constant", path: `${name}.${key}` }, value: formatAuthored(lab) }, { page: { page: "palette", name } });
+        if (refusal) {
+          setRefused(firstError(refusal));
+          setBusy(false);
+          return;
+        }
+        panel.dismiss();
+      }}
+    >
+      <div className="editor-head" {...panel.handle}>
+        <span className="ref-editor-heading">New palette</span>
+        {panel.close}
+      </div>
+      <label className="ref-control">
+        <span>palette</span>
+        <input
+          type="text"
+          className="ref-input"
+          value={name}
+          spellCheck={false}
+          autoComplete="off"
+          data-1p-ignore
+          placeholder="brand"
+          onChange={(event) => {
+            setName(event.target.value.trim());
+            setRefused(null);
+          }}
+        />
+      </label>
+      {(problem ?? refused) && <p className="ref-error ref-problem">{problem ?? refused}</p>}
+      <div className="system-form-actions">
+        <button type="submit" className="btn btn-primary" disabled={name === "" || problem != null || busy}>
+          Add palette
+        </button>
+      </div>
+    </form>
+  );
 }
 
 type SwatchSize = "small" | "medium" | "large";
@@ -131,6 +229,8 @@ export function PalettePage({
   palette,
   note,
   written,
+  constants,
+  named,
   changes,
 }: {
   palette: Palette;
@@ -138,6 +238,9 @@ export function PalettePage({
   note: string | null;
   /** Every path the systems block holds, constants and systems alike. */
   written: string[];
+  constants: SnapshotConstant[];
+  /** Every other name a ref can start with: the systems and the role groups. */
+  named: string[];
   changes: Change[];
 }) {
   const { commitStep, refusal } = useTrying();
@@ -262,7 +365,8 @@ export function PalettePage({
     ? dragOrder.flatMap((path) => palette.entries.find((entry) => entry.path === path) ?? [])
     : palette.entries;
   const taken = takenIn(palette.group, written);
-  const add = async (color?: Oklab, after?: string) => {
+  const listed = constants.filter((constant) => palette.entries.some((entry) => entry.path === constant.path));
+  const add = async (color?: Oklab, after?: string, openName = false) => {
     if (operating.current) return;
     operating.current = true;
     setBusy(true);
@@ -274,6 +378,7 @@ export function PalettePage({
       );
       const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, taken);
       const path = `${palette.group}.${key}`;
+      if (openName) openNameOf(path);
       commitStep([{ action: "add", target: { kind: "constant", path }, value: formatAuthored(lab), after }]);
     } finally {
       operating.current = false;
@@ -305,7 +410,7 @@ export function PalettePage({
         const lab = rolled.get(entry.path);
         if (!lab) continue;
         const target: ConstantTarget = { kind: "constant", path: entry.path };
-        edits.push({ action: "set", target, value: formatAuthored(lab) });
+        edits.push({ action: "set", target, value: formatAuthored(lab, entry.color.alpha) });
         if (!added(entry.path)) continue;
         const others = names.filter((name) => name !== entry.name);
         const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, others);
@@ -385,9 +490,9 @@ export function PalettePage({
   return (
     <>
       <div className="palette-head">
-        <h1>
-          {palette.group}{" "}
-          <span className="muted" style={{ fontSize: "var(--text-body)" }}>
+        <h1 className="entry-head palette-title">
+          <PaletteName palette={palette} written={written} />
+          <span className="title-kind">
             palette
           </span>
         </h1>
@@ -443,26 +548,24 @@ export function PalettePage({
         <table>
           <thead>
             <tr>
-              <th>Path</th>
-              <th>Value</th>
+              {CONSTANT_COLUMNS.map((column) => (
+                <th key={column}>{column}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {palette.entries.map((entry) => (
-              <tr key={entry.path}>
-                <td>
-                  <code>{entry.path}</code>
-                </td>
-                <td>
-                  <ColorChip
-                    color={entry.color}
-                    label={entry.written}
-                    edit={{ kind: "constant", path: entry.path }}
-                    onUnlock={isLocked(entry.path) ? () => toggle(entry.path) : undefined}
-                  />
-                </td>
-              </tr>
+            {listed.map((constant) => (
+              <ConstantRow
+                key={constant.path}
+                constant={constant}
+                constants={constants}
+                named={named}
+                siblings={listed}
+                onPalettePage
+                lock={EDITABLE ? { locked: isLocked(constant.path), onToggle: () => toggle(constant.path) } : null}
+              />
             ))}
+            <AddRow label="New color" columns={CONSTANT_COLUMNS.length} busy={busy} onAdd={() => add(undefined, undefined, true)} />
           </tbody>
         </table>
       ) : (
@@ -489,6 +592,7 @@ export function PalettePage({
                 setToolsOpen(true);
               }}
               onRename={(name) => { if (selected === entry.path) setSelected(`${palette.group}.${name}`); }}
+              lastOfPalette={palette.entries.length === 1}
             />
           ))}
         </div>
@@ -589,10 +693,13 @@ function PaletteEntry({
   selected,
   onToggleSelect,
   onRename,
+  lastOfPalette,
 }: {
   entry: PaletteEntry;
   taken: string[];
   locked: boolean;
+  /** Removing it removes the palette, and with it this page. */
+  lastOfPalette: boolean;
   /** The swatch is big enough to carry its labels and controls on the color. */
   large: boolean;
   onToggleLock: () => void;
@@ -675,14 +782,17 @@ function PaletteEntry({
             </button>
           </Hint>
           {handle}
-          <Hint text={locked ? "Unlock to delete" : "Delete"} side={hintSide}>
+          <Hint text={locked ? "Unlock to delete" : lastOfPalette ? "Delete, and the palette with it" : "Delete"} side={hintSide}>
             <button
               type="button"
               className="palette-entry-remove"
               aria-label={`Remove ${entry.name}`}
               // Not `disabled`: a disabled button gets no pointer events, so its hint would never show.
               aria-disabled={locked}
-              onClick={() => { if (!locked) commit({ action: "remove", target }); }}
+              onClick={() => {
+                if (locked) return;
+                commit({ action: "remove", target });
+              }}
             >
               <TrashIcon />
             </button>
@@ -713,7 +823,7 @@ function Rename({ target, name, taken, panel, onRename }: { target: ConstantTarg
   const problem =
     wanted === name
       ? null
-      : !CONSTANT_KEY.test(wanted)
+      : !ENTRY_NAME.test(wanted)
         ? "A name starts with a letter and holds letters, digits, - and _."
         : taken.includes(wanted)
           ? `${wanted} is taken.`

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { EditTarget } from "../src/edit.js";
 import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";
-import { useTrying } from "./preview.js";
+import { firstError, useTrying } from "./preview.js";
 
 type Range = { min: number; max: number };
 
@@ -116,10 +116,4 @@ function NumberEditor({
       {edit && refusal && <p className="ref-error">{firstError(refusal)}</p>}
     </form>
   );
-}
-
-/** The first of a refusal's errors: the reason, before everything that fails because of it. */
-function firstError(refusal: string): string {
-  const first = refusal.split("\n").find((line) => line.startsWith("- "));
-  return first ? first.slice(2) : refusal;
 }

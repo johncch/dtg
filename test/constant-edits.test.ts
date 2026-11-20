@@ -53,10 +53,22 @@ describe("adding a constant", () => {
     assert.ok(paths(edited).includes("yellow"));
   });
 
-  test("cannot add to a group the file does not have", () => {
+  test("adding to a group the file does not have writes the group, at the end of the palette", () => {
+    const edited = applyEdits(SRC, [{ action: "add", target: constant("brand.x"), value: "#000000" }]);
+    assert.ok(edited.includes(`  grounds: { paper: "#fafdff", ink: "#001a28" }\n  brand:\n    x: "#000000"\n\nsystems:`));
+    assert.ok(paths(edited).includes("brand.x"));
+  });
+
+  test("adding two groups deep where the file has neither writes both", () => {
+    const edited = applyEdits(SRC, [{ action: "add", target: constant("brand.deep.x"), value: "#000000" }]);
+    assert.ok(edited.includes(`  brand:\n    deep:\n      x: "#000000"\n\nsystems:`));
+    assert.ok(paths(edited).includes("brand.deep.x"));
+  });
+
+  test("cannot add under a constant, which is not a group", () => {
     assert.throws(
-      () => applyEdits(SRC, [{ action: "add", target: constant("nope.x"), value: "#000000" }]),
-      /nothing written for nope\.x/,
+      () => applyEdits(SRC, [{ action: "add", target: constant("blue.x"), value: "#000000" }]),
+      /nothing written for blue\.x to be added to/,
     );
   });
 
@@ -142,6 +154,13 @@ describe("moving a constant", () => {
     assert.equal(back, SRC);
   });
 
+  test("moved first, it still follows what the group says about itself", () => {
+    const described = SRC.replace(`  colors:\n`, `  colors:\n    description: Brand\n`);
+    assert.notEqual(described, SRC);
+    const edited = applyEdits(described, [{ action: "move", target: constant("colors.ruby"), after: null }]);
+    assert.ok(edited.includes(`  colors:\n    description: Brand\n    ruby: "#c50101" # red\n    theme: "#03a2e8"\n`));
+  });
+
   test("moves one in a flow group", () => {
     const edited = applyEdits(SRC, [{ action: "move", target: constant("grounds.paper"), after: "ink" }]);
     assert.ok(edited.includes(`grounds: { ink: "#001a28", paper: "#fafdff" }`));
@@ -169,15 +188,20 @@ describe("removing a constant", () => {
     assert.ok(applyEdits(SRC, [{ action: "remove", target: constant("grounds.ink") }]).includes(`grounds: { paper: "#fafdff" }`));
   });
 
-  test("leaves an emptied group as {}, still a group to add to", () => {
+  test("takes the group with its last constant, and adding to it writes it again", () => {
     const emptied = applyEdits(SRC, [
       { action: "remove", target: ruby },
       { action: "remove", target: theme },
     ]);
-    assert.ok(emptied.includes("  colors: {}\n  grounds:"));
-    assert.ok(!paths(emptied).some((path) => path.startsWith("colors.")));
+    assert.ok(emptied.includes(`  blue: "#0000ff" # loose\n  grounds:`));
+    assert.ok(!emptied.includes("colors"));
     const refilled = applyEdits(emptied, [{ action: "add", target: ruby, value: "#c50101" }]);
-    assert.ok(refilled.includes(`colors: { ruby: "#c50101" }`));
+    assert.ok(refilled.includes(`  colors:\n    ruby: "#c50101"\n`));
+  });
+
+  test("leaves the palette itself, emptied, as {}", () => {
+    const one = `dtg: 1\npalette:\n  blue: "#0000ff"\n`;
+    assert.equal(applyEdits(one, [{ action: "remove", target: constant("blue") }]), `dtg: 1\npalette: {}\n`);
   });
 
   test("is a change, unless the color was added since the file", () => {

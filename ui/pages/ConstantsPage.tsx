@@ -1,15 +1,51 @@
-import { Fragment } from "react";
+import { Fragment, useState } from "react";
+import { colorFromOklab, formatAuthored } from "../../src/color-math.js";
+import { randomColor } from "../../src/palette-roll.js";
 import type { SnapshotConstant } from "../../src/snapshot.js";
-import { ColorChip } from "../ColorChip.js";
+import { CONSTANT_COLUMNS, constantAnchor, ConstantRow, RESERVED } from "../ConstantRow.js";
+import { AddRow, groupOf, openNameOf } from "../EntryRow.js";
+import { colorNameOf } from "../names.js";
+import { useTrying } from "../preview.js";
 import { Link, useScrollToHash } from "../router.js";
-import { UsedBy } from "../UsedBy.js";
+import { keyFor, UNNAMED } from "./PalettePage.js";
 
-export function constantAnchor(path: string): string {
-  return `c-${path.replace(/\./g, "_")}`;
+/** Closes the colors in no group: adds a random one, named after itself, and opens its name. */
+function NewConstantRow({ taken }: { taken: string[] }) {
+  const { commit } = useTrying();
+  const [busy, setBusy] = useState(false);
+  return (
+    <AddRow
+      label="New color"
+      columns={4}
+      busy={busy}
+      onAdd={async () => {
+        setBusy(true);
+        const lab = randomColor();
+        const path = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, taken);
+        openNameOf(path);
+        commit({ action: "add", target: { kind: "constant", path }, value: formatAuthored(lab) });
+        setBusy(false);
+      }}
+    />
+  );
 }
 
-export function ConstantsPage({ constants }: { constants: SnapshotConstant[] }) {
+/**
+ * Every palette color in one table, so the columns line up: first the colors
+ * in no group, which are added, reordered and removed here, then each
+ * group's under its name, which are on the group's own page.
+ */
+export function ConstantsPage({
+  constants,
+  named,
+}: {
+  constants: SnapshotConstant[];
+  /** Every other name a ref can start with: the systems and the role groups. */
+  named: string[];
+}) {
   const hash = useScrollToHash();
+  const loose = constants.filter((constant) => groupOf(constant.path) === "");
+  const groups = [...new Set(constants.map((constant) => groupOf(constant.path)).filter((group) => group !== ""))];
   return (
     <>
       <h1>Palette</h1>
@@ -21,61 +57,32 @@ export function ConstantsPage({ constants }: { constants: SnapshotConstant[] }) 
       <table>
         <thead>
           <tr>
-            <th>Path</th>
-            <th>Emits</th>
-            <th>Value</th>
-            <th>Used by</th>
+            {CONSTANT_COLUMNS.map((column) => (
+              <th key={column}>{column}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
-          {constants.map((constant) => {
-            const anchor = constantAnchor(constant.path);
-            return (
-              <tr key={constant.path} id={anchor} className={anchor === hash ? "target" : undefined}>
-                <td>
-                  <code>{constant.path}</code>
-                </td>
-                <td>
-                  {constant.emitted ? (
-                    <code>--color-{constant.cssName}</code>
-                  ) : (
-                    <span className="muted">nothing — its group is an input</span>
-                  )}
-                </td>
-                <td>
-                  <ColorChip color={constant.color} label={constant.written} edit={{ kind: "constant", path: constant.path }} />
-                </td>
-                <td>
-                  {constant.usedBy.length > 0 || constant.paramOf.length > 0 ? (
-                    <>
-                      <UsedBy uses={constant.usedBy} />
-                      {constant.usedBy.length > 0 && constant.paramOf.length > 0 && ", "}
-                      <ParamOf params={constant.paramOf} />
-                    </>
-                  ) : (
-                    <span className="muted">
-                      {constant.emitted ? "nothing — it emits, but no role points at it" : "nothing"}
-                    </span>
-                  )}
+          {loose.map((constant) => (
+            <ConstantRow key={constant.path} constant={constant} constants={constants} named={named} siblings={loose} onPalettePage={false} targeted={constantAnchor(constant.path) === hash} />
+          ))}
+          <NewConstantRow taken={[...RESERVED, ...constants.map((constant) => constant.path.split(".")[0]), ...named]} />
+          {groups.map((group) => (
+            <Fragment key={group}>
+              <tr className="group-row">
+                <td colSpan={4}>
+                  <Link to={{ page: "palette", name: group }}>{group}</Link>
                 </td>
               </tr>
-            );
-          })}
+              {constants
+                .filter((constant) => groupOf(constant.path) === group)
+                .map((constant) => (
+                  <ConstantRow key={constant.path} constant={constant} constants={constants} named={named} siblings={null} onPalettePage={false} targeted={constantAnchor(constant.path) === hash} />
+                ))}
+            </Fragment>
+          ))}
         </tbody>
       </table>
     </>
   );
-}
-
-/** The systems whose params name a color, linked to each system's page. */
-function ParamOf({ params }: { params: SnapshotConstant["paramOf"] }) {
-  return params.map(({ system, param }, index) => (
-    <Fragment key={`${system} ${param}`}>
-      {index > 0 && ", "}
-      <Link to={{ page: "system", name: system }}>
-        <code>{system}</code>
-      </Link>
-      <span className="muted"> {param}</span>
-    </Fragment>
-  ));
 }
