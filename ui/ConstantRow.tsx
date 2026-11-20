@@ -7,7 +7,7 @@ import { copyName, EntryDuplicate, EntryGrip, EntryName, EntryRemove, entryRowPr
 import { Hint } from "./Hint.js";
 import { LockIcon } from "./LockIcon.js";
 import { useTrying } from "./preview.js";
-import { Link, navigate } from "./router.js";
+import { Link } from "./router.js";
 import { UsedBy } from "./UsedBy.js";
 
 export function constantAnchor(path: string): string {
@@ -35,7 +35,7 @@ export function ConstantRow({
   named: string[];
   /** The colors written beside it, its own among them, when the row can be moved, copied and removed here; null when it cannot. */
   siblings: SnapshotConstant[] | null;
-  /** The page is the color's own palette's: the row shows the last part of its path, and the page goes when its last color does. */
+  /** The page is the color's own palette's: the row shows the last part of its path, and its last color takes the palette with it. */
   onPalettePage: boolean;
   /** The palette page's lock on the color, where it has one. */
   lock?: { locked: boolean; onToggle: () => void } | null;
@@ -47,9 +47,6 @@ export function ConstantRow({
   const name = nameOf(constant.path);
   const used = constant.usedBy.length > 0 || constant.paramOf.length > 0;
   const lastOfPalette = onPalettePage && siblings?.length === 1;
-  const leavePaletteWithLast = () => {
-    if (lastOfPalette) navigate({ page: "constants" }, { replace: true });
-  };
   return (
     <tr id={constantAnchor(constant.path)} className={targeted ? "target" : undefined} {...(siblings ? entryRowProps(group, name) : {})}>
       <td>
@@ -74,12 +71,8 @@ export function ConstantRow({
               return pathProblem(path, constants.filter((other) => other !== constant).map((other) => other.path));
             }}
             onRepath={(path) => {
-              if (groupOf(path) === group) {
-                commit({ action: "rename", target, name: nameOf(path) });
-                return;
-              }
-              commit({ action: "place", target, path });
-              leavePaletteWithLast();
+              if (groupOf(path) === group) commit({ action: "rename", target, name: nameOf(path) });
+              else commit({ action: "place", target, path });
             }}
           />
           {siblings && (
@@ -103,10 +96,7 @@ export function ConstantRow({
                 ]}
                 stays={lock?.locked ? "Unlock to delete" : null}
                 hint={lastOfPalette ? "Delete, and the palette with it" : "Delete"}
-                onRemove={() => {
-                  commit({ action: "remove", target });
-                  leavePaletteWithLast();
-                }}
+                onRemove={() => commit({ action: "remove", target })}
               />
               {lock && (
                 <Hint text={lock.locked ? "Unlock" : "Lock"}>

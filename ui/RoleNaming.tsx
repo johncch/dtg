@@ -187,7 +187,7 @@ export function RoleDuplicate({ role, siblings }: { role: SnapshotRole; siblings
  * Removes a role, once no other role's ref points at it. A group goes with
  * its last role; a section's last role stays, for the section to have a row to add after.
  */
-export function RoleRemove({ role, roles, onGroupPage }: { role: SnapshotRole; roles: SnapshotRole[]; onGroupPage: boolean }) {
+export function RoleRemove({ role, roles }: { role: SnapshotRole; roles: SnapshotRole[] }) {
   const { commit } = useTrying();
   const path = rolePath(role);
   const inSection = roles.filter((other) => other.section === role.section);
@@ -200,10 +200,7 @@ export function RoleRemove({ role, roles, onGroupPage }: { role: SnapshotRole; r
         .map(rolePath)}
       stays={inSection.length === 1 ? `The only role in ${role.section}.` : null}
       hint={lastOfGroup ? `Delete, and ${role.group} with it` : "Delete"}
-      onRemove={() => {
-        commit({ action: "remove", target: targetOf(role) });
-        if (lastOfGroup && onGroupPage) navigate({ page: "roles", section: role.section }, { replace: true });
-      }}
+      onRemove={() => commit({ action: "remove", target: targetOf(role) })}
     />
   );
 }

@@ -808,7 +808,6 @@ function PaletteEntry({
               onClick={() => {
                 if (locked) return;
                 commit({ action: "remove", target });
-                if (lastOfPalette) navigate({ page: "constants" }, { replace: true });
               }}
             >
               <TrashIcon />

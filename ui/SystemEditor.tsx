@@ -190,7 +190,6 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
       return;
     }
     commit(edit);
-    navigate({ page: "definition" }, { replace: true });
     panel.dismiss();
   };
 

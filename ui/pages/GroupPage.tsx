@@ -126,7 +126,7 @@ function RoleRow({
           <RoleName role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
           <span className="entry-actions">
             <RoleDuplicate role={role} siblings={siblings} />
-            <RoleRemove role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
+            <RoleRemove role={role} roles={snapshot.roles} />
           </span>
         </div>
         {role.note && <div className="role-note">{role.note}</div>}
