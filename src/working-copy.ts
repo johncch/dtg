@@ -138,7 +138,7 @@ export function changesOf(copy: WorkingCopy): Change[] {
     const push = (change: Change) => changes.push({ change, lastEdit });
     if (inFile == null) {
       // A set on a param the file does not write adds it, as `add` does a constant.
-      if ((added || now?.kind === "param") && now != null && value != null) push({ action: "set", target: now, from: null, to: value });
+      if ((added || now?.kind === "param" || now?.kind === "emit") && now != null && value != null) push({ action: "set", target: now, from: null, to: value });
       continue;
     }
     const from = readValue(copy.diskText, inFile)!;

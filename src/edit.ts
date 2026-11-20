@@ -6,6 +6,8 @@ export type EditTarget =
   | { kind: "constant"; path: string }
   /** A whole system, by its dotted path under `systems`. */
   | { kind: "system"; path: string }
+  /** The selectors a system publishes whether or not a ref asks, as a JSON list; an empty one takes `emit` out. */
+  | { kind: "emit"; system: string }
   | { kind: "param"; system: string; path: string }
   /** A param written once in `defaults` and shared by every system of that algorithm. */
   | { kind: "default"; algorithm: string; path: string }
@@ -14,6 +16,7 @@ export type EditTarget =
 
 export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
 export type SystemTarget = Extract<EditTarget, { kind: "system" }>;
+type EmitTarget = Extract<EditTarget, { kind: "emit" }>;
 
 /**
  * Setting writes a value; for a ref, `INHERIT` is a value too: the mode says
@@ -43,6 +46,8 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
       return ["palette", ...target.path.split(".")];
     case "system":
       return ["systems", ...target.path.split(".")];
+    case "emit":
+      return ["systems", ...target.system.split("."), "emit"];
     case "param":
       return ["systems", ...target.system.split("."), "params", ...target.path.split(".")];
     case "default":
@@ -63,6 +68,8 @@ export function describeTarget(target: EditTarget): string {
     case "constant":
     case "system":
       return target.path;
+    case "emit":
+      return `${target.system} emit`;
     case "param":
       return `${target.system} ${target.path}`;
     case "default":
@@ -119,6 +126,10 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       text = withSystemSet(text, edit.target, edit.value);
       continue;
     }
+    if (edit.target.kind === "emit") {
+      text = withEmitSet(text, edit.target, edit.value);
+      continue;
+    }
     const alias = aliasOnTheWay(text, edit.target);
     if (alias) {
       throw new Error(
@@ -165,6 +176,10 @@ export function readValue(yamlText: string, target: EditTarget): string | null {
     if (!isSystem(system)) return null;
     const { algorithm, params } = system.toJSON() as { algorithm: string; params?: Record<string, unknown> };
     return JSON.stringify({ algorithm, params: params ?? {} });
+  }
+  if (target.kind === "emit") {
+    const emit = writtenAt(yamlText, target);
+    return isSeq(emit) ? JSON.stringify(emit.toJSON()) : null;
   }
   if (structureAt(yamlText, target)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
   const node = nodeAt(yamlText, target);
@@ -342,6 +357,18 @@ function withSystemSet(text: string, target: SystemTarget, value: string): strin
   return paramsNode ? written : withEntryAdded(written, keys, "params", paramsSource, target, "but not as params", "algorithm");
 }
 
+function withEmitSet(text: string, target: EmitTarget, value: string): string {
+  const listed = (JSON.parse(value) as unknown[]).length > 0;
+  const emit = writtenAt(text, target);
+  if (emit == null) {
+    if (!listed) return text;
+    return withEntryAdded(text, keysOf(target, parseDocument(text)).slice(0, -1) as string[], "emit", structureSource(value)!, target, "but not as a list");
+  }
+  if (!isSeq(emit) || !emit.range) throw new Error(`nothing written for ${describeTarget(target)} to edit`);
+  if (!listed) return withEntryRemoved(text, target);
+  return text.slice(0, emit.range[0]) + structureSource(value) + text.slice(writtenEnd(emit));
+}
+
 function isSystem(node: unknown): node is YAMLMap {
   return isMap(node) && node.has("algorithm");
 }
@@ -423,13 +450,13 @@ function keySource(name: string): string {
 
 type Entry = { doc: Document; keys: string[]; set: YAMLMap; pair: Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node> };
 
-/** The constant or system a target names, with the group it is in. Throws when the file has no such entry. */
-function entryAt(text: string, target: ConstantTarget | SystemTarget): Entry {
+/** The constant, system or emit list a target names, with the map it is in. Throws when the file has no such entry. */
+function entryAt(text: string, target: ConstantTarget | SystemTarget | EmitTarget): Entry {
   const doc = parseDocument(text);
   const keys = keysOf(target, doc) as string[];
   const set = doc.getIn(keys.slice(0, -1), true);
   const pair = isMap(set) ? set.items.find((item) => isScalar(item.key) && item.key.value === keys.at(-1)) : undefined;
-  const written = target.kind === "system" ? isSystem(pair?.value) : isScalar(pair?.value);
+  const written = target.kind === "system" ? isSystem(pair?.value) : target.kind === "emit" ? isSeq(pair?.value) : isScalar(pair?.value);
   if (!isMap(set) || !pair || !written || !isScalar(pair.key) || !pair.key.range) {
     throw new Error(`nothing written for ${describeTarget(target)} to edit`);
   }
@@ -521,7 +548,7 @@ function withConstantMoved(text: string, target: ConstantTarget, after: string |
  * The entry and its lines go. A group left with nothing is written as `{}`,
  * so it stays a group to add to rather than becoming an empty value.
  */
-function withEntryRemoved(text: string, target: ConstantTarget | SystemTarget): string {
+function withEntryRemoved(text: string, target: ConstantTarget | SystemTarget | EmitTarget): string {
   const { doc, keys, set, pair } = entryAt(text, target);
   const index = set.items.indexOf(pair);
   const valueEnd = writtenEnd(pair.value as Node);

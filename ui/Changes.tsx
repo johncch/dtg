@@ -12,6 +12,8 @@ function nameOf(target: EditTarget, modes: string[]): string {
     case "constant":
     case "system":
       return target.path;
+    case "emit":
+      return `${target.system} emit`;
     case "param":
       return `${target.system} ${target.path}`;
     case "default":

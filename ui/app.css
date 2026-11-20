@@ -67,6 +67,11 @@ table { border-collapse: collapse; width: 100%; border: 1px solid var(--border);
 th { text-align: left; font-size: var(--text-subhead); font-weight: 500; color: var(--muted); padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel-head); }
 td { padding: 8px 12px; border-bottom: 1px solid var(--border-soft); font-size: var(--text-body); vertical-align: middle; }
 tr:last-child td { border-bottom: none; }
+table.steps-table { table-layout: fixed; }
+table.steps-table th:nth-child(1), table.steps-table th:nth-child(2) { width: 19%; }
+table.steps-table th:nth-child(3) { width: 22%; }
+table.steps-table th:nth-child(4) { width: 11%; }
+table.steps-table td { overflow-wrap: anywhere; }
 tr.target { background: var(--caution-bg); }
 tr.group-row td { padding-top: 16px; font-weight: 600; }
 tr.group-row a { color: inherit; text-decoration: none; }

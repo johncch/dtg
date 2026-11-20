@@ -296,6 +296,8 @@ export type ResolvedSystem = {
   /** What a ref into this system is made of. */
   selector: SelectorShape;
   steps: ResolvedStep[];
+  /** The selectors the system's `emit` lists, which it publishes whether or not a ref asks. */
+  emit: string[];
   /** Written by hand in the definition; the algorithm's own is `algorithmDescription`. */
   description?: string;
 };
@@ -1232,6 +1234,7 @@ export function resolveDefinition(
       colorParams,
       selector: sys.selectorShape,
       steps,
+      emit: sys.emit,
       description: sys.description,
     });
   }
