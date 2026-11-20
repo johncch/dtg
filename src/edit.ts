@@ -124,7 +124,7 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       continue;
     }
     if (edit.action === "remove") {
-      text = withEntryRemoved(text, edit.target);
+      text = edit.target.kind === "role" ? withRoleRemoved(text, edit.target) : withEntryRemoved(text, edit.target);
       continue;
     }
     if (edit.action === "add") {
@@ -392,14 +392,21 @@ function withEmitSet(text: string, target: EmitTarget, value: string): string {
 
 /**
  * A new role at the end of its group, or of its section for one in no group:
- * a ref list, or the ref itself in a definition without modes.
+ * a ref list, or the ref itself in a definition without modes. A group the
+ * section does not have yet is written with it, at the end of the section.
  */
 function withRoleAdded(text: string, target: RoleTarget, value: string): string {
   const keys = [target.section, ...target.role.split(".")];
   const refs = JSON.parse(value) as string[];
   const written = refs.map((ref) => (ref === INHERIT || plainSafe(ref) ? ref : JSON.stringify(ref)));
-  const source = parseDocument(text).has("modes") ? `[${written.join(", ")}]` : written[0];
-  return withEntryAdded(text, keys.slice(0, -1), keys.at(-1)!, source, target, "as a role or a group");
+  const doc = parseDocument(text);
+  const source = doc.has("modes") ? `[${written.join(", ")}]` : written[0];
+  const name = keys.at(-1)!;
+  if (keys.length > 2 && doc.getIn(keys.slice(0, -1), true) == null) {
+    const entry = `${keySource(name)}: ${source}`;
+    return withEntryAdded(text, keys.slice(0, -2), keys.at(-2)!, `{ ${entry} }`, target, "as a role or a group", undefined, [entry]);
+  }
+  return withEntryAdded(text, keys.slice(0, -1), name, source, target, "as a role or a group");
 }
 
 /** A role's refs as written — a ref list, a block holding one under `refs`, or the ref itself — or null for anything else. */
@@ -595,11 +602,35 @@ function withConstantMoved(text: string, target: ConstantTarget, after: string |
 }
 
 /**
+ * A group of roles is there while it holds one: removing its last role takes
+ * the group with it, whatever it says about itself, and so on up to the
+ * section, which stays.
+ */
+function withRoleRemoved(text: string, target: RoleTarget): string {
+  const entry = entryAt(text, target);
+  let { keys, set, pair } = entry;
+  const holdsOnlyThis = () =>
+    set.items.every((item) => item === pair || (isScalar(item.key) && ["alias", "omit", "description"].includes(String(item.key.value))));
+  while (keys.length > 2 && holdsOnlyThis()) {
+    keys = keys.slice(0, -1);
+    const holder = entry.doc.getIn(keys.slice(0, -1), true) as YAMLMap;
+    pair = holder.items.find((item) => item.value === set) as Entry["pair"];
+    set = holder;
+  }
+  return withEntryRemoved(text, target, { doc: entry.doc, keys, set, pair }, keys.length < entry.keys.length);
+}
+
+/**
  * The entry and its lines go. A group left with nothing is written as `{}`,
  * so it stays a group to add to rather than becoming an empty value.
  */
-function withEntryRemoved(text: string, target: EntryTarget | EmitTarget): string {
-  const { doc, keys, set, pair } = entryAt(text, target);
+function withEntryRemoved(
+  text: string,
+  target: EntryTarget | EmitTarget,
+  { doc, keys, set, pair }: Entry = entryAt(text, target),
+  /** Stands apart from its neighbors by a blank line; one of the two around it goes with it. */
+  spaced = target.kind === "system",
+): string {
   const index = set.items.indexOf(pair);
   const valueEnd = writtenEnd(pair.value as Node);
   if (set.items.length === 1) {
@@ -622,9 +653,11 @@ function withEntryRemoved(text: string, target: EntryTarget | EmitTarget): strin
   const lineStart = text.lastIndexOf("\n", pair.key.range[0]) + 1;
   const lineEnd = lineEndAfter(text, valueEnd);
   if (lineEnd === text.length) return text.slice(0, Math.max(lineStart - 1, 0));
-  // A system stands apart from its neighbors by a blank line; one of the two around it goes with it.
-  const blankBefore = target.kind === "system" && /\n[ \t]*\n$/.test(text.slice(0, lineStart));
+  const blankBefore = spaced && /\n[ \t]*\n$/.test(text.slice(0, lineStart));
   const blankAfter = /^\n[ \t]*\n/.test(text.slice(lineEnd));
+  if (blankBefore && text.slice(lineEnd).trim() === "") {
+    return text.slice(0, lineStart).replace(/\n[ \t]*\n$/, "\n") + text.slice(lineEnd + 1);
+  }
   const end = blankBefore && blankAfter ? text.indexOf("\n", lineEnd + 1) : lineEnd;
   return text.slice(0, lineStart) + text.slice(end + 1);
 }

@@ -32,7 +32,7 @@ export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: stri
         </thead>
         <tbody>
           {roles.map((role) => (
-            <RoleRow key={role.role} snapshot={snapshot} role={role} siblings={roles} id={role.role} targeted={role.role === hash} />
+            <RoleRow key={role.role} snapshot={snapshot} role={role} siblings={roles} onGroupPage id={role.role} targeted={role.role === hash} />
           ))}
           <NewRoleRow siblings={roles} columns={snapshot.modes.length + 1} />
         </tbody>
@@ -102,6 +102,7 @@ function RoleRow({
   snapshot,
   role,
   siblings,
+  onGroupPage = false,
   id,
   targeted,
 }: {
@@ -109,6 +110,7 @@ function RoleRow({
   role: SnapshotRole;
   /** The roles of its group, its own among them. */
   siblings: SnapshotRole[];
+  onGroupPage?: boolean;
   /** Set where a link can land on the row: on a group's page, or a section's for a role in no group. */
   id?: string;
   targeted: boolean;
@@ -117,8 +119,8 @@ function RoleRow({
     <tr id={id} className={targeted ? "target" : undefined}>
       <td>
         <div className="role-head">
-          <RoleName role={role} siblings={siblings} />
-          <RoleRemove role={role} roles={snapshot.roles} />
+          <RoleName role={role} siblings={siblings} onGroupPage={onGroupPage} />
+          <RoleRemove role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
         </div>
         {role.note && <div className="role-note">{role.note}</div>}
       </td>

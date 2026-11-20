@@ -5,6 +5,7 @@ import type { Snapshot, SnapshotSystem } from "../src/snapshot.js";
 import { Backgrounds } from "./Backgrounds.js";
 import { Changes } from "./Changes.js";
 import { LiveCss } from "./LiveCss.js";
+import { NewGroup, OpenAwaitedGroup } from "./RoleNaming.js";
 import { NewSystem, OpenAwaitedSystem } from "./SystemEditor.js";
 import { ProjectGamutProvider } from "./gamut.js";
 import { TryingProvider } from "./preview.js";
@@ -56,6 +57,7 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
         <UnsavedChangesProvider value={working.changes}>
           <PaletteColorsProvider value={working.constants}>
             <OpenAwaitedSystem working={working} />
+            <OpenAwaitedGroup working={working} />
             <aside>
               <Nav snapshot={snapshot} working={working} />
               <div className="dock">
@@ -113,7 +115,10 @@ function Nav({ snapshot, working }: { snapshot: Snapshot; working: Snapshot }) {
         <SystemLinks nodes={systemTree(snapshot.systems)} notes={snapshot.groupNotes.systems} />
         {sections.map((section) => (
           <Fragment key={section}>
-            <h2>{section}</h2>
+            <h2 className="nav-heading">
+              {section}
+              {EDITABLE && <NewGroup working={working} section={section} />}
+            </h2>
             <Link to={{ page: "roles", section }}>All</Link>
             <GroupLinks
               notes={snapshot.groupNotes.roles}
