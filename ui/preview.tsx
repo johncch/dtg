@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Edit } from "../src/edit.js";
 import { previewOf, type Drawn } from "./engine.js";
+import { openOnceThere, type Opening } from "./follow.js";
 import { useStore } from "./store.js";
 
 type Trying = {
@@ -8,10 +9,10 @@ type Trying = {
   preview(edit: Edit | null): void;
   /** The same for several edits at once, as a drag that moves many colors makes. */
   previewStep(edits: Edit[] | null): void;
-  /** Make `edit` an unsaved change in the working copy. Returns why it was refused, or null when it was kept. */
-  commit(edit: Edit): string | null;
-  /** Make several edits unsaved changes as one step, which one undo takes back. Returns as `commit` does. */
-  commitStep(edits: Edit[]): string | null;
+  /** Make `edit` an unsaved change in the working copy, and open `opening` once it is one. Returns why it was refused, or null when it was kept. */
+  commit(edit: Edit, opening?: Opening): string | null;
+  /** Make several edits unsaved changes as one step, which one undo takes back. Otherwise as `commit`. */
+  commitStep(edits: Edit[], opening?: Opening): string | null;
   /** Why the edit being tried cannot be drawn, or null when it can. */
   refusal: string | null;
 };
@@ -71,7 +72,7 @@ export function TryingProvider({
   }, []);
 
   const trying = useMemo<Trying>(() => {
-    const commitStep = (edits: Edit[]) => {
+    const commitStep = (edits: Edit[], opening?: Opening) => {
       wanted.current = null;
       // A step that leaves the definition unresolvable is refused here,
       // whole, rather than kept as a change nobody can see.
@@ -83,7 +84,11 @@ export function TryingProvider({
         return (e as Error).message;
       }
       setRefusal(null);
-      store.commit(edits).catch(() => setTried(null));
+      if (opening) openOnceThere(opening);
+      store.commit(edits).catch(() => {
+        setTried(null);
+        if (opening) openOnceThere(null);
+      });
       return null;
     };
     const previewStep = (edits: Edit[] | null) => {
@@ -96,7 +101,7 @@ export function TryingProvider({
     return {
       preview: (edit) => previewStep(edit && [edit]),
       previewStep,
-      commit: (edit) => commitStep([edit]),
+      commit: (edit, opening) => commitStep([edit], opening),
       commitStep,
       refusal,
     };

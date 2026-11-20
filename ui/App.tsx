@@ -1,21 +1,22 @@
-import { Fragment, useLayoutEffect, useRef } from "react";
+import { Fragment } from "react";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { version } from "../package.json";
 import type { Snapshot, SnapshotSystem } from "../src/snapshot.js";
 import { Backgrounds } from "./Backgrounds.js";
 import { Changes } from "./Changes.js";
 import { LiveCss } from "./LiveCss.js";
-import { NewGroup, OpenAwaitedGroup } from "./RoleNaming.js";
-import { NewSystem, OpenAwaitedSystem } from "./SystemEditor.js";
+import { FollowWorkingCopy } from "./follow.js";
+import { NewGroup } from "./RoleNaming.js";
+import { NewSystem } from "./SystemEditor.js";
 import { ProjectGamutProvider } from "./gamut.js";
 import { TryingProvider } from "./preview.js";
 import { ConstantsPage } from "./pages/ConstantsPage.js";
 import { DefinitionPage } from "./pages/DefinitionPage.js";
 import { SettingsPage } from "./pages/SettingsPage.js";
 import { GroupPage, RolesPage } from "./pages/GroupPage.js";
-import { NewPalette, OpenAwaitedPalette, PalettePage, palettesOf } from "./pages/PalettePage.js";
+import { NewPalette, PalettePage, palettesOf } from "./pages/PalettePage.js";
 import { SystemPage } from "./pages/SystemPage.js";
-import { Link, navigate, useRoute, type Route } from "./router.js";
+import { Link, useRoute, type Route } from "./router.js";
 import { useSnapshot } from "./snapshot.js";
 import { StoreProvider } from "./store.js";
 import { EDITABLE, SAVABLE } from "./mode.js";
@@ -49,38 +50,6 @@ export function App() {
   );
 }
 
-/** The page above the one `route` names, while the working copy has what that page shows; null when it does not, or the page shows nothing an edit can take. */
-function pageAbove(route: Route, working: Snapshot): Exclude<Route, { page: "unknown" }> | null {
-  if (route.page === "palette") return palettesOf(working.constants).some((palette) => palette.group === route.name) ? { page: "constants" } : null;
-  if (route.page === "system") return working.systems.some((system) => system.system === route.name) ? { page: "definition" } : null;
-  if (route.page !== "group") return null;
-  const held = working.roles.find((role) => role.group === route.name);
-  return held ? { page: "roles", section: held.section } : null;
-}
-
-/**
- * A group, a palette or a system goes with its last entry, or with an undo;
- * the page that showed it then goes to the one above. An address that never
- * named anything stays, to say so. Before paint, and before the pages an
- * edit opens, which take over where both apply.
- */
-function LeaveVanished({ route, working }: { route: Route; working: Snapshot }) {
-  const address = JSON.stringify(route);
-  const above = pageAbove(route, working);
-  const shown = useRef<{ address: string; above: Exclude<Route, { page: "unknown" }> } | null>(null);
-  useLayoutEffect(() => {
-    if (above) {
-      shown.current = { address, above };
-      return;
-    }
-    if (shown.current?.address !== address) return;
-    const to = shown.current.above;
-    shown.current = null;
-    navigate(to, { replace: true });
-  }, [address, working]);
-  return null;
-}
-
 /** `snapshot` is what to draw, which may include a pick being tried; `working` is the working copy itself. */
 function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snapshot; route: Route }) {
   return (
@@ -88,10 +57,6 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
       <ProjectGamutProvider value={snapshot.gamut}>
         <UnsavedChangesProvider value={working.changes}>
           <PaletteColorsProvider value={working.constants}>
-            <LeaveVanished route={route} working={working} />
-            <OpenAwaitedSystem working={working} />
-            <OpenAwaitedGroup working={working} />
-            <OpenAwaitedPalette working={working} />
             <aside>
               <Nav snapshot={snapshot} working={working} />
               <div className="dock">
@@ -105,6 +70,7 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
                 <Page route={route} snapshot={snapshot} working={working} />
               </div>
             </main>
+            <FollowWorkingCopy route={route} working={working} />
           </PaletteColorsProvider>
         </UnsavedChangesProvider>
       </ProjectGamutProvider>

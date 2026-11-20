@@ -1,5 +1,5 @@
 import { Plus, SlidersHorizontal } from "lucide-react";
-import { useLayoutEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { parse } from "yaml";
 import type { Algorithm, ParamKind } from "../src/contract.js";
 import type { Edit, SystemTarget } from "../src/edit.js";
@@ -10,7 +10,6 @@ import { previewOf } from "./engine.js";
 import { ENTRY_NAME, usedByRefusal } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { firstError, useTrying } from "./preview.js";
-import { navigate } from "./router.js";
 
 const DEFAULT_START = "#808080";
 
@@ -68,22 +67,6 @@ function recipeOf(working: Snapshot, algorithm: Algorithm, from: SnapshotSystem 
     started.push(key);
   }
   return { params, started, kept, dropped: written.filter((key) => !kept.includes(key)) };
-}
-
-let awaited: string | null = null;
-
-/**
- * Opens the page of a system an edit just named, once the working copy has
- * it. Before paint, so a renamed system's old address never shows as missing.
- */
-export function OpenAwaitedSystem({ working }: { working: Snapshot }) {
-  useLayoutEffect(() => {
-    if (awaited == null || !working.systems.some((system) => system.system === awaited)) return;
-    const name = awaited;
-    awaited = null;
-    navigate({ page: "system", name }, { replace: true });
-  }, [working.systems]);
-  return null;
 }
 
 export function NewSystem({ working }: { working: Snapshot }) {
@@ -200,8 +183,7 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
       onSubmit={(event) => {
         event.preventDefault();
         if (attempt.status !== "ready") return;
-        awaited = attempt.opens;
-        commitStep(attempt.edits);
+        commitStep(attempt.edits, attempt.opens == null ? undefined : { page: { page: "system", name: attempt.opens } });
         panel.dismiss();
       }}
     >

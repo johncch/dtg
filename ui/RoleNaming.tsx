@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { useLayoutEffect, useState } from "react";
+import { useState } from "react";
 import type { RoleTarget } from "../src/edit.js";
 import { INHERIT, rolePath } from "../src/selector.js";
 import type { Snapshot, SnapshotRole } from "../src/snapshot.js";
@@ -14,12 +14,6 @@ const targetOf = (role: Pick<SnapshotRole, "section" | "group" | "role">): RoleT
   path: rolePath(role),
 });
 
-/**
- * How a new group's first role is called for its name to open: its row is
- * also drawn, for a moment, on the page being left, and must not open there.
- */
-const onItsGroupPage = (key: string) => `${key} on its group's page`;
-
 /** The keys a group of roles keeps for itself, which no role or group in it can be named. */
 const RESERVED = ["alias", "omit", "description"];
 
@@ -27,19 +21,6 @@ const freshName = (taken: string[]) => (taken.includes("new-role") ? copyName("n
 
 /** A role's refs, one per mode, as an edit that adds a role takes them. */
 const refsOf = (role: SnapshotRole) => role.perMode.map((entry) => (entry.inherited ? INHERIT : entry.ref));
-
-let awaitedGroup: string | null = null;
-
-/** Opens the page of a group an edit just made, once the working copy has it. */
-export function OpenAwaitedGroup({ working }: { working: Snapshot }) {
-  useLayoutEffect(() => {
-    if (awaitedGroup == null || !working.roles.some((role) => role.group === awaitedGroup)) return;
-    const name = awaitedGroup;
-    awaitedGroup = null;
-    navigate({ page: "group", name }, { replace: true });
-  }, [working.roles]);
-  return null;
-}
 
 /** Beside a section's heading: names a new group, which starts with one role to rename and point. */
 export function NewGroup({ working, section }: { working: Snapshot; section: string }) {
@@ -83,13 +64,11 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
         event.preventDefault();
         if (name === "" || problem || refs == null) return;
         const target = targetOf({ section, group: name, role: "new-role" });
-        const refusal = commit({ action: "add", target, value: JSON.stringify(refs) });
+        const refusal = commit({ action: "add", target, value: JSON.stringify(refs) }, { page: { page: "group", name }, naming: JSON.stringify(target) });
         if (refusal) {
           setRefused(firstError(refusal));
           return;
         }
-        openNameOf(onItsGroupPage(JSON.stringify(target)));
-        awaitedGroup = name;
         panel.dismiss();
       }}
     >
@@ -215,7 +194,7 @@ export function RoleName({ role, roles, onGroupPage }: { role: SnapshotRole; rol
   const key = JSON.stringify(target);
   return (
     <EntryName
-      keys={onGroupPage ? [key, onItsGroupPage(key)] : [key]}
+      keys={[key]}
       path={rolePath(role)}
       shown={role.role}
       problemOf={(path) => {
@@ -231,8 +210,7 @@ export function RoleName({ role, roles, onGroupPage }: { role: SnapshotRole; rol
           return;
         }
         // On its group's page the role leaves the page, so the page follows it; the section's page shows it wherever it goes.
-        if (onGroupPage && group !== "") awaitedGroup = group;
-        commit({ action: "place", target, path });
+        commit({ action: "place", target, path }, onGroupPage && group !== "" ? { page: { page: "group", name: group } } : undefined);
         if (onGroupPage && group === "") navigate({ page: "roles", section: role.section }, { replace: true });
       }}
     />
@@ -258,8 +236,7 @@ export function RoleGroupName({ snapshot, group }: { snapshot: Snapshot; group: 
       path={group}
       taken={[...RESERVED, ...beside, ...elsewhere]}
       onRename={(name) => {
-        awaitedGroup = `${under}${name}`;
-        commit({ action: "rename", target: { kind: "group", root: section, path: group }, name });
+        commit({ action: "rename", target: { kind: "group", root: section, path: group }, name }, { page: { page: "group", name: `${under}${name}` } });
       }}
     />
   );

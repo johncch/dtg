@@ -19,7 +19,6 @@ import { PaletteExplorer } from "../PaletteExplorer.js";
 import type { PaletteEntry } from "../PalettePlots.js";
 import { Popup, type PopupPanel } from "../Popup.js";
 import { firstError, useTrying } from "../preview.js";
-import { navigate } from "../router.js";
 import { TrashIcon } from "../TrashIcon.js";
 import { labelColorOn } from "../Strip.js";
 
@@ -85,8 +84,6 @@ export function keyFor(name: string, taken: string[]): string {
   return key;
 }
 
-let awaitedPalette: string | null = null;
-
 /** A palette's page title: its path, whose last part a double click renames, every ref and param naming its colors following. */
 function PaletteName({ palette, written }: { palette: Palette; written: string[] }) {
   const { commit } = useTrying();
@@ -100,22 +97,10 @@ function PaletteName({ palette, written }: { palette: Palette; written: string[]
       path={palette.group}
       taken={[...RESERVED, ...beside]}
       onRename={(name) => {
-        awaitedPalette = `${under}${name}`;
-        commit({ action: "rename", target: { kind: "group", root: "palette", path: palette.group }, name });
+        commit({ action: "rename", target: { kind: "group", root: "palette", path: palette.group }, name }, { page: { page: "palette", name: `${under}${name}` } });
       }}
     />
   );
-}
-
-/** Opens the page of a palette an edit just made, once the working copy has it. */
-export function OpenAwaitedPalette({ working }: { working: Snapshot }) {
-  useLayoutEffect(() => {
-    if (awaitedPalette == null || !working.constants.some((constant) => constant.path.startsWith(`${awaitedPalette}.`))) return;
-    const name = awaitedPalette;
-    awaitedPalette = null;
-    navigate({ page: "palette", name }, { replace: true });
-  }, [working.constants]);
-  return null;
 }
 
 /** Beside the sidebar's Palette heading: names a new palette, which starts with one random color. */
@@ -158,13 +143,12 @@ function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel 
         setBusy(true);
         const lab = randomColor();
         const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, RESERVED);
-        const refusal = commit({ action: "add", target: { kind: "constant", path: `${name}.${key}` }, value: formatAuthored(lab) });
+        const refusal = commit({ action: "add", target: { kind: "constant", path: `${name}.${key}` }, value: formatAuthored(lab) }, { page: { page: "palette", name } });
         if (refusal) {
           setRefused(firstError(refusal));
           setBusy(false);
           return;
         }
-        awaitedPalette = name;
         panel.dismiss();
       }}
     >
