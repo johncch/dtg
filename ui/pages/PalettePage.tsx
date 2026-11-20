@@ -5,7 +5,8 @@ import type { ConstantTarget, Edit } from "../../src/edit.js";
 import { addToPalette, harmonizePalette, harmonyHues, randomColor, rollPalette, type Harmony, type RollStyle } from "../../src/palette-roll.js";
 import type { Snapshot, SnapshotConstant } from "../../src/snapshot.js";
 import type { Change } from "../../src/working-copy.js";
-import { ColorChip, EditableChip } from "../ColorChip.js";
+import { EditableChip } from "../ColorChip.js";
+import { CONSTANT_COLUMNS, ConstantRow } from "../ConstantRow.js";
 import { ColorTip } from "../ColorTip.js";
 import { GripIcon } from "../GripIcon.js";
 import { LockIcon } from "../LockIcon.js";
@@ -13,7 +14,7 @@ import { Hint } from "../Hint.js";
 import { EDITABLE } from "../mode.js";
 import { colorNameOf } from "../names.js";
 import { paintCss } from "../paint.js";
-import { GroupName } from "../EntryRow.js";
+import { AddRow, GroupName, openNameOf } from "../EntryRow.js";
 import { PaletteExplorer } from "../PaletteExplorer.js";
 import type { PaletteEntry } from "../PalettePlots.js";
 import { Popup, type PopupPanel } from "../Popup.js";
@@ -237,6 +238,8 @@ export function PalettePage({
   palette,
   note,
   written,
+  constants,
+  named,
   changes,
 }: {
   palette: Palette;
@@ -244,6 +247,9 @@ export function PalettePage({
   note: string | null;
   /** Every path the systems block holds, constants and systems alike. */
   written: string[];
+  constants: SnapshotConstant[];
+  /** Every other name a ref can start with: the systems and the role groups. */
+  named: string[];
   changes: Change[];
 }) {
   const { commitStep, refusal } = useTrying();
@@ -368,7 +374,8 @@ export function PalettePage({
     ? dragOrder.flatMap((path) => palette.entries.find((entry) => entry.path === path) ?? [])
     : palette.entries;
   const taken = takenIn(palette.group, written);
-  const add = async (color?: Oklab, after?: string) => {
+  const listed = constants.filter((constant) => palette.entries.some((entry) => entry.path === constant.path));
+  const add = async (color?: Oklab, after?: string, openName = false) => {
     if (operating.current) return;
     operating.current = true;
     setBusy(true);
@@ -380,6 +387,7 @@ export function PalettePage({
       );
       const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, taken);
       const path = `${palette.group}.${key}`;
+      if (openName) openNameOf(path);
       commitStep([{ action: "add", target: { kind: "constant", path }, value: formatAuthored(lab), after }]);
     } finally {
       operating.current = false;
@@ -549,26 +557,24 @@ export function PalettePage({
         <table>
           <thead>
             <tr>
-              <th>Path</th>
-              <th>Value</th>
+              {CONSTANT_COLUMNS.map((column) => (
+                <th key={column}>{column}</th>
+              ))}
             </tr>
           </thead>
           <tbody>
-            {palette.entries.map((entry) => (
-              <tr key={entry.path}>
-                <td>
-                  <code>{entry.path}</code>
-                </td>
-                <td>
-                  <ColorChip
-                    color={entry.color}
-                    label={entry.written}
-                    edit={{ kind: "constant", path: entry.path }}
-                    onUnlock={isLocked(entry.path) ? () => toggle(entry.path) : undefined}
-                  />
-                </td>
-              </tr>
+            {listed.map((constant) => (
+              <ConstantRow
+                key={constant.path}
+                constant={constant}
+                constants={constants}
+                named={named}
+                siblings={listed}
+                onPalettePage
+                lock={EDITABLE ? { locked: isLocked(constant.path), onToggle: () => toggle(constant.path) } : null}
+              />
             ))}
+            <AddRow label="New color" columns={CONSTANT_COLUMNS.length} busy={busy} onAdd={() => add(undefined, undefined, true)} />
           </tbody>
         </table>
       ) : (

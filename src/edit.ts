@@ -153,7 +153,7 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
         edit.target.kind === "system"
           ? withSystemAdded(text, edit.target, edit.value)
           : edit.target.kind === "role"
-            ? withRoleAdded(text, edit.target, edit.value)
+            ? withRoleAdded(text, edit.target, edit.value, edit.after)
             : withConstantAdded(text, edit.target, edit.value, edit.after);
       continue;
     }
@@ -442,12 +442,12 @@ function withEmitSet(text: string, target: EmitTarget, value: string): string {
  * a ref list, or the ref itself in a definition without modes. A group the
  * section does not have yet is written with it, at the end of the section.
  */
-function withRoleAdded(text: string, target: RoleTarget, value: string): string {
+function withRoleAdded(text: string, target: RoleTarget, value: string, after?: string): string {
   const keys = [target.section, ...target.role.split(".")];
   const refs = JSON.parse(value) as string[];
   const written = refs.map((ref) => (ref === INHERIT || plainSafe(ref) ? ref : JSON.stringify(ref)));
   const source = parseDocument(text).has("modes") ? `[${written.join(", ")}]` : written[0];
-  return withEntryAddedDeep(text, keys, source, target, "as a role or a group");
+  return withEntryAddedDeep(text, keys, source, target, "as a role or a group", after);
 }
 
 /** A map of roles or of constants, as against a role written as a block. */

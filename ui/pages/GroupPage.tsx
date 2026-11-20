@@ -8,11 +8,11 @@ import { Popup } from "../Popup.js";
 import { EDITABLE } from "../mode.js";
 import { sourcesFor, TargetValueEditor } from "../picker/ValueEditor.js";
 import { entryRowProps } from "../EntryRow.js";
-import { NewRoleRow, RoleGrip, RoleGroupName, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
+import { NewRoleRow, RoleDuplicate, RoleGrip, RoleGroupName, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
 import { Link, useScrollToHash } from "../router.js";
 import { INHERIT, rolePath } from "../../src/selector.js";
 import { stepAnchor } from "../Strip.js";
-import { constantAnchor } from "./ConstantsPage.js";
+import { constantAnchor } from "../ConstantRow.js";
 
 export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: string }) {
   const hash = useScrollToHash(group);
@@ -125,6 +125,7 @@ function RoleRow({
           <RoleGrip role={role} siblings={siblings} />
           <RoleName role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
           <span className="entry-actions">
+            <RoleDuplicate role={role} siblings={siblings} />
             <RoleRemove role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
           </span>
         </div>

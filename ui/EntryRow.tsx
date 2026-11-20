@@ -1,4 +1,4 @@
-import { GripVertical, Plus } from "lucide-react";
+import { Copy, GripVertical, Plus } from "lucide-react";
 import { useLayoutEffect, useState } from "react";
 import { Hint } from "./Hint.js";
 import { EDITABLE } from "./mode.js";
@@ -178,7 +178,7 @@ export function EntryRemove({
     <Hint text={refusal ?? hint}>
       <button
         type="button"
-        className="entry-remove"
+        className="entry-action entry-remove"
         aria-label={`Remove ${label}`}
         // Not `disabled`: a disabled button gets no pointer events, so its hint would never show.
         aria-disabled={refusal != null}
@@ -187,6 +187,27 @@ export function EntryRemove({
         }}
       >
         <TrashIcon />
+      </button>
+    </Hint>
+  );
+}
+
+/** `name` numbered to the next one `taken` does not have: `paper` → `paper-2`, `paper-2` → `paper-3`. */
+export function copyName(name: string, taken: string[]): string {
+  const numbered = /^(.*)-(\d+)$/.exec(name);
+  const stem = numbered ? numbered[1] : name;
+  let count = numbered ? Number(numbered[2]) + 1 : 2;
+  while (taken.includes(`${stem}-${count}`)) count += 1;
+  return `${stem}-${count}`;
+}
+
+/** Adds a copy of an entry beneath it; the page says what a copy holds. */
+export function EntryDuplicate({ label, onDuplicate }: { label: string; onDuplicate: () => void }) {
+  if (!EDITABLE) return null;
+  return (
+    <Hint text="Duplicate">
+      <button type="button" className="entry-action" aria-label={`Duplicate ${label}`} onClick={onDuplicate}>
+        <Copy size={12} aria-hidden />
       </button>
     </Hint>
   );

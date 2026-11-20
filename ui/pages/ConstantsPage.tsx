@@ -1,26 +1,15 @@
 import { Fragment, useState } from "react";
 import { colorFromOklab, formatAuthored } from "../../src/color-math.js";
-import type { ConstantTarget } from "../../src/edit.js";
 import { randomColor } from "../../src/palette-roll.js";
 import type { SnapshotConstant } from "../../src/snapshot.js";
-import { ColorChip } from "../ColorChip.js";
-import { AddRow, EntryGrip, EntryName, EntryRemove, entryRowProps, openNameOf, pathProblem } from "../EntryRow.js";
+import { CONSTANT_COLUMNS, constantAnchor, ConstantRow } from "../ConstantRow.js";
+import { AddRow, openNameOf } from "../EntryRow.js";
 import { colorNameOf } from "../names.js";
 import { useTrying } from "../preview.js";
 import { Link, useScrollToHash } from "../router.js";
-import { UsedBy } from "../UsedBy.js";
 import { keyFor, UNNAMED } from "./PalettePage.js";
 
-export function constantAnchor(path: string): string {
-  return `c-${path.replace(/\./g, "_")}`;
-}
-
-const targetOf = (constant: SnapshotConstant): ConstantTarget => ({ kind: "constant", path: constant.path });
 const groupOf = (path: string) => path.split(".").slice(0, -1).join(".");
-const nameOf = (path: string) => path.split(".").at(-1)!;
-
-/** The rows `EntryGrip` moves among: the colors in no group. */
-const LOOSE = "palette";
 
 /** The names a constant at `path` cannot be renamed to: its siblings', and for one in no group whatever else refs can name. */
 function takenBeside(path: string, constants: SnapshotConstant[], named: string[]): string[] {
@@ -80,15 +69,14 @@ export function ConstantsPage({
       <table>
         <thead>
           <tr>
-            <th>Path</th>
-            <th>Emits</th>
-            <th>Value</th>
-            <th>Used by</th>
+            {CONSTANT_COLUMNS.map((column) => (
+              <th key={column}>{column}</th>
+            ))}
           </tr>
         </thead>
         <tbody>
           {loose.map((constant) => (
-            <ConstantRow key={constant.path} constant={constant} constants={constants} named={named} loose={loose} targeted={constantAnchor(constant.path) === hash} />
+            <ConstantRow key={constant.path} constant={constant} constants={constants} named={named} siblings={loose} onPalettePage={false} targeted={constantAnchor(constant.path) === hash} />
           ))}
           <NewConstantRow taken={takenBeside("", constants, named)} />
           {groups.map((group) => (
@@ -101,7 +89,7 @@ export function ConstantsPage({
               {constants
                 .filter((constant) => groupOf(constant.path) === group)
                 .map((constant) => (
-                  <ConstantRow key={constant.path} constant={constant} constants={constants} named={named} loose={null} targeted={constantAnchor(constant.path) === hash} />
+                  <ConstantRow key={constant.path} constant={constant} constants={constants} named={named} siblings={null} onPalettePage={false} targeted={constantAnchor(constant.path) === hash} />
                 ))}
             </Fragment>
           ))}
@@ -109,100 +97,4 @@ export function ConstantsPage({
       </table>
     </>
   );
-}
-
-function ConstantRow({
-  constant,
-  constants,
-  named,
-  loose,
-  targeted,
-}: {
-  constant: SnapshotConstant;
-  constants: SnapshotConstant[];
-  named: string[];
-  /** The colors in no group when this is one of them, to move among and be removed from; null for a color in a group. */
-  loose: SnapshotConstant[] | null;
-  targeted: boolean;
-}) {
-  const { commit } = useTrying();
-  const target = targetOf(constant);
-  const name = nameOf(constant.path);
-  const used = constant.usedBy.length > 0 || constant.paramOf.length > 0;
-  return (
-    <tr id={constantAnchor(constant.path)} className={targeted ? "target" : undefined} {...(loose ? entryRowProps(LOOSE, name) : {})}>
-      <td>
-        <div className="entry-head">
-          {loose && (
-            <EntryGrip
-              label={constant.path}
-              group={LOOSE}
-              name={name}
-              siblings={loose.map((other) => other.path)}
-              onMove={(after) => commit({ action: "move", target, after })}
-            />
-          )}
-          <EntryName
-            keys={[constant.path]}
-            path={constant.path}
-            shown={constant.path}
-            problemOf={(path) => {
-              const first = path.split(".")[0];
-              if (["alias", "emit", "description"].includes(path.split(".").at(-1)!)) return `${path.split(".").at(-1)} is a word a group keeps for itself.`;
-              if (first !== constant.path.split(".")[0] && named.includes(first)) return `${first} is already written.`;
-              return pathProblem(path, constants.filter((other) => other !== constant).map((other) => other.path));
-            }}
-            onRepath={(path) => {
-              if (groupOf(path) === groupOf(constant.path)) commit({ action: "rename", target, name: nameOf(path) });
-              else commit({ action: "place", target, path });
-            }}
-          />
-          {loose && (
-            <span className="entry-actions">
-              <EntryRemove
-                label={constant.path}
-                users={[
-                  ...new Set([
-                    ...constant.usedBy.map((use) => (use.group ? `${use.group}.${use.role}` : use.role)),
-                    ...constant.paramOf.map(({ system, param }) => `${system} ${param}`),
-                  ]),
-                ]}
-                onRemove={() => commit({ action: "remove", target })}
-              />
-            </span>
-          )}
-        </div>
-      </td>
-      <td>{constant.emitted ? <code>--color-{constant.cssName}</code> : <span className="muted">Not emitted</span>}</td>
-      <td>
-        <ColorChip color={constant.color} label={constant.written} edit={target} />
-      </td>
-      <td>
-        <UsedBy uses={constant.usedBy} />
-        {constant.usedBy.length > 0 && constant.paramOf.length > 0 && ", "}
-        <ParamOf params={constant.paramOf} />
-        {constant.emitted ? (
-          <span className="muted">
-            {used && ", "}
-            emit
-          </span>
-        ) : (
-          !used && <span className="muted">—</span>
-        )}
-      </td>
-    </tr>
-  );
-}
-
-/** The systems whose params name a color, linked to each system's page. */
-function ParamOf({ params }: { params: SnapshotConstant["paramOf"] }) {
-  return params.map(({ system, param }, index) => (
-    <Fragment key={`${system} ${param}`}>
-      {index > 0 && ", "}
-      <Link to={{ page: "system", name: system }}>
-        <code>{system}</code>
-      </Link>
-      <span className="muted"> {param}</span>
-    </Fragment>
-  ));
 }

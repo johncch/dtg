@@ -241,11 +241,12 @@ function Page({ route, snapshot, working }: { route: Route; snapshot: Snapshot; 
   if (route.page === "unknown") return <NotFound what={route.path} />;
   if (route.page === "definition") return <DefinitionPage definition={snapshot.definition} warnings={snapshot.warnings} />;
   if (route.page === "settings" && SAVABLE) return <SettingsPage configPath={snapshot.configPath} snapshot={snapshot} />;
+  const named = [...snapshot.systems.map((system) => system.system), ...snapshot.roles.map((role) => role.group || role.role)].map((path) => path.split(".")[0]);
   if (route.page === "constants") {
     return snapshot.constants.length > 0 || EDITABLE ? (
       <ConstantsPage
         constants={snapshot.constants}
-        named={[...snapshot.systems.map((system) => system.system), ...snapshot.roles.map((role) => role.group || role.role)].map((path) => path.split(".")[0])}
+        named={named}
       />
     ) : (
       <NotFound what="constants — this definition declares none" />
@@ -259,6 +260,8 @@ function Page({ route, snapshot, working }: { route: Route; snapshot: Snapshot; 
         palette={palette}
         note={snapshot.groupNotes.palette[palette.group] ?? null}
         written={[...snapshot.constants.map((constant) => constant.path), ...snapshot.systems.map((system) => system.system)]}
+        constants={snapshot.constants}
+        named={named}
         changes={snapshot.changes}
       />
     ) : (

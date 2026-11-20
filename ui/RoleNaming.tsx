@@ -3,7 +3,7 @@ import { useLayoutEffect, useState } from "react";
 import type { RoleTarget } from "../src/edit.js";
 import { INHERIT, rolePath } from "../src/selector.js";
 import type { Snapshot, SnapshotRole } from "../src/snapshot.js";
-import { AddRow, ENTRY_NAME, ENTRY_NAME_RULE, EntryGrip, EntryName, EntryRemove, GroupName, openNameOf, pathProblem } from "./EntryRow.js";
+import { AddRow, copyName, ENTRY_NAME, ENTRY_NAME_RULE, EntryDuplicate, EntryGrip, EntryName, EntryRemove, GroupName, openNameOf, pathProblem } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { useTrying } from "./preview.js";
 import { navigate } from "./router.js";
@@ -146,6 +146,26 @@ export function RoleGrip({ role, siblings }: { role: SnapshotRole; siblings: Sna
       name={role.role}
       siblings={siblings.map((other) => other.role)}
       onMove={(after) => commit({ action: "move", target: targetOf(role), after })}
+    />
+  );
+}
+
+/** Adds a role beneath this one, holding its refs, and opens its name. */
+export function RoleDuplicate({ role, siblings }: { role: SnapshotRole; siblings: SnapshotRole[] }) {
+  const { commit } = useTrying();
+  return (
+    <EntryDuplicate
+      label={rolePath(role)}
+      onDuplicate={() => {
+        const target = targetOf({ ...role, role: copyName(role.role, siblings.map((other) => other.role)) });
+        openNameOf(JSON.stringify(target));
+        commit({
+          action: "add",
+          target,
+          value: JSON.stringify(role.perMode.map((entry) => (entry.inherited ? INHERIT : entry.ref))),
+          after: role.role,
+        });
+      }}
     />
   );
 }
