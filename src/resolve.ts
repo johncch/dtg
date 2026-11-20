@@ -114,7 +114,7 @@ export function curveDrawing(
   return { samples, swatches };
 }
 
-const builtinAlgorithms: Algorithm[] = [tint, scale, overlay, curve, tone];
+export const builtinAlgorithms: Algorithm[] = [tint, scale, overlay, curve, tone];
 
 function registryOf(extra: Algorithm[]): Map<string, Algorithm> {
   return new Map(

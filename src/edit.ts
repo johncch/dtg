@@ -4,6 +4,8 @@ import { INHERIT } from "./selector.js";
 /** One value written in a definition: an authored color, or the ref a role holds for a mode. */
 export type EditTarget =
   | { kind: "constant"; path: string }
+  /** A whole system, by its dotted path under `systems`. */
+  | { kind: "system"; path: string }
   | { kind: "param"; system: string; path: string }
   /** A param written once in `defaults` and shared by every system of that algorithm. */
   | { kind: "default"; algorithm: string; path: string }
@@ -11,6 +13,7 @@ export type EditTarget =
   | { kind: "ref"; section: string; role: string; mode: number };
 
 export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
+export type SystemTarget = Extract<EditTarget, { kind: "system" }>;
 
 /**
  * Setting writes a value; for a ref, `INHERIT` is a value too: the mode says
@@ -18,24 +21,28 @@ export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
  * a constant the file does not have is added instead, at the end of its group
  * or after the sibling `after` names. A constant can also be renamed within
  * its group, moved to follow another of its group (`after` null puts it
- * first), or removed.
+ * first), or removed. A system is added and removed whole, and renamed
+ * within its group: its value is `{ "algorithm", "params" }` as JSON, and
+ * setting it writes both, leaving the system's other keys as they are.
  */
 export type Edit =
   | { action: "set"; target: EditTarget; value: string }
-  | { action: "add"; target: ConstantTarget; value: string; after?: string }
-  | { action: "rename"; target: ConstantTarget; name: string }
+  | { action: "add"; target: ConstantTarget | SystemTarget; value: string; after?: string }
+  | { action: "rename"; target: ConstantTarget | SystemTarget; name: string }
   | { action: "move"; target: ConstantTarget; after: string | null }
-  | { action: "remove"; target: ConstantTarget };
+  | { action: "remove"; target: ConstantTarget | SystemTarget };
 
-/** Where a constant is after it is renamed. */
-export function renamedTarget(target: ConstantTarget, name: string): ConstantTarget {
-  return { kind: "constant", path: [...target.path.split(".").slice(0, -1), name].join(".") };
+/** Where a constant or a system is after it is renamed. */
+export function renamedTarget<Target extends ConstantTarget | SystemTarget>(target: Target, name: string): Target {
+  return { ...target, path: [...target.path.split(".").slice(0, -1), name].join(".") };
 }
 
 function keysOf(target: EditTarget, doc: Document): (string | number)[] {
   switch (target.kind) {
     case "constant":
       return ["palette", ...target.path.split(".")];
+    case "system":
+      return ["systems", ...target.path.split(".")];
     case "param":
       return ["systems", ...target.system.split("."), "params", ...target.path.split(".")];
     case "default":
@@ -54,6 +61,7 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
 export function describeTarget(target: EditTarget): string {
   switch (target.kind) {
     case "constant":
+    case "system":
       return target.path;
     case "param":
       return `${target.system} ${target.path}`;
@@ -89,7 +97,7 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
   let text = yamlText;
   for (const edit of edits) {
     if (edit.action === "rename") {
-      text = withConstantRenamed(text, edit.target, edit.name);
+      text = withEntryRenamed(text, edit.target, edit.name);
       continue;
     }
     if (edit.action === "move") {
@@ -97,11 +105,18 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       continue;
     }
     if (edit.action === "remove") {
-      text = withConstantRemoved(text, edit.target);
+      text = withEntryRemoved(text, edit.target);
       continue;
     }
     if (edit.action === "add") {
-      text = withConstantAdded(text, edit.target, edit.value, edit.after);
+      text =
+        edit.target.kind === "system"
+          ? withSystemAdded(text, edit.target, edit.value)
+          : withConstantAdded(text, edit.target, edit.value, edit.after);
+      continue;
+    }
+    if (edit.target.kind === "system") {
+      text = withSystemSet(text, edit.target, edit.value);
       continue;
     }
     const alias = aliasOnTheWay(text, edit.target);
@@ -145,6 +160,12 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
  * holds its place or the list stops short of it.
  */
 export function readValue(yamlText: string, target: EditTarget): string | null {
+  if (target.kind === "system") {
+    const system = writtenAt(yamlText, target);
+    if (!isSystem(system)) return null;
+    const { algorithm, params } = system.toJSON() as { algorithm: string; params?: Record<string, unknown> };
+    return JSON.stringify({ algorithm, params: params ?? {} });
+  }
   if (structureAt(yamlText, target)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
   const node = nodeAt(yamlText, target);
   if (node) return node.value == null ? INHERIT : String(node.value);
@@ -229,7 +250,8 @@ function structureSource(value: string): string | null {
     if (item != null && typeof item === "object") {
       return `{ ${Object.entries(item).map(([key, inner]) => `${keySource(key)}: ${flow(inner)}`).join(", ")} }`;
     }
-    return typeof item === "number" ? String(item) : JSON.stringify(item);
+    if (typeof item === "number") return String(item);
+    return typeof item === "string" && plainSafe(item) ? item : JSON.stringify(item);
   };
   return flow(JSON.parse(value));
 }
@@ -287,6 +309,43 @@ function withConstantAdded(text: string, target: ConstantTarget, value: string, 
   return withEntryAdded(text, keys.slice(0, -1), keys.at(-1)!, JSON.stringify(value), target, "and is not a color", after);
 }
 
+/**
+ * A new system at the end of its group, or of `systems` for one in no group.
+ * In a block map it is written as a block, one key per line, with a blank
+ * line before it where the map's other entries have one.
+ */
+function withSystemAdded(text: string, target: SystemTarget, value: string): string {
+  const keys = ["systems", ...target.path.split(".")];
+  const { algorithm, params } = JSON.parse(value) as { algorithm: string; params: Record<string, unknown> };
+  const written = Object.keys(params).length > 0;
+  const block = [`algorithm: ${algorithm}`, ...(written ? [`params: ${structureSource(JSON.stringify(params))}`] : [])];
+  const flow = structureSource(JSON.stringify(written ? { algorithm, params } : { algorithm }))!;
+  return withEntryAdded(text, keys.slice(0, -1), keys.at(-1)!, flow, target, "as a system or a group", undefined, block);
+}
+
+/** The system's algorithm and params written over the ones it has. A system that writes no params gains the block. */
+function withSystemSet(text: string, target: SystemTarget, value: string): string {
+  const { keys, pair } = entryAt(text, target);
+  const system = pair.value as YAMLMap;
+  const { algorithm, params } = JSON.parse(value) as { algorithm: string; params: Record<string, unknown> };
+  const paramsSource = Object.keys(params).length > 0 ? structureSource(JSON.stringify(params))! : "{}";
+  const algorithmNode = system.get("algorithm", true);
+  const paramsNode = system.get("params", true);
+  if (!isScalar(algorithmNode) || !algorithmNode.range || (paramsNode != null && !isMap(paramsNode))) {
+    throw new Error(`nothing written for ${describeTarget(target)} to edit`);
+  }
+  const spans = [{ start: algorithmNode.range[0], end: algorithmNode.range[1], source: sourceFor(algorithm, algorithmNode) }];
+  if (paramsNode) spans.push({ start: paramsNode.range![0], end: writtenEnd(paramsNode), source: paramsSource });
+  const written = spans
+    .sort((a, b) => b.start - a.start)
+    .reduce((result, { start, end, source }) => result.slice(0, start) + source + result.slice(end), text);
+  return paramsNode ? written : withEntryAdded(written, keys, "params", paramsSource, target, "but not as params", "algorithm");
+}
+
+function isSystem(node: unknown): node is YAMLMap {
+  return isMap(node) && node.has("algorithm");
+}
+
 /** A param the system does not write yet, added to its `params` block: the algorithm's default stops applying. */
 function withParamAdded(text: string, target: Extract<EditTarget, { kind: "param" }>, value: string): string {
   const source = /^-?\d+(\.\d+)?$/.test(value) || plainSafe(value) ? value : (structureSource(value) ?? JSON.stringify(value));
@@ -306,6 +365,8 @@ function withEntryAdded(
   target: EditTarget,
   alreadyWritten: string,
   after?: string,
+  /** The value as the lines of a block, for an entry that holds a map of its own. */
+  valueBlock?: string[],
 ): string {
   const set = parseDocument(text).getIn(mapKeys, true);
   if (!isMap(set) || !set.range) {
@@ -332,7 +393,18 @@ function withEntryAdded(
   const indent = text.slice(text.lastIndexOf("\n", keyStart) + 1, keyStart);
   const nextLine = text.indexOf("\n", lastWrittenEnd(beforeNode ?? set));
   const lineEnd = nextLine === -1 ? text.length : nextLine;
+  if (valueBlock) {
+    const second = set.items[1]?.key as Node | undefined;
+    const spaced = second != null && /\n[ \t]*\n/.test(text.slice(keyStart, second.range![0]));
+    const lines = [`${keySource(name)}:`, ...valueBlock.map((line) => `  ${line}`)];
+    return `${text.slice(0, lineEnd)}${spaced ? "\n" : ""}${lines.map((line) => `\n${indent}${line}`).join("")}${text.slice(lineEnd)}`;
+  }
   return `${text.slice(0, lineEnd)}\n${indent}${entry}${text.slice(lineEnd)}`;
+}
+
+/** Where a value's own text ends: a flow collection at its closing bracket, anything else at the last value written inside it. */
+function writtenEnd(node: Node): number {
+  return (isMap(node) || isSeq(node)) && node.flow ? node.range![1] : lastWrittenEnd(node);
 }
 
 /** Where the last value written inside a node ends. A block collection's own range runs on to the next key, so it is no use. */
@@ -349,22 +421,23 @@ function keySource(name: string): string {
   return /^[A-Za-z][\w-]*$/.test(name) ? name : JSON.stringify(name);
 }
 
-type ConstantEntry = { doc: Document; keys: string[]; set: YAMLMap; pair: Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node> };
+type Entry = { doc: Document; keys: string[]; set: YAMLMap; pair: Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node> };
 
-/** The constant a target names, with the group it is in. Throws when the file has no such constant. */
-function constantAt(text: string, target: ConstantTarget): ConstantEntry {
+/** The constant or system a target names, with the group it is in. Throws when the file has no such entry. */
+function entryAt(text: string, target: ConstantTarget | SystemTarget): Entry {
   const doc = parseDocument(text);
-  const keys = ["palette", ...target.path.split(".")];
+  const keys = keysOf(target, doc) as string[];
   const set = doc.getIn(keys.slice(0, -1), true);
   const pair = isMap(set) ? set.items.find((item) => isScalar(item.key) && item.key.value === keys.at(-1)) : undefined;
-  if (!isMap(set) || !pair || !isScalar(pair.value) || !isScalar(pair.key) || !pair.key.range) {
+  const written = target.kind === "system" ? isSystem(pair?.value) : isScalar(pair?.value);
+  if (!isMap(set) || !pair || !written || !isScalar(pair.key) || !pair.key.range) {
     throw new Error(`nothing written for ${describeTarget(target)} to edit`);
   }
-  return { doc, keys, set, pair: pair as ConstantEntry["pair"] };
+  return { doc, keys, set, pair: pair as Entry["pair"] };
 }
 
-function withConstantRenamed(text: string, target: ConstantTarget, name: string): string {
-  const { set, pair } = constantAt(text, target);
+function withEntryRenamed(text: string, target: ConstantTarget | SystemTarget, name: string): string {
+  const { set, pair } = entryAt(text, target);
   if (set.items.some((item) => isScalar(item.key) && item.key.value === name)) {
     throw new Error(`${describeTarget(renamedTarget(target, name))} is already written`);
   }
@@ -373,7 +446,7 @@ function withConstantRenamed(text: string, target: ConstantTarget, name: string)
   const spans: { start: number; end: number; source: string }[] = [
     { start: pair.key.range[0], end: pair.key.range[1], source: keySource(name) },
   ];
-  for (const { node, renamed } of pointersAt(parseDocument(text).contents, [], from, to)) {
+  for (const { node, renamed } of pointersAt(parseDocument(text).contents, [], target.kind, from, to)) {
     spans.push({ start: node.range![0], end: node.range![1], source: sourceFor(renamed, node) });
   }
   return spans
@@ -384,20 +457,31 @@ function withConstantRenamed(text: string, target: ConstantTarget, name: string)
 /**
  * Every value that points at the constant `from`, with what it says once the
  * constant is `to`: a role's ref, `transparent(from …)`, or a color param.
- * Only where refs and params are written — an `alias` or a changelog note
- * that happens to read the same is left alone.
+ * For a system, every ref into it, `from(…)`. Only where refs and params are
+ * written — an `alias` or a changelog note that happens to read the same is
+ * left alone.
  */
-function pointersAt(node: unknown, keys: string[], from: string, to: string): { node: Scalar; renamed: string }[] {
+function pointersAt(
+  node: unknown,
+  keys: string[],
+  kind: "constant" | "system",
+  from: string,
+  to: string,
+): { node: Scalar; renamed: string }[] {
   if (isMap(node)) {
     return node.items.flatMap((pair) => {
       const key = isScalar(pair.key) ? String(pair.key.value) : "";
-      return pointersAt(pair.value, [...keys, key], from, to);
+      return pointersAt(pair.value, [...keys, key], kind, from, to);
     });
   }
-  if (isSeq(node)) return node.items.flatMap((item) => pointersAt(item, keys, from, to));
+  if (isSeq(node)) return node.items.flatMap((item) => pointersAt(item, keys, kind, from, to));
   if (!isScalar(node) || typeof node.value !== "string" || !node.range) return [];
   const [top] = keys;
   if (keys.includes("alias") || ["dtg", "modes", "palette", "changelog"].includes(top)) return [];
+  if (kind === "system") {
+    if (top === "systems" || top === "defaults" || !node.value.startsWith(`${from}(`)) return [];
+    return [{ node, renamed: to + node.value.slice(from.length) }];
+  }
   if (top === "systems" && !keys.includes("params")) return [];
   if (node.value === from) return [{ node, renamed: to }];
   const faded = /^transparent\(\s*(\S+)(\s[^)]*)?\)$/.exec(node.value);
@@ -406,16 +490,12 @@ function pointersAt(node: unknown, keys: string[], from: string, to: string): { 
 }
 
 /**
- * The constant and its line go. A group left with nothing is written as `{}`,
- * so it stays a group to add to rather than becoming an empty value.
- */
-/**
  * The group's entries in a new order. Each entry's own text moves, a block
  * entry with the comment on its line; whatever is written between entries
  * stays where it is.
  */
 function withConstantMoved(text: string, target: ConstantTarget, after: string | null): string {
-  const { set, pair } = constantAt(text, target);
+  const { set, pair } = entryAt(text, target);
   const items: Pair[] = set.items;
   const others = items.filter((item) => item !== pair);
   const at = after == null ? 0 : others.findIndex((item) => isScalar(item.key) && item.key.value === after) + 1;
@@ -437,10 +517,14 @@ function withConstantMoved(text: string, target: ConstantTarget, after: string |
   return moved + text.slice(spans.at(-1)!.end);
 }
 
-function withConstantRemoved(text: string, target: ConstantTarget): string {
-  const { doc, keys, set, pair } = constantAt(text, target);
+/**
+ * The entry and its lines go. A group left with nothing is written as `{}`,
+ * so it stays a group to add to rather than becoming an empty value.
+ */
+function withEntryRemoved(text: string, target: ConstantTarget | SystemTarget): string {
+  const { doc, keys, set, pair } = entryAt(text, target);
   const index = set.items.indexOf(pair);
-  const valueEnd = (pair.value as Node).range![1];
+  const valueEnd = writtenEnd(pair.value as Node);
   if (set.items.length === 1) {
     const holderKeys = keys.slice(0, -2);
     const holder = holderKeys.length === 0 ? doc.contents : doc.getIn(holderKeys, true);
@@ -455,14 +539,17 @@ function withConstantRemoved(text: string, target: ConstantTarget): string {
       const next = set.items[1].key as Node;
       return text.slice(0, pair.key.range[0]) + text.slice(next.range![0]);
     }
-    const previousEnd = lastWrittenEnd(set.items[index - 1].value as Node);
+    const previousEnd = writtenEnd(set.items[index - 1].value as Node);
     return text.slice(0, previousEnd) + text.slice(valueEnd);
   }
   const lineStart = text.lastIndexOf("\n", pair.key.range[0]) + 1;
   const lineEnd = lineEndAfter(text, valueEnd);
-  return lineEnd === text.length
-    ? text.slice(0, Math.max(lineStart - 1, 0))
-    : text.slice(0, lineStart) + text.slice(lineEnd + 1);
+  if (lineEnd === text.length) return text.slice(0, Math.max(lineStart - 1, 0));
+  // A system stands apart from its neighbors by a blank line; one of the two around it goes with it.
+  const blankBefore = target.kind === "system" && /\n[ \t]*\n$/.test(text.slice(0, lineStart));
+  const blankAfter = /^\n[ \t]*\n/.test(text.slice(lineEnd));
+  const end = blankBefore && blankAfter ? text.indexOf("\n", lineEnd + 1) : lineEnd;
+  return text.slice(0, lineStart) + text.slice(end + 1);
 }
 
 function lineEndAfter(text: string, at: number): number {

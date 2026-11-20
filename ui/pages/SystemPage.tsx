@@ -6,13 +6,16 @@ import type { Snapshot, SnapshotStep, SnapshotSystem } from "../../src/snapshot.
 import { ColorChip } from "../ColorChip.js";
 import { ChoiceParam } from "../ChoiceParam.js";
 import { CurveParam } from "../CurveParam.js";
+import { EDITABLE } from "../mode.js";
 import { NumberParam } from "../NumberParam.js";
 import { Probe } from "../Probe.js";
 import { useScrollToHash } from "../router.js";
+import { SystemSettings } from "../SystemEditor.js";
 import { stepAnchor, stepDeltaE, Strip } from "../Strip.js";
 import { UsedBy } from "../UsedBy.js";
 
-export function SystemPage({ system, snapshot }: { system: SnapshotSystem; snapshot: Snapshot }) {
+/** `snapshot` is what to draw; `working` is the working copy, which an edit to the system itself is made on. */
+export function SystemPage({ system, snapshot, working }: { system: SnapshotSystem; snapshot: Snapshot; working: Snapshot }) {
   const hash = useScrollToHash(system.system);
   const constants = useMemo(
     () => new Map(snapshot.constants.map((constant) => [constant.path, constant.color])),
@@ -21,12 +24,15 @@ export function SystemPage({ system, snapshot }: { system: SnapshotSystem; snaps
 
   return (
     <>
-      <h1>
-        {system.system}{" "}
-        <span className="muted" style={{ fontSize: "var(--text-body)" }}>
-          {system.algorithm}
-        </span>
-      </h1>
+      <div className="system-head">
+        <h1>
+          {system.system}{" "}
+          <span className="muted" style={{ fontSize: "var(--text-body)" }}>
+            {system.algorithm}
+          </span>
+        </h1>
+        {EDITABLE && <SystemSettings key={system.system} system={working.systems.find((candidate) => candidate.system === system.system) ?? system} working={working} />}
+      </div>
       {system.note && <p className="note">{system.note}</p>}
       <p className="desc">{system.description}</p>
       <Params system={system} constants={constants} />

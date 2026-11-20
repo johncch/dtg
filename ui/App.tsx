@@ -5,6 +5,7 @@ import type { Snapshot, SnapshotSystem } from "../src/snapshot.js";
 import { Backgrounds } from "./Backgrounds.js";
 import { Changes } from "./Changes.js";
 import { LiveCss } from "./LiveCss.js";
+import { NewSystem, OpenAwaitedSystem } from "./SystemEditor.js";
 import { ProjectGamutProvider } from "./gamut.js";
 import { TryingProvider } from "./preview.js";
 import { ConstantsPage } from "./pages/ConstantsPage.js";
@@ -54,8 +55,9 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
       <ProjectGamutProvider value={snapshot.gamut}>
         <UnsavedChangesProvider value={working.changes}>
           <PaletteColorsProvider value={working.constants}>
+            <OpenAwaitedSystem working={working} />
             <aside>
-              <Nav snapshot={snapshot} />
+              <Nav snapshot={snapshot} working={working} />
               <div className="dock">
                 {EDITABLE && <Changes working={working} />}
                 <Backgrounds backgrounds={snapshot.backgrounds} />
@@ -64,7 +66,7 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
             <main>
               <div className="page">
                 <Banner snapshot={snapshot} />
-                <Page route={route} snapshot={snapshot} />
+                <Page route={route} snapshot={snapshot} working={working} />
               </div>
             </main>
           </PaletteColorsProvider>
@@ -74,7 +76,7 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
   );
 }
 
-function Nav({ snapshot }: { snapshot: Snapshot }) {
+function Nav({ snapshot, working }: { snapshot: Snapshot; working: Snapshot }) {
   const sections = [...new Set(snapshot.roles.map((role) => role.section))];
   return (
     <>
@@ -104,7 +106,10 @@ function Nav({ snapshot }: { snapshot: Snapshot }) {
             ))}
           </>
         )}
-        <h2>Systems</h2>
+        <h2 className="nav-heading">
+          Systems
+          {EDITABLE && <NewSystem working={working} />}
+        </h2>
         <SystemLinks nodes={systemTree(snapshot.systems)} notes={snapshot.groupNotes.systems} />
         {sections.map((section) => (
           <Fragment key={section}>
@@ -223,7 +228,7 @@ function NotFound({ what }: { what: string }) {
   );
 }
 
-function Page({ route, snapshot }: { route: Route; snapshot: Snapshot }) {
+function Page({ route, snapshot, working }: { route: Route; snapshot: Snapshot; working: Snapshot }) {
   if (route.page === "unknown") return <NotFound what={route.path} />;
   if (route.page === "definition") return <DefinitionPage definition={snapshot.definition} warnings={snapshot.warnings} />;
   if (route.page === "settings" && SAVABLE) return <SettingsPage configPath={snapshot.configPath} snapshot={snapshot} />;
@@ -257,7 +262,7 @@ function Page({ route, snapshot }: { route: Route; snapshot: Snapshot }) {
   }
   if (route.page === "system") {
     const system = snapshot.systems.find((candidate) => candidate.system === route.name);
-    return system ? <SystemPage system={system} snapshot={snapshot} /> : <NotFound what={`system "${route.name}"`} />;
+    return system ? <SystemPage system={system} snapshot={snapshot} working={working} /> : <NotFound what={`system "${route.name}"`} />;
   }
   if (route.page === "roles" && route.section != null && !snapshot.roles.some((role) => role.section === route.section)) {
     return <NotFound what={`section "${route.section}"`} />;

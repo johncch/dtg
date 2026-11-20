@@ -76,6 +76,14 @@ function addressOf(route: Exclude<Route, { page: "unknown" }>, hash?: string): s
   return STATIC ? `#${page}${fragment}` : `${page}${fragment}`;
 }
 
+/** `replace` is for leaving an address that no longer names anything, so Back does not return to it. */
+export function navigate(to: Exclude<Route, { page: "unknown" }>, { replace = false }: { replace?: boolean } = {}): void {
+  if (replace) history.replaceState(null, "", addressOf(to));
+  else history.pushState(null, "", addressOf(to));
+  dispatchEvent(new Event(NAVIGATED));
+  scrollTo(0, 0);
+}
+
 export function useRoute(): Route {
   return parse(useSyncExternalStore(subscribe, pagePath));
 }

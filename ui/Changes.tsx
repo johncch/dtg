@@ -10,6 +10,7 @@ function nameOf(target: EditTarget, modes: string[]): string {
     case "ref":
       return `${target.role} [${modes[target.mode]}]`;
     case "constant":
+    case "system":
       return target.path;
     case "param":
       return `${target.system} ${target.path}`;
@@ -37,6 +38,8 @@ export function Changes({ working }: { working: Snapshot }) {
     if (edit.action === "rename") return `rename ${name} to ${edit.name}`;
     if (edit.action === "move") return `move ${name}`;
     if (edit.action === "remove") return `remove ${name}`;
+    if (edit.action === "add" && edit.target.kind === "system") return `add system ${name}`;
+    if (edit.action === "set" && edit.target.kind === "system") return `${name} → ${(JSON.parse(edit.value) as { algorithm: string }).algorithm}`;
     if (edit.action === "add") return `add ${name} ${edit.value}`;
     return `${name} → ${edit.value}`;
   };
@@ -45,6 +48,10 @@ export function Changes({ working }: { working: Snapshot }) {
     const name = nameOf(change.target, modes);
     if (change.action === "rename") return `${name}: renamed to ${change.to.path}`;
     if (change.action === "move") return `${name}: moved`;
+    if (change.target.kind === "system") {
+      if (change.action === "remove") return `${name}: system removed`;
+      return change.action === "set" && change.from != null ? `${name}: algorithm and params changed` : `${name}: system added`;
+    }
     if (change.action === "remove") return `${name}: removed (was ${change.from})`;
     return `${name}: ${change.from ?? "added"} → ${change.to}`;
   };
