@@ -220,3 +220,75 @@ describe("a system's emit list", () => {
     assert.deepEqual(changes([{ action: "set", target: emit, value: "[50,90]" }]), [{ action: "set", target: emit, from: "[50]", to: "[50,90]" }]);
   });
 });
+
+describe("the changes after a rename of what holds an entry", () => {
+  test("a color edited before and after its group is renamed is one change, at its new path", () => {
+    assert.deepEqual(
+      changes([
+        { action: "set", target: constant("ink.body"), value: "#111111" },
+        { action: "rename", target: group("palette", "ink"), name: "inks" },
+        { action: "set", target: constant("inks.body"), value: "#222222" },
+        { action: "set", target: constant("inks.muted"), value: "#999999" },
+      ]),
+      [
+        { action: "rename", target: group("palette", "ink"), to: group("palette", "inks") },
+        { action: "set", target: constant("inks.body"), from: "#313133", to: "#222222" },
+        { action: "set", target: constant("inks.muted"), from: "#828282", to: "#999999" },
+      ],
+    );
+  });
+
+  test("a color added to a group stays an added color once the group is renamed", () => {
+    assert.deepEqual(
+      changes([
+        { action: "add", target: constant("ink.faint"), value: "#cccccc" },
+        { action: "rename", target: group("palette", "ink"), name: "inks" },
+      ]),
+      [
+        { action: "set", target: constant("inks.faint"), from: null, to: "#cccccc" },
+        { action: "rename", target: group("palette", "ink"), to: group("palette", "inks") },
+      ],
+    );
+  });
+
+  test("a ref set after its role is renamed is a change to the role the file has", () => {
+    const ref = (path: string) => ({ kind: "ref", section: "roles", role: path, mode: 1 }) as const;
+    assert.deepEqual(
+      changes([
+        { action: "rename", target: role("label.primary"), name: "strong" },
+        { action: "set", target: ref("label.strong"), value: "ink.muted" },
+      ]),
+      [
+        { action: "rename", target: role("label.primary"), to: role("label.strong") },
+        { action: "set", target: ref("label.strong"), from: "paper", to: "ink.muted" },
+      ],
+    );
+  });
+
+  test("a system's emit list set after the system is renamed is a change, not an addition", () => {
+    const system = (path: string) => ({ kind: "system", path }) as const;
+    assert.deepEqual(
+      changes([
+        { action: "rename", target: system("sky"), name: "air" },
+        { action: "set", target: { kind: "emit", system: "air" }, value: "[50,90]" },
+      ]),
+      [
+        { action: "rename", target: system("sky"), to: system("air") },
+        { action: "set", target: { kind: "emit", system: "air" }, from: "[50]", to: "[50,90]" },
+      ],
+    );
+  });
+
+  test("an entry renamed inside a renamed group reads as renamed from where the file has it", () => {
+    assert.deepEqual(
+      changes([
+        { action: "rename", target: group("palette", "ink"), name: "inks" },
+        { action: "rename", target: constant("inks.body"), name: "strong" },
+      ]),
+      [
+        { action: "rename", target: group("palette", "ink"), to: group("palette", "inks") },
+        { action: "rename", target: constant("ink.body"), to: constant("inks.strong") },
+      ],
+    );
+  });
+});

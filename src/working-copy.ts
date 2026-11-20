@@ -97,12 +97,37 @@ export function workingText(copy: WorkingCopy): {
   return { text, dropped };
 }
 
-/** A color followed through the edits: where the file has it, or whether it was added, where it is now (null once removed), and its last value. */
+/**
+ * How `target` is addressed once the entry or group `from` is at `to`: what
+ * `from` holds moves with it — a group's entries, a system's params and emit
+ * list, a role's refs. Anything else is addressed as before.
+ */
+function carried(target: EditTarget, from: EditTarget, to: EditTarget): EditTarget {
+  const under = (path: string, group: string, now: string) => (path.startsWith(`${group}.`) ? now + path.slice(group.length) : path);
+  if (from.kind === "system" && to.kind === "system" && (target.kind === "param" || target.kind === "emit")) {
+    return target.system === from.path ? { ...target, system: to.path } : target;
+  }
+  if (from.kind === "role" && to.kind === "role" && target.kind === "ref") {
+    return target.section === from.section && target.role === from.role ? { ...target, role: to.role } : target;
+  }
+  if (from.kind !== "group" || to.kind !== "group") return target;
+  if (target.kind === "constant" && from.root === "palette") return { ...target, path: under(target.path, from.path, to.path) };
+  if ((target.kind === "role" || target.kind === "ref") && target.section === from.root) return { ...target, role: under(target.role, from.path, to.path) };
+  if (target.kind === "group" && target.root === from.root) return { ...target, path: under(target.path, from.path, to.path) };
+  return target;
+}
+
+/**
+ * A color followed through the edits: where the file has it, or whether it
+ * was added; where it is now (null once removed), and where it would be had
+ * only what holds it been renamed; and its last value.
+ */
 type Followed = {
   inFile: EditTarget | null;
   added: boolean;
   moved: boolean;
   now: EditTarget | null;
+  unrenamed: EditTarget;
   value: string | null;
   lastEdit: number;
 };
@@ -115,13 +140,17 @@ type Followed = {
  */
 export function changesOf(copy: WorkingCopy): Change[] {
   const followed: Followed[] = [];
+  const renames: { from: EditTarget; to: EditTarget }[] = [];
   const follow = (target: EditTarget): Followed => {
     const known = followed.find((color) => color.now != null && sameTarget(color.now, target));
     if (known) return known;
+    // The file has it under the names its holders had before they were renamed.
+    const origin = renames.reduceRight((at, { from, to }) => carried(at, to, from), target);
+    const stillThere = sameTarget(renames.reduce((at, { from, to }) => carried(at, from, to), origin), target);
     // A name another color was renamed away from is a new color if it comes back.
-    const claimed = followed.some((color) => color.inFile != null && sameTarget(color.inFile, target));
-    const inFile = !claimed && readValue(copy.diskText, target) != null ? target : null;
-    const color = { inFile, added: false, moved: false, now: target, value: null, lastEdit: -1 };
+    const claimed = followed.some((color) => color.inFile != null && sameTarget(color.inFile, origin));
+    const inFile = stillThere && !claimed && readValue(copy.diskText, origin) != null ? origin : null;
+    const color = { inFile, added: false, moved: false, now: target, unrenamed: target, value: null, lastEdit: -1 };
     followed.push(color);
     return color;
   };
@@ -130,14 +159,22 @@ export function changesOf(copy: WorkingCopy): Change[] {
     color.lastEdit = index;
     if (edit.action === "add") color.added = true;
     if (edit.action === "set" || edit.action === "add") color.value = edit.value;
-    else if (edit.action === "rename") color.now = renamedTarget(edit.target, edit.name);
-    else if (edit.action === "place") color.now = placedTarget(edit.target, edit.path);
     else if (edit.action === "move") color.moved = true;
-    else color.now = null;
+    else if (edit.action === "remove") color.now = null;
+    else {
+      const to = edit.action === "rename" ? renamedTarget(edit.target, edit.name) : placedTarget(edit.target, edit.path);
+      color.now = to;
+      for (const other of followed) {
+        if (other === color) continue;
+        if (other.now) other.now = carried(other.now, edit.target, to);
+        other.unrenamed = carried(other.unrenamed, edit.target, to);
+      }
+      renames.push({ from: edit.target, to });
+    }
   });
 
   const changes: { change: Change; lastEdit: number }[] = [];
-  for (const { inFile, added, moved, now, value, lastEdit } of followed) {
+  for (const { inFile, added, moved, now, unrenamed, value, lastEdit } of followed) {
     const push = (change: Change) => changes.push({ change, lastEdit });
     if (inFile == null) {
       // A set on a param the file does not write adds it, as `add` does a constant.
@@ -149,7 +186,7 @@ export function changesOf(copy: WorkingCopy): Change[] {
       push({ action: "remove", target: inFile as EntryTarget, from });
       continue;
     }
-    if (!sameTarget(now, inFile)) push({ action: "rename", target: inFile as EntryTarget | GroupTarget, to: now as EntryTarget | GroupTarget });
+    if (!sameTarget(now, unrenamed)) push({ action: "rename", target: inFile as EntryTarget | GroupTarget, to: now as EntryTarget | GroupTarget });
     if (moved) push({ action: "move", target: now as ConstantTarget | RoleTarget });
     if (value != null && value !== from) push({ action: "set", target: now, from, to: value });
   }
