@@ -118,10 +118,18 @@ function carried(target: EditTarget, from: EditTarget, to: EditTarget): EditTarg
   return target;
 }
 
+/** Whether `target` is written inside the entry `holder`: a role's ref, or a system's param or emit list. */
+function heldBy(target: EditTarget, holder: EditTarget): boolean {
+  if (holder.kind === "role") return target.kind === "ref" && target.section === holder.section && target.role === holder.path;
+  if (holder.kind === "system") return (target.kind === "param" || target.kind === "emit") && target.system === holder.path;
+  return false;
+}
+
 /**
  * A color followed through the edits: where the file has it, or whether it
  * was added; where it is now (null once removed), and where it would be had
- * only what holds it been renamed; and its last value.
+ * only what holds it been renamed; whether what holds it was removed, which
+ * is then the one change; and its last value.
  */
 type Followed = {
   inFile: EditTarget | null;
@@ -129,6 +137,7 @@ type Followed = {
   moved: boolean;
   now: EditTarget | null;
   unrenamed: EditTarget;
+  holderRemoved: boolean;
   value: string | null;
   lastEdit: number;
 };
@@ -151,7 +160,7 @@ export function changesOf(copy: WorkingCopy): Change[] {
     // A name another color was renamed away from is a new color if it comes back.
     const claimed = followed.some((color) => color.inFile != null && sameTarget(color.inFile, origin));
     const inFile = stillThere && !claimed && readValue(copy.diskText, origin) != null ? origin : null;
-    const color = { inFile, added: false, moved: false, now: target, unrenamed: target, value: null, lastEdit: -1 };
+    const color = { inFile, added: false, moved: false, now: target, unrenamed: target, holderRemoved: false, value: null, lastEdit: -1 };
     followed.push(color);
     return color;
   };
@@ -161,7 +170,12 @@ export function changesOf(copy: WorkingCopy): Change[] {
     if (edit.action === "add") color.added = true;
     if (edit.action === "set" || edit.action === "add") color.value = edit.value;
     else if (edit.action === "move") color.moved = true;
-    else if (edit.action === "remove") color.now = null;
+    else if (edit.action === "remove") {
+      color.now = null;
+      for (const other of followed) {
+        if (other.now && heldBy(other.now, edit.target)) other.holderRemoved = true;
+      }
+    }
     else {
       const to = edit.action === "rename" ? renamedTarget(edit.target, edit.name) : placedTarget(edit.target, edit.path);
       color.now = to;
@@ -175,7 +189,8 @@ export function changesOf(copy: WorkingCopy): Change[] {
   });
 
   const changes: { change: Change; lastEdit: number }[] = [];
-  for (const { inFile, added, moved, now, unrenamed, value, lastEdit } of followed) {
+  for (const { inFile, added, moved, now, unrenamed, holderRemoved, value, lastEdit } of followed) {
+    if (holderRemoved) continue;
     const push = (change: Change) => changes.push({ change, lastEdit });
     if (inFile == null) {
       // A set on a param the file does not write adds it, as `add` does a constant.

@@ -292,3 +292,29 @@ describe("the changes after a rename of what holds an entry", () => {
     );
   });
 });
+
+describe("the changes after what holds an entry is removed", () => {
+  test("a ref set on a role that is then removed is not a change of its own", () => {
+    const target = role("surface.echo");
+    assert.deepEqual(
+      changes([
+        { action: "set", target: { kind: "ref", section: "roles", role: "surface.echo", mode: 1 }, value: "paper" },
+        { action: "remove", target },
+      ]),
+      [{ action: "remove", target, from: refs("surface.canvas", "surface.canvas") }],
+    );
+  });
+
+  test("nor is a param or an emit list set on a system that is then removed", () => {
+    const target = { kind: "system", path: "sky" } as const;
+    const listed = changes([
+      { action: "set", target: { kind: "param", system: "sky", path: "base" }, value: "#eeeeee" },
+      { action: "set", target: emit, value: "[50,90]" },
+      { action: "remove", target },
+    ]);
+    assert.deepEqual(
+      listed.map((change) => [change.action, change.target]),
+      [["remove", target]],
+    );
+  });
+});
