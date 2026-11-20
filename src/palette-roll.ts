@@ -33,7 +33,7 @@ export function randomColor(random: () => number = Math.random): Oklab {
  */
 function evenHues(fixed: number[], count: number, start: number): number[] {
   if (fixed.length === 0) return Array.from({ length: count }, (_, index) => wrap(start + (360 * index) / count));
-  const sorted = [...fixed].sort((a, b) => a - b);
+  const sorted = [...new Set(fixed)].sort((a, b) => a - b);
   const gaps = sorted.map((from, index) => ({ from, size: wrap(sorted[(index + 1) % sorted.length] - from) || 360, holds: 0 }));
   for (let placed = 0; placed < count; placed++) {
     gaps.reduce((widest, gap) => (gap.size / (gap.holds + 1) > widest.size / (widest.holds + 1) ? gap : widest)).holds++;

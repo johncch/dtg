@@ -417,7 +417,7 @@ export function PalettePage({
         const lab = rolled.get(entry.path);
         if (!lab) continue;
         const target: ConstantTarget = { kind: "constant", path: entry.path };
-        edits.push({ action: "set", target, value: formatAuthored(lab) });
+        edits.push({ action: "set", target, value: formatAuthored(lab, entry.color.alpha) });
         if (!added(entry.path)) continue;
         const others = names.filter((name) => name !== entry.name);
         const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, others);

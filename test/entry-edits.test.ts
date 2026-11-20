@@ -179,6 +179,16 @@ describe("renaming a group", () => {
     assert.ok(text.includes(`refs: [inks.muted, inks.muted]`));
   });
 
+  test("leaves refs into a group of another kind with the same name", () => {
+    const shared = SRC.replace("  label:\n    description: Text\n", "  ink:\n    strong: [ink.body, ink.body]\n    echo: [ink.strong, transparent(ink.strong 50)]\n  label:\n    description: Text\n");
+    assert.notEqual(shared, SRC);
+    const roles = applyEdits(shared, [{ action: "rename", target: group("roles", "ink"), name: "text" }]);
+    assert.ok(roles.includes(`  text:\n    strong: [ink.body, ink.body]\n    echo: [text.strong, transparent(text.strong 50)]\n`));
+    assert.ok(roles.includes(`params: { base: paper, tint: ink.body }`));
+    const palette = applyEdits(shared, [{ action: "rename", target: group("palette", "ink"), name: "inks" }]);
+    assert.ok(palette.includes(`  ink:\n    strong: [inks.body, inks.body]\n    echo: [ink.strong, transparent(ink.strong 50)]\n`));
+  });
+
   test("reads as one rename", () => {
     assert.deepEqual(changes([{ action: "rename", target: group("palette", "ink"), name: "inks" }]), [
       { action: "rename", target: group("palette", "ink"), to: group("palette", "inks") },

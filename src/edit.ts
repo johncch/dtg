@@ -463,7 +463,7 @@ function isGroup(node: unknown): node is YAMLMap {
 function withEntryPlaced(text: string, target: ConstantTarget | RoleTarget, path: string): string {
   const placed = placedTarget(target, path);
   const pathOf = (entry: ConstantTarget | RoleTarget) => (entry.kind === "role" ? entry.role : entry.path);
-  const pointed = withPointersRewritten(text, [], target.kind, pathOf(target), path, false);
+  const pointed = withPointersRewritten(text, [], target.kind, pathOf(target), path);
   const value = entryAt(pointed, target).pair.value as Node;
   const onOneLine = isScalar(value) || ((isMap(value) || isSeq(value)) && value.flow === true);
   const source = onOneLine ? pointed.slice(value.range![0], value.range![1]) : structureSource(JSON.stringify(value.toJSON()))!;
@@ -479,9 +479,9 @@ function withPointersRewritten(
   kind: EntryTarget["kind"],
   from: string,
   to: string,
-  wholeGroup: boolean,
+  holds?: (path: string) => boolean,
 ): string {
-  const rewritten = pointersAt(parseDocument(text).contents, [], kind, from, to, wholeGroup).map(({ node, renamed }) => ({
+  const rewritten = pointersAt(parseDocument(text).contents, [], kind, from, to, holds).map(({ node, renamed }) => ({
     start: node.range![0],
     end: node.range![1],
     source: sourceFor(renamed, node),
@@ -602,7 +602,7 @@ function entryAt(text: string, target: EntryTarget | EmitTarget | GroupTarget): 
 }
 
 function withEntryRenamed(text: string, target: EntryTarget | GroupTarget, name: string): string {
-  const { set, pair } = entryAt(text, target);
+  const { doc, set, pair } = entryAt(text, target);
   if (set.items.some((item) => isScalar(item.key) && item.key.value === name)) {
     throw new Error(`${describeTarget(renamedTarget(target, name))} is already written`);
   }
@@ -614,7 +614,7 @@ function withEntryRenamed(text: string, target: EntryTarget | GroupTarget, name:
     kind,
     pathOf(target),
     pathOf(renamedTarget(target, name)),
-    target.kind === "group",
+    target.kind === "group" ? (path) => doc.hasIn([target.root, ...path.split(".")]) : undefined,
   );
 }
 
@@ -624,8 +624,9 @@ function withEntryRenamed(text: string, target: EntryTarget | GroupTarget, name:
  * For a system, every ref into it, `from(…)`; for a role, every other
  * role's ref to it, plain or `transparent(from …)`. Only where refs and params are
  * written — an `alias` or a changelog note that happens to read the same is
- * left alone. With `wholeGroup`, `from` is a group, and every value pointing
- * at something in it is one.
+ * left alone. With `holds`, `from` is a group, and every value pointing at
+ * something it holds is one: a path that only starts the same, into a group
+ * of another kind with the group's name, is not.
  */
 function pointersAt(
   node: unknown,
@@ -633,15 +634,15 @@ function pointersAt(
   kind: EntryTarget["kind"],
   from: string,
   to: string,
-  wholeGroup = false,
+  holds?: (path: string) => boolean,
 ): { node: Scalar; renamed: string }[] {
   if (isMap(node)) {
     return node.items.flatMap((pair) => {
       const key = isScalar(pair.key) ? String(pair.key.value) : "";
-      return pointersAt(pair.value, [...keys, key], kind, from, to, wholeGroup);
+      return pointersAt(pair.value, [...keys, key], kind, from, to, holds);
     });
   }
-  if (isSeq(node)) return node.items.flatMap((item) => pointersAt(item, keys, kind, from, to, wholeGroup));
+  if (isSeq(node)) return node.items.flatMap((item) => pointersAt(item, keys, kind, from, to, holds));
   if (!isScalar(node) || typeof node.value !== "string" || !node.range) return [];
   const [top] = keys;
   if (keys.includes("alias") || ["dtg", "modes", "palette", "changelog"].includes(top)) return [];
@@ -651,7 +652,7 @@ function pointersAt(
   }
   if (kind === "role" && (top === "systems" || top === "defaults")) return [];
   if (top === "systems" && !keys.includes("params")) return [];
-  const moved = (name: string) => (wholeGroup ? (name.startsWith(`${from}.`) ? to + name.slice(from.length) : null) : name === from ? to : null);
+  const moved = (name: string) => (holds ? (name.startsWith(`${from}.`) && holds(name) ? to + name.slice(from.length) : null) : name === from ? to : null);
   const plain = moved(node.value);
   if (plain != null) return [{ node, renamed: plain }];
   const faded = /^transparent\(\s*(\S+)(\s[^)]*)?\)$/.exec(node.value);

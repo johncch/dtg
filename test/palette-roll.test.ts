@@ -71,6 +71,15 @@ describe("harmonizing a palette", () => {
     assert.ok(hueGap(hues[1], baseHue + 240) < 0.5);
   });
 
+  test("even counts two fixed colors of one hue as one place on the wheel", () => {
+    const twin = [PALETTE[0], { ...PALETTE[0], path: "twin" }, { ...PALETTE[1], locked: false }, { ...PALETTE[2], locked: false }].map((entry, index) => ({ ...entry, locked: index < 2 }));
+    const baseHue = oklabToOklch(PALETTE[0].lab)[2];
+    const hues = [...harmonizePalette(twin, "even", null).values()].map((lab) => oklabToOklch(lab)[2]);
+    assert.equal(hues.length, 2);
+    assert.ok(hueGap(hues[0], baseHue + 120) < 0.5);
+    assert.ok(hueGap(hues[1], baseHue + 240) < 0.5);
+  });
+
   test("applying a harmony twice changes nothing the second time", () => {
     const once = harmonizePalette(PALETTE, "analogous", null);
     const after = PALETTE.map((entry) => ({ ...entry, lab: once.get(entry.path) ?? entry.lab }));
