@@ -108,11 +108,12 @@ function carried(target: EditTarget, from: EditTarget, to: EditTarget): EditTarg
     return target.system === from.path ? { ...target, system: to.path } : target;
   }
   if (from.kind === "role" && to.kind === "role" && target.kind === "ref") {
-    return target.section === from.section && target.role === from.role ? { ...target, role: to.role } : target;
+    return target.section === from.section && target.role === from.path ? { ...target, role: to.path } : target;
   }
   if (from.kind !== "group" || to.kind !== "group") return target;
   if (target.kind === "constant" && from.root === "palette") return { ...target, path: under(target.path, from.path, to.path) };
-  if ((target.kind === "role" || target.kind === "ref") && target.section === from.root) return { ...target, role: under(target.role, from.path, to.path) };
+  if (target.kind === "role" && target.section === from.root) return { ...target, path: under(target.path, from.path, to.path) };
+  if (target.kind === "ref" && target.section === from.root) return { ...target, role: under(target.role, from.path, to.path) };
   if (target.kind === "group" && target.root === from.root) return { ...target, path: under(target.path, from.path, to.path) };
   return target;
 }

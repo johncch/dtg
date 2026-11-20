@@ -10,7 +10,6 @@ function nameOf(target: EditTarget, modes: string[]): string {
     case "ref":
       return `${target.role} [${modes[target.mode]}]`;
     case "role":
-      return target.role;
     case "group":
     case "constant":
     case "system":

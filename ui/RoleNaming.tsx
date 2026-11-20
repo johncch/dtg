@@ -11,7 +11,7 @@ import { navigate } from "./router.js";
 const targetOf = (role: Pick<SnapshotRole, "section" | "group" | "role">): RoleTarget => ({
   kind: "role",
   section: role.section,
-  role: rolePath(role),
+  path: rolePath(role),
 });
 
 /**

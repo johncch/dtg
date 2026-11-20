@@ -34,7 +34,7 @@ roles:
       refs: [ink.muted, ink.muted]
 `;
 
-const role = (path: string) => ({ kind: "role", section: "roles", role: path }) as const;
+const role = (path: string) => ({ kind: "role", section: "roles", path }) as const;
 const constant = (path: string) => ({ kind: "constant", path }) as const;
 const group = (root: string, path: string) => ({ kind: "group", root, path }) as const;
 const emit = { kind: "emit", system: "sky" } as const;

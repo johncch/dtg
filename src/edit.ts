@@ -14,7 +14,7 @@ export type EditTarget =
   /** `role` is the role's dotted path within its section; `mode` its place in `modes`. */
   | { kind: "ref"; section: string; role: string; mode: number }
   /** A whole role, by its dotted path within its section. */
-  | { kind: "role"; section: string; role: string }
+  | { kind: "role"; section: string; path: string }
   /** A group of roles or of constants, by its dotted path within `root`: a section, or `palette`. */
   | { kind: "group"; root: string; path: string };
 
@@ -52,13 +52,13 @@ export type Edit =
 
 /** Where a constant or a role is after it is placed at `path`. */
 export function placedTarget<Target extends ConstantTarget | RoleTarget>(target: Target, path: string): Target {
-  return target.kind === "role" ? { ...target, role: path } : { ...target, path };
+  return { ...target, path };
 }
 
 /** Where a constant, a system, a role or a group is after it is renamed. */
 export function renamedTarget<Target extends EntryTarget | GroupTarget>(target: Target, name: string): Target {
   const renamed = (path: string) => [...path.split(".").slice(0, -1), name].join(".");
-  return target.kind === "role" ? { ...target, role: renamed(target.role) } : { ...target, path: renamed(target.path) };
+  return { ...target, path: renamed(target.path) };
 }
 
 function keysOf(target: EditTarget, doc: Document): (string | number)[] {
@@ -74,7 +74,7 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
     case "default":
       return ["defaults", target.algorithm, ...target.path.split(".")];
     case "role":
-      return [target.section, ...target.role.split(".")];
+      return [target.section, ...target.path.split(".")];
     case "group":
       return [target.root, ...target.path.split(".")];
     case "ref": {
@@ -102,7 +102,7 @@ export function describeTarget(target: EditTarget): string {
     case "ref":
       return `${target.role}, mode ${target.mode + 1}`;
     case "role":
-      return target.role;
+      return target.path;
     case "group":
       return `the group ${target.path}`;
   }
@@ -443,7 +443,7 @@ function withEmitSet(text: string, target: EmitTarget, value: string): string {
  * section does not have yet is written with it, at the end of the section.
  */
 function withRoleAdded(text: string, target: RoleTarget, value: string, after?: string): string {
-  const keys = [target.section, ...target.role.split(".")];
+  const keys = [target.section, ...target.path.split(".")];
   const refs = JSON.parse(value) as string[];
   const written = refs.map((ref) => (ref === INHERIT || plainSafe(ref) ? ref : JSON.stringify(ref)));
   const source = parseDocument(text).has("modes") ? `[${written.join(", ")}]` : written[0];
@@ -462,8 +462,7 @@ function isGroup(node: unknown): node is YAMLMap {
  */
 function withEntryPlaced(text: string, target: ConstantTarget | RoleTarget, path: string): string {
   const placed = placedTarget(target, path);
-  const pathOf = (entry: ConstantTarget | RoleTarget) => (entry.kind === "role" ? entry.role : entry.path);
-  const pointed = withPointersRewritten(text, [], target.kind, pathOf(target), path);
+  const pointed = withPointersRewritten(text, [], target.kind, target.path, path);
   const value = entryAt(pointed, target).pair.value as Node;
   const onOneLine = isScalar(value) || ((isMap(value) || isSeq(value)) && value.flow === true);
   const source = onOneLine ? pointed.slice(value.range![0], value.range![1]) : structureSource(JSON.stringify(value.toJSON()))!;
@@ -606,14 +605,13 @@ function withEntryRenamed(text: string, target: EntryTarget | GroupTarget, name:
   if (set.items.some((item) => isScalar(item.key) && item.key.value === name)) {
     throw new Error(`${describeTarget(renamedTarget(target, name))} is already written`);
   }
-  const pathOf = (entry: EntryTarget | GroupTarget) => (entry.kind === "role" ? entry.role : entry.path);
   const kind = target.kind === "group" ? (target.root === "palette" ? "constant" : "role") : target.kind;
   return withPointersRewritten(
     text,
     [{ start: pair.key.range[0], end: pair.key.range[1], source: keySource(name) }],
     kind,
-    pathOf(target),
-    pathOf(renamedTarget(target, name)),
+    target.path,
+    renamedTarget(target, name).path,
     target.kind === "group" ? (path) => doc.hasIn([target.root, ...path.split(".")]) : undefined,
   );
 }
