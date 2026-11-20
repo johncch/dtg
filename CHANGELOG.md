@@ -41,6 +41,28 @@
   spaced), keeping each color's lightness and chroma. The base is the
   selected color, or the first locked one. Each is one undo step.
 
+- The editor adds, renames and removes systems, roles, role groups and
+  palettes, not only colors. Nothing is written until you save.
+  - Systems: the + beside Systems adds one; a system's page changes its
+    name or algorithm, or removes it. Its `emit` list is edited in Params
+    as comma-separated steps, and a step's "Used by" says `emit` when the
+    list publishes it.
+  - Roles: every roles table ends each group with "New role". A row's name
+    is renamed by double-click, dragged by its handle to reorder, copied
+    with the duplicate button, and removed with the trash once nothing
+    points at it. The + beside a section adds a group.
+  - Palette: the + beside Palette adds a palette. The page of all colors
+    adds, renames, reorders, duplicates and removes the colors in no group,
+    and a palette's List layout does the same for its own, with a lock per
+    color.
+  - Names are dotted paths. Retyping `surface.canvas` as `label.canvas`
+    moves the role to that group, writing a group that is not there;
+    colors move between palettes the same way. Every ref, `transparent()`
+    and color param follows.
+  - A group or palette is renamed from the title of its page, and every ref
+    into it follows. A group is written with its first entry and goes with
+    its last.
+
 - The editor's panels (the color picker, rename, the ref editor) open beside
   the pointer where you clicked, not below the thing clicked. Opened from
   the keyboard, a panel still opens below its button.
