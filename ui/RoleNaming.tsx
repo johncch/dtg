@@ -162,11 +162,22 @@ export function RoleDuplicate({ role, siblings }: { role: SnapshotRole; siblings
   );
 }
 
+/** The roles whose refs point at each role, plain or through `transparent(…)`, by the path pointed at. */
+export function roleUsers(roles: SnapshotRole[]): Map<string, string[]> {
+  const users = new Map<string, string[]>();
+  for (const role of roles) {
+    for (const pointed of new Set(role.perMode.map((entry) => /^transparent\(\s*(\S+)\s/.exec(entry.ref)?.[1] ?? entry.ref))) {
+      users.set(pointed, [...(users.get(pointed) ?? []), rolePath(role)]);
+    }
+  }
+  return users;
+}
+
 /**
  * Removes a role, once no other role's ref points at it. A group goes with
  * its last role; a section's last role stays, for the section to have a row to add after.
  */
-export function RoleRemove({ role, roles }: { role: SnapshotRole; roles: SnapshotRole[] }) {
+export function RoleRemove({ role, roles, users }: { role: SnapshotRole; roles: SnapshotRole[]; /** The roles pointing at it, from `roleUsers`. */ users: string[] }) {
   const { commit } = useTrying();
   const path = rolePath(role);
   const inSection = roles.filter((other) => other.section === role.section);
@@ -174,9 +185,7 @@ export function RoleRemove({ role, roles }: { role: SnapshotRole; roles: Snapsho
   return (
     <EntryRemove
       label={path}
-      users={roles
-        .filter((other) => other.perMode.some((entry) => entry.ref === path || entry.ref.startsWith(`transparent(${path} `)))
-        .map(rolePath)}
+      users={users}
       stays={inSection.length === 1 ? `The only role in ${role.section}.` : null}
       hint={lastOfGroup ? `Delete, and ${role.group} with it` : "Delete"}
       onRemove={() => commit({ action: "remove", target: targetOf(role) })}

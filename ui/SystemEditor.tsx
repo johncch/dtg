@@ -1,5 +1,5 @@
 import { Plus, SlidersHorizontal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useDeferredValue, useMemo, useState } from "react";
 import { parse } from "yaml";
 import type { Algorithm, ParamKind } from "../src/contract.js";
 import type { Edit, SystemTarget } from "../src/edit.js";
@@ -122,7 +122,9 @@ type Attempt =
 function SystemForm({ working, editing, panel }: { working: Snapshot; editing: SnapshotSystem | null; panel: PopupPanel }) {
   const { commitStep, commit } = useTrying();
   const group = editing ? editing.system.split(".").slice(0, -1) : [];
-  const [name, setName] = useState(editing ? editing.system.split(".").at(-1)! : "");
+  const [typed, setTyped] = useState(editing ? editing.system.split(".").at(-1)! : "");
+  // Trying a name resolves the whole definition, so it trails the typing rather than holding up each key.
+  const name = useDeferredValue(typed);
   const [algorithm, setAlgorithm] = useState(editing?.algorithm ?? builtinAlgorithms[0].name);
   const [removal, setRemoval] = useState<string | null>(null);
   const chosen = builtinAlgorithms.find((candidate) => candidate.name === algorithm);
@@ -182,7 +184,7 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
       className="ref-editor"
       onSubmit={(event) => {
         event.preventDefault();
-        if (attempt.status !== "ready") return;
+        if (attempt.status !== "ready" || name !== typed) return;
         commitStep(attempt.edits, attempt.opens == null ? undefined : { page: { page: "system", name: attempt.opens } });
         panel.dismiss();
       }}
@@ -196,12 +198,12 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
         <input
           type="text"
           className="ref-input"
-          value={name}
+          value={typed}
           spellCheck={false}
           autoComplete="off"
           data-1p-ignore
           placeholder="brand"
-          onChange={(event) => setName(event.target.value.trim())}
+          onChange={(event) => setTyped(event.target.value.trim())}
         />
       </label>
       <label className="ref-control">

@@ -1,4 +1,4 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useMemo, type ReactNode } from "react";
 import type { RefTarget } from "../../src/resolve.js";
 import type { Snapshot, SnapshotRole } from "../../src/snapshot.js";
 import { isOpaque } from "../../src/color-math.js";
@@ -8,7 +8,7 @@ import { Popup } from "../Popup.js";
 import { EDITABLE } from "../mode.js";
 import { sourcesFor, TargetValueEditor } from "../picker/ValueEditor.js";
 import { entryRowProps } from "../EntryRow.js";
-import { NewRoleRow, RoleDuplicate, RoleGrip, RoleGroupName, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
+import { NewRoleRow, RoleDuplicate, RoleGrip, roleUsers, RoleGroupName, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
 import { Link, useScrollToHash } from "../router.js";
 import { INHERIT, rolePath } from "../../src/selector.js";
 import { stepAnchor } from "../Strip.js";
@@ -17,6 +17,7 @@ import { constantAnchor } from "../ConstantRow.js";
 export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: string }) {
   const hash = useScrollToHash(group);
   const roles = snapshot.roles.filter((role) => role.group === group);
+  const users = useMemo(() => roleUsers(snapshot.roles), [snapshot.roles]);
   return (
     <>
       <h1 className="entry-head">
@@ -35,7 +36,7 @@ export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: stri
         </thead>
         <tbody>
           {roles.map((role) => (
-            <RoleRow key={role.role} snapshot={snapshot} role={role} siblings={roles} onGroupPage id={role.role} targeted={role.role === hash} />
+            <RoleRow key={role.role} snapshot={snapshot} role={role} siblings={roles} users={users} onGroupPage id={role.role} targeted={role.role === hash} />
           ))}
           <NewRoleRow siblings={roles} columns={snapshot.modes.length + 1} />
         </tbody>
@@ -54,6 +55,7 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
   const shown = section ? snapshot.roles.filter((role) => role.section === section) : snapshot.roles;
   const groups = [...new Set(shown.map((role) => role.group))];
   const named = groups.filter((group) => group !== "").length;
+  const users = useMemo(() => roleUsers(snapshot.roles), [snapshot.roles]);
   return (
     <>
       <h1>{section ?? "All roles"}</h1>
@@ -70,31 +72,33 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
           </tr>
         </thead>
         <tbody>
-          {groups.map((group) => (
-            <Fragment key={group}>
-              {group !== "" && (
-                <tr className="group-row">
-                  <td colSpan={snapshot.modes.length + 1}>
-                    <Link to={{ page: "group", name: group }}>{group}</Link>
-                    {snapshot.groupNotes.roles[group] && <div className="role-note group-note">{snapshot.groupNotes.roles[group]}</div>}
-                  </td>
-                </tr>
-              )}
-              {shown
-                .filter((role) => role.group === group)
-                .map((role) => (
+          {groups.map((group) => {
+            const inGroup = shown.filter((role) => role.group === group);
+            return (
+              <Fragment key={group}>
+                {group !== "" && (
+                  <tr className="group-row">
+                    <td colSpan={snapshot.modes.length + 1}>
+                      <Link to={{ page: "group", name: group }}>{group}</Link>
+                      {snapshot.groupNotes.roles[group] && <div className="role-note group-note">{snapshot.groupNotes.roles[group]}</div>}
+                    </td>
+                  </tr>
+                )}
+                {inGroup.map((role) => (
                   <RoleRow
                     key={role.role}
                     snapshot={snapshot}
                     role={role}
-                    siblings={shown.filter((other) => other.group === group)}
+                    siblings={inGroup}
+                    users={users}
                     id={group === "" ? role.role : undefined}
                     targeted={group === "" && role.role === hash}
                   />
                 ))}
-              <NewRoleRow siblings={shown.filter((role) => role.group === group)} columns={snapshot.modes.length + 1} />
-            </Fragment>
-          ))}
+                <NewRoleRow siblings={inGroup} columns={snapshot.modes.length + 1} />
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </>
@@ -105,6 +109,7 @@ function RoleRow({
   snapshot,
   role,
   siblings,
+  users,
   onGroupPage = false,
   id,
   targeted,
@@ -113,6 +118,8 @@ function RoleRow({
   role: SnapshotRole;
   /** The roles of its group, its own among them. */
   siblings: SnapshotRole[];
+  /** `roleUsers` of every role. */
+  users: Map<string, string[]>;
   onGroupPage?: boolean;
   /** Set where a link can land on the row: on a group's page, or a section's for a role in no group. */
   id?: string;
@@ -126,7 +133,7 @@ function RoleRow({
           <RoleName role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
           <span className="entry-actions">
             <RoleDuplicate role={role} siblings={siblings} />
-            <RoleRemove role={role} roles={snapshot.roles} />
+            <RoleRemove role={role} roles={snapshot.roles} users={users.get(rolePath(role)) ?? []} />
           </span>
         </div>
         {role.note && <div className="role-note">{role.note}</div>}
