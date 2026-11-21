@@ -32,7 +32,7 @@ const STOPS: Span = { min: 0, max: 1000 };
 export const curve: Algorithm = {
   name: "curve",
   description:
-    "Experimental. A ramp drawn through a picked color. The selector is a position from 0 to 1000, and the anchor sits exactly at `at`. Lightness, chroma and hue are each a curve from `from` at 0, through the anchor's own value, to `to` at 1000, shaped by a CSS cubic-bezier easing on each side. Chroma is a share of the most the gamut holds at that lightness and hue, so values up to 1 stay in gamut. Hue is degrees from the anchor's hue.",
+    "Experimental. A light-to-dark ramp through one color, shaped by curves you draw.",
 
   params: {
     anchor: { kind: "color" },

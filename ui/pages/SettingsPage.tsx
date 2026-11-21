@@ -10,6 +10,7 @@ import { paintCss } from "../paint.js";
 import { ValueEditor, type Drawn } from "../picker/ValueEditor.js";
 import { Popup } from "../Popup.js";
 import { useStore } from "../store.js";
+import { Alert } from "../Alert.js";
 
 /**
  * The definition's modes and how this app shows each: its scheme, and the
@@ -162,10 +163,10 @@ function ModeRow({
               sources={["picker", "palette", "systems", "roles"]}
               constants={snapshot.constants}
               systems={snapshot.systems}
-              roles={snapshot.roles.map((role) => ({
-                path: rolePath(role),
-                color: role.perMode[modeIndex].color,
-              }))}
+              roles={snapshot.roles.flatMap((role) => {
+                const entry = role.perMode[modeIndex];
+                return entry.kind === "color" ? [{ path: rolePath(role), color: entry.color }] : [];
+              })}
               panel={panel}
               onPreview={setTried}
               onCommit={onPick}
@@ -178,7 +179,7 @@ function ModeRow({
           </button>
         )}
         {mode.backgroundProblem && (
-          <p className="ref-error">{mode.backgroundProblem}</p>
+          <Alert className="inline-alert">{mode.backgroundProblem}</Alert>
         )}
       </td>
     </tr>
@@ -209,7 +210,12 @@ function comesTo(
   const role = snapshot.roles.find(
     (candidate) => rolePath(candidate) === written,
   );
-  if (role) return { kind: "color", color: role.perMode[modeIndex].color };
+  if (role) {
+    const entry = role.perMode[modeIndex];
+    return entry.kind === "color"
+      ? { kind: "color", color: entry.color }
+      : { kind: "refused", error: `"${written}" is a gradient — a background is a color` };
+  }
   const probe = probeOf(snapshot.definition.text, gamut, written);
   return "error" in probe
     ? { kind: "refused", error: probe.error }

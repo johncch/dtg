@@ -10,6 +10,7 @@ import { previewOf } from "./engine.js";
 import { ENTRY_NAME, usedByRefusal } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { firstError, useTrying } from "./preview.js";
+import { Alert } from "./Alert.js";
 
 const DEFAULT_START = "#808080";
 
@@ -223,7 +224,7 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
           {recipe.dropped.length > 0 && <>Drops {recipe.dropped.join(", ")}.</>}
         </p>
       )}
-      {attempt.status === "refused" && <p className="ref-error ref-problem">{attempt.problem}</p>}
+      {attempt.status === "refused" && <Alert className="inline-alert">{attempt.problem}</Alert>}
       <div className="system-form-actions">
         <button type="submit" className="btn btn-primary" disabled={attempt.status !== "ready"}>
           {editing ? "Apply" : "Add system"}
@@ -234,7 +235,7 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
           </button>
         )}
       </div>
-      {removal && <p className="ref-error ref-problem">{removal}</p>}
+      {removal && <Alert className="inline-alert">{removal}</Alert>}
     </form>
   );
 }

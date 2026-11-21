@@ -8,6 +8,7 @@ import { EDITABLE } from "./mode.js";
 import { paintCss } from "./paint.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { firstError, useTrying } from "./preview.js";
+import { Alert } from "./Alert.js";
 
 type Range = { min: number; max: number };
 
@@ -148,7 +149,7 @@ function CurveEditor({
           </div>
         </div>
       ))}
-      {edit && refusal && <p className="ref-error">{firstError(refusal)}</p>}
+      {edit && refusal && <Alert className="inline-alert">{firstError(refusal)}</Alert>}
       {/* A form of several fields submits on Enter only when it has a submit button. */}
       <button type="submit" hidden />
     </form>

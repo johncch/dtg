@@ -177,8 +177,12 @@ describe("formatAuthored", () => {
     assert.equal(formatAuthored(oklchToOklab([0.7, 0.26, 150])), "oklch(0.7 0.26 150)");
   });
 
-  test("a translucent color is written as oklch() with its alpha, since hex has nowhere to put it", () => {
-    assert.equal(formatAuthored(oklchToOklab([0.5, 0.1, 30]), 0.4), "oklch(0.5 0.1 30 / 0.4)");
+  test("a translucent color sRGB holds is written as hex with its alpha as the last pair", () => {
+    assert.equal(formatAuthored(oklchToOklab([0.5, 0.1, 30]), 0.4), "#944b4066");
+  });
+
+  test("a translucent color outside sRGB is written as oklch() with its alpha", () => {
+    assert.equal(formatAuthored(oklchToOklab([0.7, 0.26, 150]), 0.4), "oklch(0.7 0.26 150 / 0.4)");
   });
 });
 

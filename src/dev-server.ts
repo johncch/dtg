@@ -246,6 +246,11 @@ export function startDevServer(
         // Read again rather than trust what was last seen: the write is the
         // file as it is this instant, plus the edits.
         const { text } = workingText({ ...state.copy, diskText: readDisk() });
+        const { problems } = resolveDefinition(text, [], gamut);
+        if (problems.length > 0) {
+          sendJson(409, { error: problems.join("; ") });
+          return;
+        }
         writeFileSync(definitionPath, text);
         // Saving wipes the board: no unsaved edits, and no history to undo into.
         adopt(openFile(text));

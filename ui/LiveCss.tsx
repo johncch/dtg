@@ -15,7 +15,8 @@ const EMBEDDED = window.parent !== window;
  * override what the host's own stylesheet set.
  */
 export function LiveCss({ resolved, modes }: { resolved: ResolvedDefinition; modes: ModeRendering }) {
-  const css = useMemo(() => (EMBEDDED ? emitCss(resolved, "plain", modes) : null), [resolved, modes]);
+  // A definition with problems draws but is not written out, so the host keeps the CSS it last got.
+  const css = useMemo(() => (EMBEDDED && resolved.problems.length === 0 ? emitCss(resolved, "plain", modes) : null), [resolved, modes]);
   const latest = useRef(css);
 
   useEffect(() => {

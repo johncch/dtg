@@ -11,6 +11,7 @@ import {
   formatRef,
   orderOf,
   parseCall,
+  canonicalSelector,
   parseSelector,
   publicStepOf,
   rolePath,
@@ -24,6 +25,7 @@ import {
   type Color,
   type Gamut,
 } from "./color-math.js";
+import { accepts, acceptedBy, isRefFunction, REF_FUNCTIONS, splitArguments, wordsOutsideParens, type Accepted, type RefFunction } from "./ref-functions.js";
 import { tint } from "./algorithms/tint.js";
 import { scale } from "./algorithms/scale.js";
 import { overlay } from "./algorithms/overlay.js";
@@ -145,7 +147,7 @@ const RENAMED_ALGORITHMS: Record<string, string> = {
 
 const LITERAL_FUNCTIONS = ["oklch", "oklab", "color"];
 
-const TRANSPARENT_USAGE = `transparent() takes a constant and an opacity, as transparent(shade 70). For a system's uncomposited form, ask the algorithm — tint spells it "sky(3 tint)".`;
+const TRANSPARENT_USAGE = `transparent() takes a color or a gradient, then an opacity, as transparent(shade 70) or transparent(sky(500) 70). For a system's uncomposited form, ask the algorithm — tint spells it "sky(3 tint)".`;
 
 /** A public-name override: one name for all targets, or per-target ("css", "figma"). */
 export type AliasValue = string | Record<string, string>;
@@ -205,35 +207,40 @@ function compareSteps(a: OrderedStep, b: OrderedStep): number {
   for (let i = 0; i < a.order.length; i++) {
     if (a.order[i] !== b.order[i]) return a.order[i] - b.order[i];
   }
-  // Two spellings of one coordinate ("3" and "3.0") still need a fixed order.
   const [x, y] = [a.step.selector, b.step.selector];
   return x < y ? -1 : x > y ? 1 : 0;
 }
 
 export type Lineage = Map<
   string,
-  { section: string; group: string; role: string; mode: string; translucent: boolean }[]
+  { section: string; group: string; role: string; mode: string }[]
 >;
 
 export function buildLineage(resolved: ResolvedDefinition): Lineage {
   const lineage: Lineage = new Map();
   for (const role of resolved.roles) {
-    role.perMode.forEach((entry, i) => {
-      const target = entry.target;
-      if (target.kind === "role" || target.kind === "literal") return;
-      const key =
-        target.kind === "constant"
-          ? target.name
-          : formatRef(target.system, target.selector);
-      const uses = lineage.get(key) ?? [];
-      uses.push({
-        section: role.section,
-        group: role.group,
-        role: role.role,
-        mode: resolved.modes[i] ?? String(i),
-        translucent: !isOpaque(entry.color),
-      });
-      lineage.set(key, uses);
+    role.perMode.forEach((roleEntry, i) => {
+      const named: ResolvedRef[] = roleEntry.kind === "gradient" && throughTransparent(roleEntry.target).kind === "constant" ? [roleEntry] : [];
+      for (const entry of [...named, ...colorRefsOf(roleEntry)]) {
+        if (entry.target.kind === "transparent" && throughTransparent(entry.target).kind === "step") continue;
+        const target = throughTransparent(entry.target);
+        if (target.kind !== "constant" && target.kind !== "step") continue;
+        const key =
+          target.kind === "constant"
+            ? target.name
+            : formatRef(target.system, target.selector);
+        const uses = lineage.get(key) ?? [];
+        const use = {
+          section: role.section,
+          group: role.group,
+          role: role.role,
+          mode: resolved.modes[i] ?? String(i),
+        };
+        // A gradient can name one color at several stops; that is still one use.
+        if (uses.some((other) => JSON.stringify(other) === JSON.stringify(use))) continue;
+        uses.push(use);
+        lineage.set(key, uses);
+      }
     });
   }
   return lineage;
@@ -317,6 +324,16 @@ export type PathSegment = {
   omit?: boolean;
 };
 
+/** A gradient named in the palette. It is kept apart from the colors: everything that works on a palette's colors has no use for it. */
+export type ResolvedStaticGradient = {
+  path: string;
+  segments: PathSegment[];
+  written: string;
+  gradient: ResolvedGradientRef;
+  /** False for one in a group marked `emit: false` that no role points at. */
+  emitted: boolean;
+};
+
 /** A declared constant. `path` is its internal identity; segments carry aliases. */
 export type ResolvedStatic = {
   path: string;
@@ -345,16 +362,109 @@ export type ResolvedSection = {
 
 export type RefTarget =
   | { kind: "step"; system: string; selector: string }
-  /** A declared constant; `alpha` present means it was taken through transparent(). */
-  | { kind: "constant"; name: string; alpha?: number }
+  | { kind: "constant"; name: string }
   | { kind: "role"; group: string; role: string }
-  | { kind: "literal" };
+  | { kind: "literal" }
+  /** `alpha` is the opacity as written, 0–100. */
+  | { kind: "transparent"; of: RefTarget; alpha: number }
+  /**
+   * Written in place as `gradient(…)`; a role pointing at a gradient has that
+   * as its target instead. `of` is the gradient a restyle took its stops
+   * from, null for one written out color by color.
+   */
+  | { kind: "gradient"; of: RefTarget | null };
 
-export type ResolvedRef = {
+export type PlainRefTarget = Exclude<RefTarget, { kind: "transparent" }>;
+
+export function throughTransparent(target: RefTarget): PlainRefTarget {
+  return target.kind === "transparent" ? throughTransparent(target.of) : target;
+}
+
+export type ResolvedColorRef = {
+  kind: "color";
   ref: string;
   target: RefTarget;
   color: Color;
 };
+
+export type GradientStop = {
+  color: ResolvedColorRef;
+  /** Percent along the line, as written; null where the definition left it to be spread evenly. */
+  position: number | null;
+};
+
+export const RADIAL_SHAPES = ["circle", "ellipse"] as const;
+export const RADIAL_SIZES = ["closest-side", "closest-corner", "farthest-side", "farthest-corner"] as const;
+/** The spaces CSS can interpolate a gradient in. */
+export const GRADIENT_SPACES = [
+  "srgb", "srgb-linear", "display-p3", "a98-rgb", "prophoto-rgb", "rec2020",
+  "lab", "oklab", "xyz", "xyz-d50", "xyz-d65", "hsl", "hwb", "lch", "oklch",
+] as const;
+
+/** Angles are degrees as CSS reads them: 0 runs upward, 90 to the right. `x` and `y` are the center, in percent. */
+export type GradientGeometry =
+  | { kind: "linear"; angle: number }
+  | { kind: "radial"; shape: (typeof RADIAL_SHAPES)[number]; size: (typeof RADIAL_SIZES)[number]; x: number; y: number }
+  | { kind: "conic"; angle: number; x: number; y: number };
+
+/** The named arguments each kind of gradient takes, beside `kind`, `repeat` and `space`, which all do. */
+export const GEOMETRY_ARGUMENTS: Record<GradientGeometry["kind"], string[]> = {
+  linear: ["angle"],
+  radial: ["x", "y", "shape", "size"],
+  conic: ["angle", "x", "y"],
+};
+
+/** A gradient is made of colors, and nothing is made of a gradient: only a role holds one or points at one. */
+export type ResolvedGradientRef = {
+  kind: "gradient";
+  ref: string;
+  target: RefTarget;
+  geometry: GradientGeometry;
+  repeat: boolean;
+  /** The space its colors are interpolated in; null leaves it to the browser. */
+  space: (typeof GRADIENT_SPACES)[number] | null;
+  stops: GradientStop[];
+};
+
+export type ResolvedRef = ResolvedColorRef | ResolvedGradientRef;
+
+/**
+ * The colors an entry names itself: its own, or its stops'. A role pointing
+ * at a gradient role, as it is or through transparent(), names none — the
+ * role it points at does.
+ */
+export function colorRefsOf(entry: ResolvedRef): ResolvedColorRef[] {
+  if (entry.kind === "color") return [entry];
+  return throughTransparent(entry.target).kind === "gradient" ? entry.stops.map((stop) => stop.color) : [];
+}
+
+/**
+ * True for a role written as a gradient in some modes and a color in others.
+ * A role that says the same ref in every mode only follows what it points
+ * at, so the mix is that role's to fix and is reported there alone.
+ */
+export function mixesKinds(perMode: ResolvedRef[]): boolean {
+  return new Set(perMode.map((entry) => entry.kind)).size > 1 && new Set(perMode.map((entry) => entry.ref)).size > 1;
+}
+
+/**
+ * The roles an entry's value comes from. An `inlined` one was read through
+ * transparent() or a restyle, so the value holds what that role came to in
+ * its mode, where a plain one is written as a pointer at it.
+ */
+export function rolesUnder(entry: ResolvedRef): { role: Extract<RefTarget, { kind: "role" }>; inlined: boolean }[] {
+  const found: ReturnType<typeof rolesUnder> = [];
+  const walk = (target: RefTarget, inlined: boolean) => {
+    if (target.kind === "role") found.push({ role: target, inlined });
+    if (target.kind === "transparent") walk(target.of, true);
+    if (target.kind === "gradient" && target.of) walk(target.of, true);
+  };
+  walk(entry.target, false);
+  for (const stop of colorRefsOf(entry)) {
+    if (stop !== entry) walk(stop.target, false);
+  }
+  return found;
+}
 
 export type ResolvedRole = {
   section: string;
@@ -402,11 +512,21 @@ export type ResolvedDefinition = {
   /** The systems block's own alias (its Figma collection name). */
   systemsAlias?: AliasValue;
   statics: ResolvedStatic[];
+  /** The palette's gradients, in the order written. */
+  gradients: ResolvedStaticGradient[];
+  /** Every palette entry's path, colors and gradients together, in the order written. */
+  paletteOrder: string[];
   sections: ResolvedSection[];
   roles: ResolvedRole[];
   /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role groups. */
   groupDescriptions: { systems: Record<string, string>; palette: Record<string, string>; roles: Record<string, string> };
   warnings: string[];
+  /**
+   * What is wrong with a definition that still resolved: every value is
+   * there to draw, but the whole is not to be written out. The emitters
+   * refuse while any is here, and so does saving from the editor.
+   */
+  problems: string[];
   /** Index-parallel to the `probes` asked for. */
   probed: Probe[];
 };
@@ -514,6 +634,7 @@ export function resolveDefinition(
   const doc = parse(yamlText) as Record<string, unknown>;
   const errors: string[] = [];
   const warnings: string[] = [];
+  const problems: string[] = [];
   const algorithms = registryOf(extraAlgorithms);
 
   const grammar = doc.dtg;
@@ -607,6 +728,9 @@ export function resolveDefinition(
     return raw;
   };
   const statics: ResolvedStatic[] = [];
+  const gradients: ResolvedStaticGradient[] = [];
+  const writtenGradients: { path: string; segments: PathSegment[]; written: string }[] = [];
+  const paletteOrder: string[] = [];
   const systemsBlock = (doc.systems ?? {}) as Record<string, unknown>;
   const systemsAlias = parseAlias(systemsBlock.alias, "systems block");
 
@@ -622,6 +746,12 @@ export function resolveDefinition(
       if ((key === "alias" || key === "emit" || key === "description") && prefix.length > 0) continue;
       const segments = [...prefix, { name: key }];
       const path = segments.map((seg) => seg.name).join(".");
+      if (typeof raw === "string") paletteOrder.push(path);
+      if (typeof raw === "string" && raw.startsWith("gradient(")) {
+        writtenGradients.push({ path, segments, written: raw });
+        if (!emits) silent.add(path);
+        continue;
+      }
       if (typeof raw === "string") {
         try {
           statics.push({ path, segments, written: raw, color: parseColor(raw, `palette color "${path}"`), emitted: true });
@@ -691,9 +821,9 @@ export function resolveDefinition(
         continue;
       }
       const algoName = String(block.algorithm);
-      if (path === "transparent") {
+      if (isRefFunction(path)) {
         errors.push(
-          `system "transparent": that name is taken by transparent(), the constant-at-an-opacity ref`,
+          `system "${path}": that name is taken by ${path}(), ${REF_FUNCTIONS[path].is}`,
         );
         continue;
       }
@@ -769,7 +899,12 @@ export function resolveDefinition(
         colorParams: parsed.colors,
         ownParams: new Set(Object.keys(paramsBlock ?? {})),
         selectorShape,
-        overrides: (block.overrides ?? {}) as Record<string, unknown>,
+        overrides: Object.fromEntries(
+          Object.entries((block.overrides ?? {}) as Record<string, unknown>).map(([selector, color]) => [
+            canonicalSelector(algo.name, selectorShape, selector),
+            color,
+          ]),
+        ),
         alias,
         emit,
         segments: named,
@@ -779,23 +914,25 @@ export function resolveDefinition(
   }
   walkSystems(systemsBlock, []);
 
-  for (const constant of statics) {
+  for (const constant of [...statics, ...writtenGradients]) {
     if (systems.has(constant.path)) {
       errors.push(`"${constant.path}" is both a palette color and a system — refs would be ambiguous`);
     }
   }
 
   const stepCache = new Map<string, ResolvedStep | undefined>();
+  const demandedSteps = new Set<string>();
   const stepOrders = new Map<ResolvedStep, number[]>();
 
   function resolveStep(
     systemName: string,
-    selector: string,
+    written: string,
     refContext: string,
   ): ResolvedStep | undefined {
+    const sys = systems.get(systemName);
+    const selector = sys ? canonicalSelector(sys.algo.name, sys.selectorShape, written) : written;
     const key = formatRef(systemName, selector);
     if (stepCache.has(key)) return stepCache.get(key);
-    const sys = systems.get(systemName);
     let step: ResolvedStep | undefined;
     if (!sys) {
       errors.push(`${refContext}: unknown system "${systemName}"`);
@@ -951,7 +1088,7 @@ export function resolveDefinition(
     walkRoles(sectionBlock, []);
   }
 
-  for (const constant of statics) {
+  for (const constant of [...statics, ...writtenGradients]) {
     if (roleIndex.has(constant.path)) {
       errors.push(
         `"${constant.path}" is both a constant and a role path — refs would be ambiguous`,
@@ -1027,7 +1164,13 @@ export function resolveDefinition(
     }
 
     const complete = perMode.length === modes.length;
-    if (complete && new Set(perMode.map((entry) => isOpaque(entry.color))).size > 1) {
+    const sameKind = new Set(perMode.map((entry) => entry.kind)).size === 1;
+    if (complete && mixesKinds(perMode)) {
+      problems.push(
+        `${path}: modes mix a color and a gradient — a role is one or the other in every mode`,
+      );
+    }
+    if (complete && sameKind && new Set(perMode.map((entry) => entry.kind === "color" && isOpaque(entry.color))).size > 1) {
       warnings.push(
         `${path}: modes mix opaque and translucent values — probably a mistake`,
       );
@@ -1053,6 +1196,7 @@ export function resolveDefinition(
     modeIndex: number,
     context: string,
     stack: string[],
+    demands = true,
   ): ResolvedRef | undefined {
     const call = parseCall(ref);
     if (call && call.selector.includes(",")) {
@@ -1063,26 +1207,19 @@ export function resolveDefinition(
     }
     if (ref.startsWith("#") || LITERAL_FUNCTIONS.includes(call?.name ?? "")) {
       try {
-        return { ref, target: { kind: "literal" }, color: parseColor(ref, context) };
+        return { kind: "color", ref, target: { kind: "literal" }, color: parseColor(ref, context) };
       } catch (error) {
         errors.push((error as Error).message);
         return undefined;
       }
     }
-    if (call?.name === "transparent") {
-      // transparent(<constant> <opacity>): a declared color at an alpha,
-      // never composited. A system takes its weight from its own selector
-      // instead, so the two do not overlap.
-      const [inner, weight, ...rest] = call.selector.split(" ");
-      if (weight == null || rest.length > 0) {
+    const gradient = /^gradient\((.*)\)$/s.exec(ref);
+    if (gradient) return resolveGradient(ref, gradient[1], modeIndex, context, stack, demands);
+    const faded = /^transparent\(\s*(.+?)\s+(\S+)\s*\)$/.exec(ref);
+    if (faded) {
+      const [, inner, weight] = faded;
+      if (inner.includes(" ") && !inner.includes("(")) {
         errors.push(`${context}: ${TRANSPARENT_USAGE}`);
-        return undefined;
-      }
-      const constant = statics.find((c) => c.path === inner);
-      if (!constant) {
-        errors.push(
-          `${context}: unknown constant "${inner}" (declared: ${statics.map((c) => c.path).join(", ") || "none"})`,
-        );
         return undefined;
       }
       const alpha = Number(weight);
@@ -1092,18 +1229,36 @@ export function resolveDefinition(
         );
         return undefined;
       }
-      return {
-        ref,
-        target: { kind: "constant", name: inner, alpha },
-        color: { ...constant.color, alpha: alpha / 100 },
-      };
+      const of = resolveArgument("transparent", inner, modeIndex, context, stack, false);
+      if (!of) return undefined;
+      const target: RefTarget = { kind: "transparent", of: of.target, alpha };
+      const atOpacity = (color: ResolvedColorRef): ResolvedColorRef => ({
+        kind: "color",
+        ref: color.ref,
+        target: { kind: "transparent", of: color.target, alpha },
+        color: { ...color.color, alpha: color.color.alpha * (alpha / 100) },
+      });
+      return of.kind === "color"
+        ? { ...atOpacity(of), ref, target }
+        : {
+            ...of,
+            ref,
+            target,
+            stops: of.stops.map((stop) => ({ color: atOpacity(stop.color), position: stop.position })),
+          };
+    }
+    if (call?.name === "transparent") {
+      errors.push(`${context}: ${TRANSPARENT_USAGE}`);
+      return undefined;
     }
     if (call) {
       const step = resolveStep(call.name, call.selector, context);
       if (!step) return undefined;
+      if (demands) demandedSteps.add(formatRef(call.name, step.selector));
       return {
+        kind: "color",
         ref,
-        target: { kind: "step", system: call.name, selector: call.selector },
+        target: { kind: "step", system: call.name, selector: step.selector },
         color: step.color,
       };
     }
@@ -1124,19 +1279,23 @@ export function resolveDefinition(
       const entry = targetRole?.perMode[modeIndex];
       if (!entry) return undefined;
       const dot = ref.lastIndexOf(".");
-      return {
-        ref,
-        target: {
-          kind: "role",
-          group: dot < 0 ? "" : ref.slice(0, dot),
-          role: ref.slice(dot + 1),
-        },
-        color: entry.color,
+      const target: RefTarget = {
+        kind: "role",
+        group: dot < 0 ? "" : ref.slice(0, dot),
+        role: ref.slice(dot + 1),
       };
+      return entry.kind === "gradient"
+        ? { ...entry, ref, target }
+        : { kind: "color", ref, target, color: entry.color };
+    }
+    const namedGradient = gradients.find((candidate) => candidate.path === ref);
+    if (namedGradient) {
+      return { ...namedGradient.gradient, ref, target: { kind: "constant", name: ref } };
     }
     const constant = statics.find((s) => s.path === ref);
     if (constant) {
       return {
+        kind: "color",
         ref,
         target: { kind: "constant", name: ref },
         color: constant.color,
@@ -1144,7 +1303,7 @@ export function resolveDefinition(
     }
     if (ref.includes("(") && !ref.endsWith(")")) {
       errors.push(
-        `${context}: "${ref}" was cut short — a comma inside a \`[ ]\` list separates items. Separate with spaces, as transparent(paper 70).`,
+        `${context}: "${ref}" was cut short — a comma inside a \`[ ]\` list separates items, and an unquoted # after a space starts a YAML comment. Separate with spaces, as transparent(paper 70), and quote a ref that holds a hex color, as "gradient(paper #000000)".`,
       );
       return undefined;
     }
@@ -1155,9 +1314,172 @@ export function resolveDefinition(
       return undefined;
     }
     errors.push(
-      `${context}: unrecognized ref "${ref}" — expected system(selector), group.role, a declared constant, or transparent(...)`,
+      `${context}: unrecognized ref "${ref}" — expected system(selector), group.role, a declared constant, a color, or transparent(...)`,
     );
     return undefined;
+  }
+
+  /** A ref where only a color will do: a gradient there is refused, naming what asked. */
+  /** A ref handed to `fn`, as one of the kinds `fn` declares it accepts; any other kind is refused by name. */
+  function resolveArgument<F extends RefFunction>(
+    fn: F,
+    ref: string,
+    modeIndex: number,
+    context: string,
+    stack: string[],
+    demands: boolean,
+  ): Accepted<F> | undefined {
+    const resolved = resolveRef(ref, modeIndex, context, stack, demands);
+    if (!resolved) return undefined;
+    if (!accepts(fn, resolved)) {
+      errors.push(`${context}: ${ref} is a ${resolved.kind} — ${fn}() takes ${acceptedBy(fn)}`);
+      return undefined;
+    }
+    return resolved;
+  }
+
+  function resolveGradient(
+    ref: string,
+    inside: string,
+    modeIndex: number,
+    context: string,
+    stack: string[],
+    demands: boolean,
+  ): ResolvedGradientRef | undefined {
+    const refuse = (message: string) => {
+      errors.push(`${context}: gradient() ${message}`);
+      return undefined;
+    };
+    if (inside.includes(",")) {
+      errors.push(
+        `${context}: "${ref}" separates with a comma — write spaces, as gradient(paper 0% shade 100% angle=90deg)`,
+      );
+      return undefined;
+    }
+    const args = splitArguments("gradient", wordsOutsideParens(inside));
+    if ("error" in args) {
+      errors.push(`${context}: ${args.error}`);
+      return undefined;
+    }
+    const { positional, named } = args;
+    const leadingAngle = positional.find((word) => /^-?[\d.]+deg$/.test(word));
+    if (leadingAngle) {
+      return refuse(
+        `takes its angle as a named argument, after the colors — write angle=${leadingAngle}, as gradient(paper shade angle=${leadingAngle})`,
+      );
+    }
+
+    const stops: GradientStop[] = [];
+    let restyled: ResolvedGradientRef | null = null;
+    let failed = false;
+    for (const word of positional) {
+      if (word !== "" && Number.isFinite(Number(word))) {
+        return refuse(
+          `got the bare number ${word} — a position is written ${word}% and follows its color, and the angle is written angle=${word}deg after the colors`,
+        );
+      }
+      if (word.endsWith("%")) {
+        const position = Number(word.slice(0, -1));
+        const stop = stops.at(-1);
+        if (!Number.isFinite(position) || word.length === 1) {
+          return refuse(`position must be a number, as 50%, got "${word}"`);
+        }
+        if (!stop || stop.position != null) {
+          return refuse(`position ${word} has no color before it — a position follows its color, one each`);
+        }
+        stop.position = position;
+        continue;
+      }
+      const argument = resolveArgument("gradient", word, modeIndex, context, stack, demands);
+      if (!argument) {
+        failed = true;
+        continue;
+      }
+      if (argument.kind === "gradient") {
+        if (positional.length > 1) {
+          return refuse(
+            `got ${word} as a stop, and it is a gradient — a stop is a color; to restyle a gradient, give it alone, as gradient(${word} angle=90deg)`,
+          );
+        }
+        restyled = argument;
+        continue;
+      }
+      stops.push({ color: argument, position: null });
+    }
+    if (failed) return undefined;
+    if (!restyled && stops.length === 1) {
+      return refuse(`takes at least two colors, or one gradient to restyle — ${stops[0].color.ref} is a color`);
+    }
+    if (!restyled && stops.length < 2) {
+      return refuse(`takes at least two colors, as gradient(paper shade angle=90deg)`);
+    }
+
+    // Restyling keeps what is not named: the stops always, and the rest
+    // while the kind is still the one those arguments belong to.
+    const oneOf = <T extends string>(name: string, options: readonly T[], fallback: T): T | undefined => {
+      const value = named.get(name);
+      if (value == null) return fallback;
+      return (options as readonly string[]).includes(value) ? (value as T) : undefined;
+    };
+    const kind = oneOf("kind", ["linear", "radial", "conic"], restyled?.geometry.kind ?? "linear");
+    if (!kind) return refuse(`kind must be linear, radial or conic, got "${named.get("kind")}"`);
+    const misplaced = [...named.keys()].find(
+      (name) => !["kind", "repeat", "space", ...GEOMETRY_ARGUMENTS[kind]].includes(name),
+    );
+    if (misplaced) {
+      const kinds = Object.entries(GEOMETRY_ARGUMENTS).filter(([, names]) => names.includes(misplaced)).map(([name]) => name);
+      return refuse(`takes ${misplaced} when kind is ${kinds.join(" or ")}, and this one is ${kind}`);
+    }
+    const kept = restyled?.geometry.kind === kind ? restyled.geometry : null;
+    const measure = (name: string, unit: string, fallback: number): number | undefined => {
+      const value = named.get(name);
+      if (value == null) return fallback;
+      const number = value.endsWith(unit) && /^-?[\d.]+$/.test(value.slice(0, -unit.length)) ? Number(value.slice(0, -unit.length)) : NaN;
+      return Number.isFinite(number) ? number : undefined;
+    };
+    const angle = measure("angle", "deg", kept && "angle" in kept ? kept.angle : kind === "conic" ? 0 : 180);
+    if (angle == null) return refuse(`angle must be a number of degrees, as angle=90deg, got "${named.get("angle")}"`);
+    const x = measure("x", "%", kept && "x" in kept ? kept.x : 50);
+    const y = measure("y", "%", kept && "y" in kept ? kept.y : 50);
+    if (x == null || y == null) {
+      return refuse(`x and y are percents, as x=30% y=20%, got "${named.get(x == null ? "x" : "y")}"`);
+    }
+    const shape = oneOf("shape", RADIAL_SHAPES, kept?.kind === "radial" ? kept.shape : "ellipse");
+    if (!shape) return refuse(`shape must be ${RADIAL_SHAPES.join(" or ")}, got "${named.get("shape")}"`);
+    const size = oneOf("size", RADIAL_SIZES, kept?.kind === "radial" ? kept.size : "farthest-corner");
+    if (!size) return refuse(`size must be one of ${RADIAL_SIZES.join(", ")}, got "${named.get("size")}"`);
+    const repeat = oneOf("repeat", ["true", "false"], restyled?.repeat ? "true" : "false");
+    if (!repeat) return refuse(`repeat is true or false, got "${named.get("repeat")}"`);
+    const space = named.has("space") ? oneOf("space", GRADIENT_SPACES, "srgb") : (restyled?.space ?? null);
+    if (space === undefined) return refuse(`space must be one of ${GRADIENT_SPACES.join(", ")}, got "${named.get("space")}"`);
+    const geometry: GradientGeometry =
+      kind === "linear" ? { kind, angle } : kind === "radial" ? { kind, shape, size, x, y } : { kind, angle, x, y };
+    return {
+      kind: "gradient",
+      ref,
+      target: { kind: "gradient", of: restyled?.target ?? null },
+      geometry,
+      repeat: repeat === "true",
+      space,
+      stops: restyled?.stops ?? stops,
+    };
+  }
+
+  // The palette is read before systems and roles, so its gradients hold
+  // only what it has itself: its colors, and colors written out. That also
+  // leaves nothing for one to loop back through.
+  for (const { path, segments, written } of writtenGradients) {
+    const context = `palette gradient "${path}"`;
+    const gradient = resolveRef(written, 0, context, [], false);
+    if (!gradient || gradient.kind !== "gradient") continue;
+    const foreign = gradient.stops.find((stop) => !["constant", "literal"].includes(throughTransparent(stop.color.target).kind));
+    if (foreign || gradient.target.kind !== "gradient" || gradient.target.of) {
+      errors.push(
+        `${context}: ${foreign ? foreign.color.ref : written} is not the palette's own — a palette gradient holds palette colors and colors written out; build one from a step, a role or another gradient in a role`,
+      );
+      continue;
+    }
+    gradients.push({ path, segments, written, gradient, emitted: true });
   }
 
   const roles: ResolvedRole[] = [];
@@ -1165,9 +1487,15 @@ export function resolveDefinition(
     const resolved = resolveRole(path, []);
     if (resolved) roles.push(resolved);
   }
-  const pointedAt = new Set(
-    roles.flatMap((role) => role.perMode.flatMap((entry) => (entry.target.kind === "constant" ? [entry.target.name] : []))),
-  );
+  const constantsNamedBy = (entries: ResolvedRef[]) =>
+    entries.flatMap((entry) => [entry, ...colorRefsOf(entry)]).flatMap((entry) => (entry.target.kind === "constant" ? [entry.target.name] : []));
+  const pointedAt = new Set(constantsNamedBy(roles.flatMap((role) => role.perMode)));
+  for (const gradient of gradients) {
+    gradient.emitted = !silent.has(gradient.path) || pointedAt.has(gradient.path);
+  }
+  for (const name of constantsNamedBy(gradients.filter((gradient) => gradient.emitted).map((gradient) => gradient.gradient))) {
+    pointedAt.add(name);
+  }
   for (const constant of statics) {
     constant.emitted = !silent.has(constant.path) || pointedAt.has(constant.path);
   }
@@ -1197,9 +1525,12 @@ export function resolveDefinition(
   const resolvedSystems: ResolvedSystem[] = [];
   for (const [name, sys] of systems) {
     // What a system publishes is what its `emit` lists plus what refs demand.
-    for (const selector of sys.emit) resolveStep(name, selector, `system "${name}" emit`);
+    for (const selector of sys.emit) {
+      const step = resolveStep(name, selector, `system "${name}" emit`);
+      if (step) demandedSteps.add(formatRef(name, step.selector));
+    }
     const steps = [...stepCache.entries()]
-      .filter(([key, step]) => step != null && key.startsWith(`${name}(`))
+      .filter(([key, step]) => step != null && demandedSteps.has(key) && key.startsWith(`${name}(`))
       .map(([, step]) => step as ResolvedStep)
       .map((step) => ({ step, order: stepOrders.get(step) ?? [] }))
       .sort(compareSteps)
@@ -1275,21 +1606,24 @@ export function resolveDefinition(
   const literalUses = new Map<string, { ref: string; places: string[] }>();
   for (const role of roles) {
     const rolePath = role.segments.map((seg) => seg.name).join(".");
-    role.perMode.forEach((entry, i) => {
-      if (entry.target.kind !== "literal" || role.inherited[i]) return;
+    role.perMode.forEach((roleEntry, i) => {
+      if (role.inherited[i]) return;
       const place = `${rolePath}[${modes[i]}]`;
-      if (needsMapping(entry.color, gamut)) {
-        warnings.push(`${place}: ${entry.ref} is outside ${gamut}, the project's gamut`);
+      for (const entry of colorRefsOf(roleEntry)) {
+        if (entry.target.kind !== "literal") continue;
+        if (needsMapping(entry.color, gamut)) {
+          warnings.push(`${place}: ${entry.ref} is outside ${gamut}, the project's gamut`);
+        }
+        const value = formatAuthored(toOklab(entry.color), entry.color.alpha);
+        const constant = constantByValue.get(value);
+        if (constant) {
+          warnings.push(`${place}: ${entry.ref} is the constant \`${constant}\` — point at it`);
+          continue;
+        }
+        const uses = literalUses.get(value) ?? { ref: entry.ref, places: [] };
+        uses.places.push(place);
+        literalUses.set(value, uses);
       }
-      const value = formatAuthored(toOklab(entry.color), entry.color.alpha);
-      const constant = constantByValue.get(value);
-      if (constant) {
-        warnings.push(`${place}: ${entry.ref} is the constant \`${constant}\` — point at it`);
-        return;
-      }
-      const uses = literalUses.get(value) ?? { ref: entry.ref, places: [] };
-      uses.places.push(place);
-      literalUses.set(value, uses);
     });
   }
   for (const { ref, places } of literalUses.values()) {
@@ -1309,10 +1643,13 @@ export function resolveDefinition(
     systems: resolvedSystems,
     systemsAlias,
     statics,
+    gradients,
+    paletteOrder,
     sections,
     roles,
     groupDescriptions,
     warnings,
+    problems,
     probed,
   };
 }

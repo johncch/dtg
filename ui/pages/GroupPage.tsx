@@ -1,13 +1,10 @@
 import { Fragment, useMemo, type ReactNode } from "react";
-import type { RefTarget } from "../../src/resolve.js";
+import { mixesKinds, throughTransparent, type RefTarget } from "../../src/resolve.js";
 import type { Snapshot, SnapshotRole } from "../../src/snapshot.js";
-import { isOpaque } from "../../src/color-math.js";
-import { ColorTip } from "../ColorTip.js";
-import { paintCss } from "../paint.js";
-import { Popup } from "../Popup.js";
-import { EDITABLE } from "../mode.js";
-import { sourcesFor, TargetValueEditor } from "../picker/ValueEditor.js";
-import { entryRowProps } from "../EntryRow.js";
+import type { EditTarget } from "../../src/edit.js";
+import { ColorChip } from "../ColorChip.js";
+import { Alert } from "../Alert.js";
+import { ControlsCell, ControlsHead, entryRowProps } from "../EntryRow.js";
 import { NewRoleRow, RoleDuplicate, RoleGrip, roleUsers, RoleGroupName, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
 import { Link, useScrollToHash } from "../router.js";
 import { INHERIT, rolePath } from "../../src/selector.js";
@@ -25,10 +22,12 @@ export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: stri
       </h1>
       {snapshot.groupNotes.roles[group] && <p className="note">{snapshot.groupNotes.roles[group]}</p>}
       <p className="sub">{roles.length} roles</p>
-      <table>
+      <MixedRoles roles={roles} />
+      <table className="roles-table">
         <thead>
           <tr>
             <th>Role</th>
+            <ControlsHead />
             {snapshot.modes.map((mode) => (
               <th key={mode}>{mode}</th>
             ))}
@@ -38,7 +37,7 @@ export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: stri
           {roles.map((role) => (
             <RoleRow key={role.role} snapshot={snapshot} role={role} siblings={roles} users={users} onGroupPage id={role.role} targeted={role.role === hash} />
           ))}
-          <NewRoleRow siblings={roles} columns={snapshot.modes.length + 1} />
+          <NewRoleRow siblings={roles} columns={snapshot.modes.length + 2} />
         </tbody>
       </table>
     </>
@@ -62,10 +61,12 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
       <p className="sub">
         {shown.length} roles{named > 0 ? ` in ${named} ${named === 1 ? "group" : "groups"}` : ""}
       </p>
-      <table>
+      <MixedRoles roles={shown} />
+      <table className="roles-table">
         <thead>
           <tr>
             <th>Role</th>
+            <ControlsHead />
             {snapshot.modes.map((mode) => (
               <th key={mode}>{mode}</th>
             ))}
@@ -78,7 +79,7 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
               <Fragment key={group}>
                 {group !== "" && (
                   <tr className="group-row">
-                    <td colSpan={snapshot.modes.length + 1}>
+                    <td colSpan={snapshot.modes.length + 2}>
                       <Link to={{ page: "group", name: group }}>{group}</Link>
                       {snapshot.groupNotes.roles[group] && <div className="role-note group-note">{snapshot.groupNotes.roles[group]}</div>}
                     </td>
@@ -95,13 +96,31 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
                     targeted={group === "" && role.role === hash}
                   />
                 ))}
-                <NewRoleRow siblings={inGroup} columns={snapshot.modes.length + 1} />
+                <NewRoleRow siblings={inGroup} columns={snapshot.modes.length + 2} />
               </Fragment>
             );
           })}
         </tbody>
       </table>
     </>
+  );
+}
+
+/** The roles on a page that are a gradient in some modes and a color in others, which keeps the definition from being saved. */
+function MixedRoles({ roles }: { roles: SnapshotRole[] }) {
+  const mixed = roles.filter((role) => mixesKinds(role.perMode));
+  if (mixed.length === 0) return null;
+  return (
+    <Alert className="page-alert">
+      <strong>Gradient in some modes, color in others:</strong>{" "}
+      {mixed.map((role, index) => (
+        <Fragment key={rolePath(role)}>
+          {index > 0 && ", "}
+          <code>{rolePath(role)}</code>
+        </Fragment>
+      ))}
+      . Make each one or the other to save.
+    </Alert>
   );
 }
 
@@ -131,97 +150,46 @@ function RoleRow({
         <div className="entry-head">
           <RoleGrip role={role} siblings={siblings} />
           <RoleName role={role} roles={snapshot.roles} onGroupPage={onGroupPage} />
-          <span className="entry-actions">
-            <RoleDuplicate role={role} siblings={siblings} />
-            <RoleRemove role={role} roles={snapshot.roles} users={users.get(rolePath(role)) ?? []} />
-          </span>
         </div>
         {role.note && <div className="role-note">{role.note}</div>}
       </td>
+      <ControlsCell>
+        <RoleRemove role={role} roles={snapshot.roles} users={users.get(rolePath(role)) ?? []} />
+        <RoleDuplicate role={role} siblings={siblings} />
+      </ControlsCell>
       {role.perMode.map((entry, index) => {
         const parent = snapshot.modeDetails[index].extends;
         const trail = refTrail(snapshot, entry, index);
         const trailText = <code>{trail.join(" → ")}</code>;
         const inheritedNote = entry.inherited && <span className="muted">inherited from {parent}</span>;
-        if (!EDITABLE) {
-          return (
-            <td key={index}>
-              <ColorTip
-                color={entry.color}
-                reference={
-                  <>
-                    <RefLink snapshot={snapshot} target={entry.target}>
-                      {trailText}
-                    </RefLink>
-                    {inheritedNote}
-                  </>
-                }
-              >
-                <span className={entry.inherited ? "chip chip-inherited" : "chip"}>
-                  <span className={isOpaque(entry.color) ? "swatch" : "swatch swatch-alpha"}>
-                    <span className="swatch-color" style={{ background: paintCss(entry.color) }} />
-                  </span>
-                  <code>{entry.ref}</code>
-                </span>
-              </ColorTip>
-            </td>
-          );
-        }
+        const target: EditTarget = { kind: "ref", section: role.section, role: rolePath(role), mode: index };
         return (
           <td key={index}>
-            <Popup
-              title="Edit ref"
-              className={entry.inherited ? "chip chip-editable chip-inherited" : "chip chip-editable"}
-              label={
+            <ColorChip
+              color={entry.kind === "gradient" ? entry : entry.color}
+              label={entry.ref}
+              value={entry.inherited ? INHERIT : entry.ref}
+              className={entry.inherited ? "chip-inherited" : undefined}
+              edit={target}
+              reference={
                 <>
-                  <span className={isOpaque(entry.color) ? "swatch" : "swatch swatch-alpha"}>
-                    <span className="swatch-color" style={{ background: paintCss(entry.color) }} />
-                  </span>
-                  <code>{entry.ref}</code>
+                  <RefLink snapshot={snapshot} target={entry.target}>
+                    {trailText}
+                  </RefLink>
+                  {inheritedNote}
                 </>
               }
-              focus={entry.target.kind === "role" && !entry.inherited ? "field" : "panel"}
-              wrap={(button, open) => (
-                <ColorTip
-                  color={entry.color}
-                  suppressed={open}
-                  reference={
-                    <>
-                      <RefLink snapshot={snapshot} target={entry.target}>
-                        {trailText}
-                      </RefLink>
-                      {inheritedNote}
-                    </>
-                  }
-                >
-                  {button}
-                </ColorTip>
-              )}
-            >
-              {(panel) => (
-                <TargetValueEditor
-                  target={{
-                    kind: "ref",
-                    section: role.section,
-                    role: rolePath(role),
-                    mode: index,
-                  }}
-                  value={entry.inherited ? INHERIT : entry.ref}
-                  color={entry.color}
-                  sources={sourcesFor({ kind: "ref", section: role.section, role: rolePath(role), mode: index })}
-                  constants={snapshot.constants}
-                  systems={snapshot.systems}
-                  roles={snapshot.roles
-                    .filter((other) => other !== role)
-                    .map((other) => ({ path: rolePath(other), color: other.perMode[index].color }))}
-                  transparent
-                  inherits={
-                    parent == null ? null : { mode: parent, ref: role.perMode[snapshot.modes.indexOf(parent)].ref }
-                  }
-                  panel={panel}
-                />
-              )}
-            </Popup>
+              editor={{
+                paletteGradients: snapshot.gradients,
+                systems: snapshot.systems,
+                roles: snapshot.roles.flatMap((other) => {
+                  const pointed = other.perMode[index];
+                  return other !== role ? [{ path: rolePath(other), color: pointed.kind === "color" ? pointed.color : pointed }] : [];
+                }),
+                transparent: true,
+                inherits: parent == null ? null : { mode: parent, ref: role.perMode[snapshot.modes.indexOf(parent)].ref },
+              }}
+            />
           </td>
         );
       })}
@@ -232,20 +200,20 @@ function RoleRow({
 /** The ref, then each ref it leads to through other roles, down to the step or constant the color comes from. */
 function refTrail(snapshot: Snapshot, entry: { ref: string; target: RefTarget }, mode: number): string[] {
   const trail = [entry.ref];
-  let target = entry.target;
+  let target = throughTransparent(entry.target);
   while (target.kind === "role") {
     const { group, role } = target;
     const next = snapshot.roles.find((candidate) => candidate.group === group && candidate.role === role)?.perMode[mode];
     if (!next) break;
     trail.push(next.ref);
-    target = next.target;
+    target = throughTransparent(next.target);
   }
   return trail;
 }
 
 function RefLink({
   snapshot,
-  target,
+  target: written,
   onFollow,
   children,
 }: {
@@ -254,6 +222,7 @@ function RefLink({
   onFollow?: () => void;
   children: ReactNode;
 }) {
+  const target = throughTransparent(written);
   if (target.kind === "role") {
     const section = snapshot.roles.find((role) => role.group === target.group && role.role === target.role)?.section;
     return (
@@ -269,7 +238,7 @@ function RefLink({
       </Link>
     );
   }
-  if (target.kind === "literal") return <>{children}</>;
+  if (target.kind === "literal" || target.kind === "gradient") return <>{children}</>;
   const step = snapshot.systems
     .find((system) => system.system === target.system)
     ?.steps.find((candidate) => candidate.selector === target.selector);

@@ -42,7 +42,7 @@ describe("golden output", () => {
     const kinds = new Set(
       resolved.roles.flatMap((r) => r.perMode.map((e) => e.target.kind)),
     );
-    assert.deepEqual([...kinds].sort(), ["constant", "role", "step"]);
+    assert.deepEqual([...kinds].sort(), ["constant", "role", "step", "transparent"]);
     const refs = resolved.roles.flatMap((r) => r.perMode.map((e) => e.ref));
     assert.ok(refs.some((r) => r.endsWith(" tint)")));
     assert.ok(refs.some((r) => r.startsWith("transparent(")));

@@ -3,9 +3,8 @@
 **Read `docs/how-this-works.md` before changing anything.** It is the design
 doc: the grammar, the algorithms, and — most importantly — the decisions
 that were settled in long-form conversation with Chong Han and should not be
-re-litigated (no middle scale tier, no role flags, no literals in the
-semantic tier, demand-driven primitives, deterministic generation, explicit
-over inferred). `README.md` is the user-facing summary of the same system.
+re-litigated (no middle scale tier, no role flags, demand-driven primitives,
+deterministic generation, explicit over inferred). `README.md` is the user-facing summary of the same system.
 
 Working notes:
 

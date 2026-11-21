@@ -1,12 +1,14 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import type { RoleTarget } from "../src/edit.js";
+import { colorRefsOf, throughTransparent } from "../src/resolve.js";
 import { INHERIT, rolePath } from "../src/selector.js";
 import type { Snapshot, SnapshotRole } from "../src/snapshot.js";
 import { AddRow, copyName, ENTRY_NAME, ENTRY_NAME_RULE, EntryDuplicate, EntryGrip, EntryName, EntryRemove, GroupName, openNameOf, pathProblem } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { firstError, useTrying } from "./preview.js";
 import { navigate } from "./router.js";
+import { Alert } from "./Alert.js";
 
 const targetOf = (role: Pick<SnapshotRole, "section" | "group" | "role">): RoleTarget => ({
   kind: "role",
@@ -92,7 +94,7 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
           }}
         />
       </label>
-      {(problem ?? refused) && <p className="ref-error ref-problem">{problem ?? refused}</p>}
+      {(problem ?? refused) && <Alert className="inline-alert">{problem ?? refused}</Alert>}
       <div className="system-form-actions">
         <button type="submit" className="btn btn-primary" disabled={name === "" || problem != null}>
           Add group
@@ -162,11 +164,12 @@ export function RoleDuplicate({ role, siblings }: { role: SnapshotRole; siblings
   );
 }
 
-/** The roles whose refs point at each role, plain or through `transparent(…)`, by the path pointed at. */
+/** The roles whose refs point at each role, plain, through `transparent(…)` or as a gradient's stop, by the path pointed at. */
 export function roleUsers(roles: SnapshotRole[]): Map<string, string[]> {
   const users = new Map<string, string[]>();
   for (const role of roles) {
-    for (const pointed of new Set(role.perMode.map((entry) => /^transparent\(\s*(\S+)\s/.exec(entry.ref)?.[1] ?? entry.ref))) {
+    const targets = role.perMode.flatMap((entry) => [entry.target, ...colorRefsOf(entry).map((ref) => ref.target)]).map(throughTransparent);
+    for (const pointed of new Set(targets.flatMap((target) => (target.kind === "role" ? [target.group ? `${target.group}.${target.role}` : target.role] : [])))) {
       users.set(pointed, [...(users.get(pointed) ?? []), rolePath(role)]);
     }
   }

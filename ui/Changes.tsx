@@ -36,7 +36,7 @@ function isTextField(target: EventTarget | null): boolean {
  * the edits, drop them all, or write them to the definition file.
  */
 export function Changes({ working }: { working: Snapshot }) {
-  const { changes, undo, redo, modes } = working;
+  const { changes, undo, redo, modes, problems } = working;
   const describeEdit = (edit: Edit) => {
     const name = nameOf(edit.target, modes);
     if (edit.action === "rename") return `rename ${name} to ${edit.name}`;
@@ -120,7 +120,12 @@ export function Changes({ working }: { working: Snapshot }) {
             discard
           </button>
           {store.save ? (
-            <button className="btn btn-small changes-save" onClick={() => run("save")}>
+            <button
+              className="btn btn-small changes-save"
+              disabled={problems.length > 0}
+              title={problems.length > 0 ? "Fix what is listed below to save" : undefined}
+              onClick={() => run("save")}
+            >
               save
             </button>
           ) : (
@@ -128,6 +133,11 @@ export function Changes({ working }: { working: Snapshot }) {
           )}
         </div>
       )}
+      {problems.map((problem) => (
+        <p key={problem} className="changes-error">
+          {problem}
+        </p>
+      ))}
       {failure && (
         <p className="changes-error">
           Could not {failure.step}: {failure.message}

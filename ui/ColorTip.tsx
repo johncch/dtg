@@ -12,8 +12,10 @@ import {
   toOklab,
   type Color,
 } from "../src/color-math.js";
+import { gradientCss, stopPositions } from "../src/emit.js";
+import type { ResolvedGradientRef } from "../src/resolve.js";
 import { useColorName } from "./names.js";
-import { paintCss } from "./paint.js";
+import { isGradient, paintCss, paintIsOpaque, type Paint } from "./paint.js";
 
 const trim = (n: number, digits: number) => String(Number(n.toFixed(digits)));
 
@@ -36,7 +38,7 @@ const REACH_LABEL: Record<Reach["where"], string> = {
 
 const INSIDE_INSET = 128;
 
-/** Hovering the child shows the color large, with its OKLCH value and which displays can show it. */
+/** Hovering the child shows the color large, with its OKLCH value and which displays can show it; a gradient large, with its stops. */
 export function ColorTip({
   color,
   reference,
@@ -45,7 +47,7 @@ export function ColorTip({
   inside = false,
   children,
 }: {
-  color: Color;
+  color: Paint;
   /** Shown under the color's name: the ref it comes from, where it has one. */
   reference?: ReactNode;
   /** Keeps the tooltip shut while something else, like the picker, is open on the same element. */
@@ -110,8 +112,40 @@ function srgbFormsOf(color: Color): { hex: string; rgb: string; hsl: string } {
   };
 }
 
+/** What is known of a swatch, laid out the same for a color and for a gradient: it large, then where it comes from and what it is made of. */
+export function ColorFacts({ color, reference }: { color: Paint; reference?: ReactNode }) {
+  return isGradient(color) ? <GradientFacts gradient={color} reference={reference} /> : <SolidFacts color={color} reference={reference} />;
+}
+
+/** The gradient large, with where it comes from, the CSS it draws as, and each stop with its place along the line. */
+function GradientFacts({ gradient, reference }: { gradient: ResolvedGradientRef; reference?: ReactNode }) {
+  const places = stopPositions(gradient.stops);
+  return (
+    <div className="color-facts">
+      {reference && <div className="color-facts-head">{reference}</div>}
+      <div className="color-facts-body">
+        <div className={paintIsOpaque(gradient) ? "tip-swatch" : "tip-swatch tip-swatch-translucent"}>
+          <span style={{ background: paintCss(gradient) }} />
+        </div>
+        <div className="tip-facts">
+          {gradient.stops.map((stop, index) => (
+            <span key={index} className="tip-stop">
+              <span className={isOpaque(stop.color.color) ? "swatch" : "swatch swatch-alpha"}>
+                <span className="swatch-color" style={{ background: paintCss(stop.color.color) }} />
+              </span>
+              <code>{stop.color.ref}</code>
+              <span className="muted">{trim(places[index], 1)}%</span>
+            </span>
+          ))}
+          <Copyable value={gradientCss(gradient, gradient.stops.map((stop) => formatColor(stop.color.color, "srgb")))} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** The color large, with its name, where it comes from, its values, and which displays can show it. */
-export function ColorFacts({ color, reference }: { color: Color; reference?: ReactNode }) {
+function SolidFacts({ color, reference }: { color: Color; reference?: ReactNode }) {
   const [L, C, H] = oklabToOklch(toOklab(color));
   // A gray has no hue; atan2 of two rounding errors is not worth printing.
   const hue = C < NO_HUE_BELOW_CHROMA ? 0 : H;

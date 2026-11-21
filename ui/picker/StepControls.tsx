@@ -9,7 +9,7 @@ type Constant = { kind: "constant"; path: string; opacity: number | null };
 export type Pointing = Step | Constant;
 
 /** What the ref points at, or null when it is another role or does not read as a ref. */
-export function pointingOf(ref: string, systems: SnapshotSystem[], constants: SnapshotConstant[]): Pointing | null {
+export function pointingOf(ref: string, systems: SnapshotSystem[], constants: { path: string }[]): Pointing | null {
   if (constants.some((constant) => constant.path === ref)) return { kind: "constant", path: ref, opacity: null };
   const call = parseCall(ref);
   if (!call) return null;

@@ -22,6 +22,17 @@ describe("color math", () => {
     }
   });
 
+  test("hex with an alpha reads it as the last pair, or the last digit doubled", () => {
+    const long = parseColor("#B30A0A66", "long");
+    assert.deepEqual(long.coords, parseColor("#b30a0a", "plain").coords);
+    assert.equal(long.alpha, 0x66 / 255);
+    const short = parseColor("#f008", "short");
+    assert.deepEqual(short.coords, parseColor("#ff0000", "plain").coords);
+    assert.equal(short.alpha, 0x88 / 255);
+    assert.equal(parseColor("#ff0000ff", "opaque").alpha, 1);
+    assert.throws(() => parseColor("#ff00000", "seven digits"), /cannot read/);
+  });
+
   test("alphaComposite endpoints are the ground and the layer", () => {
     const ink = hexToRgb("#001a28");
     const base = hexToRgb("#fafdff");
@@ -46,8 +57,9 @@ describe("color math", () => {
     assert.ok(Math.hypot(a, b) > NO_HUE_BELOW_CHROMA);
   });
   test("a gray is written back with hue 0, whatever hue it was written with", () => {
-    const lab = toOklab(parseColor("oklch(0.7 0 200)", "ctx"));
-    assert.equal(formatAuthored(lab, 0.5), "oklch(0.7 0 0 / 0.5)");
+    // Brighter than white, so sRGB cannot hold it and it is written as oklch().
+    const lab = toOklab(parseColor("oklch(1.2 0 200)", "ctx"));
+    assert.equal(formatAuthored(lab, 0.5), "oklch(1.2 0 0 / 0.5)");
   });
   test("the mix space decides what 50% black over white is", () => {
     const black = parseColor("#000000", "black");

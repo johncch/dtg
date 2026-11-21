@@ -16,7 +16,7 @@ type ToneParams = {
 export const tone: Algorithm = {
   name: "tone",
   description:
-    "Experimental. A palette whose selector is tone, 0 (black) to 100 (white): CIELAB lightness, as in Material 3's tonal palettes. Every palette's 40 is equally light, so the contrast between two tones is the same whatever their hue — tone 40 is about 6.5:1 against white, tone 50 about 4.5:1. The anchor lends its hue and, unless `chroma` is given, its chroma; `hue` turns away from the anchor's. Where a tone cannot hold the chroma inside the gamut, it gets the most it can.",
+    "Experimental. A light-to-dark ramp where the same step is equally light in every hue, as in Material 3.",
 
   params: {
     anchor: { kind: "color" },

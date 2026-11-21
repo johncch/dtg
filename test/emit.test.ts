@@ -438,6 +438,131 @@ roles:
   });
 });
 
+describe("transparent() over a role, in a mode that extends another", () => {
+  const source = (card: string) => `
+dtg: 1
+modes:
+  light: { scheme: light }
+  dark: { scheme: dark }
+  dark-hc: { extends: dark }
+palette: { ink: "#313133", paper: "#ffffff", loud: "#000000" }
+roles:
+  surface:
+    card: ${card}
+    scrim: [transparent(surface.card 80), transparent(surface.card 80)]
+`;
+  const blockFor = (css: string, selector: string) => css.split("\n\n").find((block) => block.startsWith(`${selector} {`)) ?? "";
+
+  test("the value is written again where the role under it moved", () => {
+    const moved = resolveDefinition(source("[paper, ink, loud]"));
+    assert.ok(blockFor(emitCss(moved, "plain", "nested"), ".dark, .dark-hc").includes("--surface-scrim: rgba(49, 49, 51, 0.8);"));
+    assert.ok(blockFor(emitCss(moved, "plain", "nested"), ".dark-hc").includes("--surface-scrim: rgba(0, 0, 0, 0.8);"));
+  });
+
+  test("and left to the parent's where it did not", () => {
+    const still = resolveDefinition(source("[paper, ink]"));
+    assert.ok(!emitCss(still, "plain", "nested").includes("--surface-scrim: rgba(0, 0, 0, 0.8);"));
+    assert.equal(emitCss(still, "plain", "nested").split("--surface-scrim:").length, 3);
+  });
+
+  test("DTCG writes a value for every mode", () => {
+    const moved = resolveDefinition(source("[paper, ink, loud]"));
+    const scrim = (emitDtcg(moved) as any).roles.surface.scrim;
+    assert.equal(scrim.$value.alpha, 0.8);
+    assert.equal(scrim.$value.hex, "#ffffff");
+    assert.ok(!JSON.stringify(scrim).includes("{roles.surface.card}"));
+  });
+});
+
+describe("gradient roles", () => {
+  const source = `
+dtg: 1
+modes:
+  light: { scheme: light }
+  dark: { scheme: dark }
+  dark-hc: { extends: dark }
+palette: { ink: "#313133", paper: "#ffffff", loud: "#000000", vivid: "color(display-p3 1 0 0)" }
+systems:
+  sky:
+    algorithm: tint
+    params: { base: "#fafdff", tint: "#001a28" }
+roles:
+  surface:
+    card: [paper, ink, loud]
+    hero:
+      - gradient(surface.card sky(3) 40% transparent(vivid 50) 100% angle=90deg)
+      - gradient(surface.card transparent(surface.card 50))
+    echo: [surface.hero, surface.hero]
+`;
+  const resolved = resolveDefinition(source);
+  const blockFor = (css: string, selector: string) => css.split("\n\n").find((block) => block.startsWith(`${selector} {`)) ?? "";
+
+  test("css keeps each stop's reference and writes positions as given", () => {
+    const css = emitCss(resolved, "plain", "nested");
+    assert.ok(css.includes("--surface-hero: linear-gradient(90deg, var(--surface-card), var(--color-sky-3) 40%, rgba(255, 52, 40, 0.5) 100%);"));
+    assert.ok(css.includes("--surface-echo: var(--surface-hero);"));
+    assert.ok(css.includes("--color-sky-3: #f3f6f9;"));
+  });
+
+  test("a stop taken from a role through transparent() is written again where the role moved", () => {
+    const css = emitCss(resolved, "plain", "nested");
+    assert.ok(blockFor(css, ".dark, .dark-hc").includes("--surface-hero: linear-gradient(180deg, var(--surface-card), rgba(49, 49, 51, 0.5));"));
+    assert.ok(blockFor(css, ".dark-hc").includes("--surface-hero: linear-gradient(180deg, var(--surface-card), rgba(0, 0, 0, 0.5));"));
+    assert.ok(!blockFor(css, ".dark-hc").includes("--surface-echo"));
+  });
+
+  test("a gradient role taken through transparent() is written again where that role moved", () => {
+    const faded = resolveDefinition(source.replace("    echo:", "    veil: [transparent(surface.hero 50), transparent(surface.hero 50)]\n    echo:"));
+    const css = emitCss(faded, "plain", "nested");
+    assert.ok(blockFor(css, ".dark, .dark-hc").includes("--surface-veil: linear-gradient(180deg, rgba(49, 49, 51, 0.5), rgba(49, 49, 51, 0.25));"));
+    assert.ok(blockFor(css, ".dark-hc").includes("--surface-veil: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.25));"));
+    const veil = (emitDtcg(faded) as any).roles.surface.veil;
+    assert.equal(veil.$type, "gradient");
+    assert.equal(veil.$value[0].color.alpha, 0.5);
+  });
+
+  test("so is a gradient role restyled by gradient()", () => {
+    const restyled = resolveDefinition(source.replace("    echo:", "    turned: [gradient(surface.hero angle=10deg), gradient(surface.hero angle=10deg)]\n    echo:"));
+    const css = emitCss(restyled, "plain", "nested");
+    assert.ok(blockFor(css, ".dark, .dark-hc").includes("--surface-turned: linear-gradient(10deg, var(--surface-card), rgba(49, 49, 51, 0.5));"));
+    assert.ok(blockFor(css, ".dark-hc").includes("--surface-turned: linear-gradient(10deg, var(--surface-card), rgba(0, 0, 0, 0.5));"));
+  });
+
+  test("the wide-gamut layer repeats a gradient holding a color outside sRGB", () => {
+    const layer = emitCss(resolved, "plain", "nested").split("@supports")[1];
+    assert.ok(layer.includes("--surface-hero: linear-gradient(90deg, var(--surface-card), var(--color-sky-3) 40%, color(display-p3 1 0 0 / 0.5) 100%);"));
+    assert.equal(layer.split("--surface-hero").length, 2);
+  });
+
+  test("scss writes every stop as its color", () => {
+    assert.ok(emitScss(resolved).includes("$light-surface-hero: linear-gradient(90deg, #ffffff, #f3f6f9 40%, rgba(255, 52, 40, 0.5) 100%);"));
+  });
+
+  test("dtcg writes a gradient token with a position for every stop", () => {
+    const d = emitDtcg(resolved) as any;
+    const hero = d.roles.surface.hero;
+    assert.equal(hero.$type, "gradient");
+    assert.deepEqual(hero.$value.map((stop: any) => stop.position), [0, 0.4, 1]);
+    assert.equal(hero.$value[0].color, "{roles.surface.card}");
+    assert.equal(hero.$value[1].color, "{systems.sky.3}");
+    assert.equal(hero.$value[2].color.alpha, 0.5);
+    assert.deepEqual(hero.$extensions[NS].gradients.light, { kind: "linear", angle: 90, repeat: false, space: null });
+    assert.deepEqual(Object.keys(hero.$extensions[NS].gradients), ["light", "dark", "dark-hc"]);
+    assert.equal(d.roles.surface.echo.$type, "gradient");
+    assert.equal(d.roles.surface.echo.$value, "{roles.surface.hero}");
+    assert.equal(d.systems.sky["3"].$extensions[NS].id, "surface.hero[light]");
+  });
+
+  test("the tailwind format gives one a bg- utility where a color is wired into the theme", () => {
+    const css = emitCss(resolved, "tailwind", "nested");
+    assert.ok(css.includes("  --color-surface-card: var(--surface-card);"));
+    assert.ok(!css.includes("--color-surface-hero"));
+    assert.ok(css.includes("@utility bg-surface-hero {\n  background-image: var(--surface-hero);\n}"));
+    assert.ok(css.includes("@utility bg-surface-echo {\n  background-image: var(--surface-echo);\n}"));
+    assert.ok(emitCss(resolved, "tailwind", "flat").includes("@utility bg-dark-hc-surface-hero {\n  background-image: var(--dark-hc-surface-hero);\n}"));
+  });
+});
+
 describe("a mode that extends a mode other than the first", () => {
   const hc = resolveDefinition(`
 dtg: 1

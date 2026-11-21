@@ -9,7 +9,7 @@ import { composite, type Color } from "../color-math.js";
 export const tint: Algorithm = {
   name: "tint",
   description:
-    "A fixed tint composited over a base color. The selector is the tint's alpha in percent — `15` is 15% tint over the base, so the token name is the recipe. Adding `tint` — `15 tint` — gives the tint alone at the same alpha, without the base, for a value that has to sit over an unknown surface.",
+    "Light washes of one color over a background.",
 
   params: {
     base: { kind: "color" },

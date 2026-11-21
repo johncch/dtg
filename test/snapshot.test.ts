@@ -50,7 +50,7 @@ describe("snapshot", () => {
       ["3", "8"],
     );
     assert.deepEqual(sky.steps[0].usedBy, [
-      { section: "roles", group: "surface", role: "canvas", mode: "light", translucent: false },
+      { section: "roles", group: "surface", role: "canvas", mode: "light" },
     ]);
   });
 

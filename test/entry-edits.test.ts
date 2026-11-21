@@ -109,6 +109,38 @@ describe("renaming and removing a role", () => {
   });
 });
 
+describe("renaming what a transparent() holds", () => {
+  const nested = SRC.replace(
+    "    echo: [surface.canvas, surface.canvas]\n",
+    "    echo: [surface.canvas, surface.canvas]\n    veil: [transparent(sky(3 tint) 50), transparent(surface.canvas 70)]\n",
+  );
+
+  test("a system's rename reaches a step inside", () => {
+    const text = edited([{ action: "rename", target: { kind: "system", path: "sky" }, name: "air" }], nested);
+    assert.ok(text.includes(`    veil: [transparent(air(3 tint) 50), transparent(surface.canvas 70)]\n`));
+  });
+
+  test("and the stops of a gradient", () => {
+    const withGradient = nested.replace("    veil:", "    wash: [gradient(sky(3) 10% ink.body angle=90deg), gradient(surface.canvas transparent(sky(8) 50))]\n    veil:");
+    const text = edited([{ action: "rename", target: { kind: "system", path: "sky" }, name: "air" }], withGradient);
+    assert.ok(text.includes(`    wash: [gradient(air(3) 10% ink.body angle=90deg), gradient(surface.canvas transparent(air(8) 50))]\n`));
+    const moved = edited([{ action: "rename", target: role("surface.canvas"), name: "page" }], withGradient);
+    assert.ok(moved.includes(`gradient(surface.page transparent(sky(8) 50))]\n`));
+  });
+
+  test("a palette color's rename reaches a palette gradient made of it", () => {
+    const withPalette = SRC.replace(`  paper: "#ffffff"\n`, `  paper: "#ffffff"\n  wash: gradient(paper ink.body 40% angle=90deg)\n`);
+    const text = edited([{ action: "rename", target: constant("paper"), name: "page" }], withPalette);
+    assert.ok(text.includes(`  page: "#ffffff"\n  wash: gradient(page ink.body 40% angle=90deg)\n`));
+    assert.ok(text.includes(`primary: [ink.body, page]`));
+  });
+
+  test("a role's rename reaches a role inside", () => {
+    const text = edited([{ action: "rename", target: role("surface.canvas"), name: "page" }], nested);
+    assert.ok(text.includes(`    veil: [transparent(sky(3 tint) 50), transparent(surface.page 70)]\n`));
+  });
+});
+
 describe("moving a role within its group", () => {
   test("moved first, it still follows what the group says about itself", () => {
     const text = edited([{ action: "move", target: role("label.faded"), after: null }]);

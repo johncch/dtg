@@ -9,7 +9,8 @@ import {
   publicPath,
   publicSystemName,
   type Lineage,
-  type RefTarget,
+  type ResolvedGradientRef,
+  type ResolvedRef,
   type ResolvedColorParam,
   type ResolvedCurve,
   type ResolvedDefinition,
@@ -44,8 +45,14 @@ export type Snapshot = {
   /** Index-parallel to `modes`. */
   modeDetails: SnapshotMode[];
   warnings: string[];
+  /** What keeps the definition from being saved or written out, though it draws. */
+  problems: string[];
   systems: SnapshotSystem[];
   constants: SnapshotConstant[];
+  /** The palette's gradients, kept apart from its colors. */
+  gradients: SnapshotGradient[];
+  /** Every palette entry's path, colors and gradients together, in the order written. */
+  paletteOrder: string[];
   roles: SnapshotRole[];
   /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role groups. */
   groupNotes: { systems: Record<string, string>; palette: Record<string, string>; roles: Record<string, string> };
@@ -91,7 +98,10 @@ const LIGHT_FROM = 0.6;
 /** The median lightness of the mode's opaque role colors, light at 0.6 and above. Light when there is nothing to go on. */
 function inferScheme(resolved: ResolvedDefinition, modeIndex: number): ModeScheme {
   const lightness = resolved.roles
-    .map((role) => role.perMode[modeIndex].color)
+    .flatMap((role) => {
+      const entry = role.perMode[modeIndex];
+      return entry.kind === "color" ? [entry.color] : [];
+    })
     .filter((color) => color.alpha === 1)
     .map((color) => toOklab(color)[0])
     .sort((a, b) => a - b);
@@ -115,7 +125,11 @@ export function resolveBackground(written: string, resolved: ResolvedDefinition,
   const constant = resolved.statics.find((candidate) => candidate.path === written);
   if (constant) return constant.color;
   const role = resolved.roles.find((candidate) => rolePath(candidate) === written);
-  if (role) return role.perMode[modeIndex].color;
+  if (role) {
+    const entry = role.perMode[modeIndex];
+    if (entry.kind === "gradient") throw new Error(`"${written}" is a gradient — a background is a color`);
+    return entry.color;
+  }
   if (parseCall(written)) {
     const probe = resolved.probed.find((candidate) => candidate.ref === written);
     if (!probe) throw new Error(`"${written}" was not resolved`);
@@ -171,7 +185,6 @@ export type SnapshotUse = {
   group: string;
   role: string;
   mode: string;
-  translucent: boolean;
 };
 
 export type SnapshotStep = {
@@ -213,6 +226,15 @@ export type SnapshotSystem = {
   emit: string[];
 };
 
+export type SnapshotGradient = {
+  path: string;
+  cssName: string;
+  emitted: boolean;
+  written: string;
+  gradient: ResolvedGradientRef;
+  usedBy: SnapshotUse[];
+};
+
 export type SnapshotConstant = {
   path: string;
   cssName: string;
@@ -236,7 +258,7 @@ export type SnapshotRole = {
    * One entry per mode, in `modes` order. `inherited` = the role wrote
    * nothing for this mode and the ref is the one of the mode it extends.
    */
-  perMode: { ref: string; target: RefTarget; color: Color; inherited: boolean }[];
+  perMode: (ResolvedRef & { inherited: boolean })[];
 };
 
 export function buildSnapshot({
@@ -287,6 +309,7 @@ export function buildSnapshot({
     modes: resolved.modes,
     modeDetails,
     warnings: [...resolved.warnings, ...backgroundWarnings],
+    problems: resolved.problems,
     systems: resolved.systems.map((system) => ({
       system: system.system,
       cssName: publicSystemName(system, "css"),
@@ -311,6 +334,15 @@ export function buildSnapshot({
       })),
       emit: system.emit,
     })),
+    paletteOrder: resolved.paletteOrder,
+    gradients: resolved.gradients.map((named) => ({
+      path: named.path,
+      cssName: publicPath(named.segments, "css", "-"),
+      emitted: named.emitted,
+      written: named.written,
+      gradient: named.gradient,
+      usedBy: lineage.get(named.path) ?? [],
+    })),
     constants: resolved.statics.map((constant) => ({
       path: constant.path,
       cssName: publicPath(constant.segments, "css", "-"),
@@ -330,12 +362,7 @@ export function buildSnapshot({
       group: role.group,
       role: role.role,
       note: role.description ?? null,
-      perMode: role.perMode.map((entry, index) => ({
-        ref: entry.ref,
-        target: entry.target,
-        color: entry.color,
-        inherited: role.inherited[index],
-      })),
+      perMode: role.perMode.map((entry, index) => ({ ...entry, inherited: role.inherited[index] })),
     })),
   };
 }

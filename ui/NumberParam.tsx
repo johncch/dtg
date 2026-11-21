@@ -3,6 +3,7 @@ import type { EditTarget } from "../src/edit.js";
 import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { firstError, useTrying } from "./preview.js";
+import { Alert } from "./Alert.js";
 
 type Range = { min: number; max: number };
 
@@ -112,8 +113,8 @@ function NumberEditor({
           onChange={(event) => setText(event.target.value)}
         />
       )}
-      {!valid && <p className="ref-error">Not a number.</p>}
-      {edit && refusal && <p className="ref-error">{firstError(refusal)}</p>}
+      {!valid && <Alert className="inline-alert">Not a number.</Alert>}
+      {edit && refusal && <Alert className="inline-alert">{firstError(refusal)}</Alert>}
     </form>
   );
 }

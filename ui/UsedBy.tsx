@@ -12,11 +12,7 @@ export function UsedBy({ uses }: { uses: SnapshotUse[] }) {
           {rolePath(use)}
         </code>
       </Link>
-      <span className="muted">
-        {" "}
-        {use.mode}
-        {use.translucent ? " (translucent)" : ""}
-      </span>
+      <span className="muted"> {use.mode}</span>
     </Fragment>
   ));
 }

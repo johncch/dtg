@@ -7,6 +7,7 @@ import {
   resolveDefinition,
 } from "../dist/resolve.js";
 import { emitCss, emitDtcg } from "../dist/emit.js";
+import { readGradient, writeGradient } from "../dist/ref-functions.js";
 
 const BASE = `
 dtg: 1
@@ -71,22 +72,379 @@ s:
     assert.equal(isOpaque(r.roles[0].perMode[0].color), false);
   });
 
-  test("transparent() is a utility on constants only", () => {
+  test("transparent() takes anything that resolves to a color", () => {
     const r = withRoles(`
 s:
   d:
-    veil: [transparent(reds.dawn 20), transparent(paper 40)]
+    veil: [transparent(reds.dawn 20), transparent(generated.sky(3) 40)]
+    ink: [transparent(#000000 50), transparent(oklch(0 0 0) 50)]
+    faint: [transparent(generated.sky(3 tint) 50), transparent(transparent(paper 50) 50)]
 `);
-    assert.equal(formatColor(r.roles[0].perMode[0].color, "srgb"), "rgba(250, 0, 0, 0.2)");
+    const [veil, ink, faint] = r.roles;
+    assert.equal(formatColor(veil.perMode[0].color, "srgb"), "rgba(250, 0, 0, 0.2)");
+    assert.equal(formatColor(veil.perMode[1].color, "srgb"), "rgba(243, 246, 249, 0.4)");
+    assert.deepEqual(veil.perMode[1].target, {
+      kind: "transparent",
+      of: { kind: "step", system: "generated.sky", selector: "3" },
+      alpha: 40,
+    });
+    assert.equal(formatColor(ink.perMode[0].color, "srgb"), "rgba(0, 0, 0, 0.5)");
+    assert.equal(formatColor(ink.perMode[1].color, "srgb"), "rgba(0, 0, 0, 0.5)");
+    assert.equal(faint.perMode[0].color.alpha, 0.015);
+    assert.equal(faint.perMode[1].color.alpha, 0.25);
+  });
+
+  test("transparent() over a role follows it mode by mode", () => {
+    const r = withRoles(`
+s:
+  d:
+    card: [paper, reds.rose]
+    scrim: [transparent(d.card 80), transparent(d.card 80)]
+`);
+    const scrim = r.roles[1];
+    assert.equal(formatColor(scrim.perMode[0].color, "srgb"), "rgba(255, 255, 255, 0.8)");
+    assert.equal(formatColor(scrim.perMode[1].color, "srgb"), "rgba(255, 0, 0, 0.8)");
     assert.throws(
       () =>
         withRoles(`
 s:
   d:
-    veil: [transparent(generated.sky(3)), transparent(paper 40)]
+    a: [transparent(d.b 50), paper]
+    b: [transparent(d.a 50), paper]
 `),
-      /takes a constant and an opacity/,
+      /circular role reference: d\.a → d\.b → d\.a/,
     );
+  });
+
+  test("transparent() emits its value and demands nothing", () => {
+    const r = resolveDefinition(`
+dtg: 1
+modes: [light]
+palette:
+  quiet:
+    emit: false
+    mist: "#eeeeee"
+systems:
+  sky:
+    algorithm: tint
+    params: { base: "#fafdff", tint: "#001a28" }
+roles:
+  d:
+    veil: [transparent(sky(3) 40)]
+    haze: [transparent(quiet.mist 40)]
+`);
+    assert.deepEqual(r.systems[0].steps, []);
+    assert.equal(r.statics[0].emitted, false);
+    const css = emitCss(r, "plain");
+    assert.ok(css.includes("--d-veil: rgba(243, 246, 249, 0.4);"));
+    assert.ok(!css.includes("--color-sky-3"));
+    assert.ok(!css.includes("--color-quiet-mist"));
+  });
+
+  test("transparent() without something to fade and an opacity says what it takes", () => {
+    for (const ref of ["transparent(generated.sky(3))", "transparent(paper 40 50)"]) {
+      assert.throws(
+        () =>
+          withRoles(`
+s:
+  d:
+    veil: [${ref}, transparent(paper 40)]
+`),
+        /takes a color or a gradient, then an opacity/,
+      );
+    }
+  });
+
+  test("gradient() lays colors along a line", () => {
+    const r = withRoles(`
+s:
+  d:
+    card: [paper, reds.rose]
+    hero:
+      - gradient(paper generated.sky(3) 40% transparent(reds.rose 50) 100% angle=90deg)
+      - "gradient(d.card
+          #000000)"
+    echo: [d.hero, d.hero]
+`);
+    const [, hero, echo] = r.roles;
+    const light = hero.perMode[0];
+    assert.equal(light.kind, "gradient");
+    if (light.kind !== "gradient") return;
+    assert.deepEqual(light.geometry, { kind: "linear", angle: 90 });
+    assert.deepEqual(light.target, { kind: "gradient", of: null });
+    assert.deepEqual(light.stops.map((stop) => stop.position), [null, 40, 100]);
+    assert.deepEqual(light.stops.map((stop) => stop.color.target.kind), ["constant", "step", "transparent"]);
+    const dark = hero.perMode[1];
+    if (dark.kind !== "gradient") return assert.fail("dark is a gradient too");
+    assert.deepEqual(dark.geometry, { kind: "linear", angle: 180 });
+    assert.equal(formatColor(dark.stops[0].color.color, "srgb"), "#ff0000");
+    assert.equal(echo.perMode[0].kind, "gradient");
+    assert.equal(echo.perMode[0].target.kind, "role");
+    assert.deepEqual(r.systems[0].steps.map((step) => step.selector), ["3"]);
+  });
+
+  test("gradient() goes out from a point or around one, repeats, and names its space", () => {
+    const r = resolveDefinition(`
+dtg: 1
+modes: [light]
+palette: { paper: "#ffffff", rose: "#ff0000" }
+roles:
+  d:
+    spot: [gradient(paper rose 80% kind=radial shape=circle size=closest-side x=30% y=20%)]
+    glow: [gradient(paper rose kind=radial)]
+    dial: [gradient(paper rose paper kind=conic angle=90deg x=25%)]
+    spin: [gradient(paper rose kind=conic)]
+    bars: [gradient(paper 0% rose 10% repeat=true space=oklch angle=45deg)]
+    veil: [transparent(d.spot 50)]
+`);
+    const css = emitCss(r, "plain");
+    for (const line of [
+      "--d-spot: radial-gradient(circle closest-side at 30% 20%, var(--color-paper), var(--color-rose) 80%);",
+      "--d-glow: radial-gradient(ellipse farthest-corner at 50% 50%, var(--color-paper), var(--color-rose));",
+      "--d-dial: conic-gradient(from 90deg at 25% 50%, var(--color-paper), var(--color-rose), var(--color-paper));",
+      "--d-spin: conic-gradient(from 0deg at 50% 50%, var(--color-paper), var(--color-rose));",
+      "--d-bars: repeating-linear-gradient(45deg in oklch, var(--color-paper) 0%, var(--color-rose) 10%);",
+      "--d-veil: radial-gradient(circle closest-side at 30% 20%, rgba(255, 255, 255, 0.5), rgba(255, 0, 0, 0.5) 80%);",
+    ]) {
+      assert.ok(css.includes(line), line);
+    }
+    const spot = (emitDtcg(r) as any).roles.d.spot.$extensions["com.fifthrevision.dtg"].gradients.light;
+    assert.deepEqual(spot, { kind: "radial", shape: "circle", size: "closest-side", x: 30, y: 20, repeat: false, space: null });
+  });
+
+  describe("a gradient named in the palette", () => {
+    const source = (palette: string, roles: string) => `
+dtg: 1
+modes: [light, dark]
+palette:
+  paper: "#ffffff"
+  rose: "#ff0000"
+  quiet:
+    emit: false
+    mist: "#eeeeee"
+    haze: gradient(quiet.mist paper)
+${palette}
+systems:
+  sky:
+    algorithm: tint
+    params: { base: "#fafdff", tint: "#001a28" }
+roles:
+  d:
+${roles}
+`;
+
+    test("is pointed at by its path and restyled by gradient()", () => {
+      const r = resolveDefinition(
+        source(
+          `  brand: gradient(paper rose 60% transparent(rose 20) kind=radial shape=circle x=30% repeat=true)`,
+          `    hero: [brand, brand]
+    banner: [gradient(brand x=10% repeat=false), gradient(brand kind=linear angle=45deg)]
+    veil: [transparent(brand 50), transparent(gradient(brand kind=conic) 50)]`,
+        ),
+      );
+      assert.deepEqual(r.problems, []);
+      assert.deepEqual(r.gradients.map((named) => [named.path, named.emitted]), [["quiet.haze", false], ["brand", true]]);
+      assert.equal(r.statics.find((constant) => constant.path === "quiet.mist")?.emitted, false);
+      const [hero, banner, veil] = r.roles;
+      assert.deepEqual(hero.perMode[0].target, { kind: "constant", name: "brand" });
+      const [kept, changed] = banner.perMode;
+      if (kept.kind !== "gradient" || changed.kind !== "gradient") return assert.fail("both are gradients");
+      assert.deepEqual(kept.geometry, { kind: "radial", shape: "circle", size: "farthest-corner", x: 10, y: 50 });
+      assert.equal(kept.repeat, false);
+      assert.deepEqual(changed.geometry, { kind: "linear", angle: 45 });
+      assert.equal(changed.repeat, true);
+      assert.deepEqual(kept.stops.map((stop) => stop.position), [null, 60, null]);
+      assert.deepEqual(kept.target, { kind: "gradient", of: { kind: "constant", name: "brand" } });
+      const css = emitCss(r, "plain");
+      for (const line of [
+        "--gradient-brand: repeating-radial-gradient(circle farthest-corner at 30% 50%, var(--color-paper), var(--color-rose) 60%, rgba(255, 0, 0, 0.2));",
+        "--d-hero: var(--gradient-brand);",
+        "--d-banner: radial-gradient(circle farthest-corner at 10% 50%, var(--color-paper), var(--color-rose) 60%, rgba(255, 0, 0, 0.2));",
+        "--d-banner: repeating-linear-gradient(45deg, var(--color-paper), var(--color-rose) 60%, rgba(255, 0, 0, 0.2));",
+        "--d-veil: repeating-radial-gradient(circle farthest-corner at 30% 50%, rgba(255, 255, 255, 0.5), rgba(255, 0, 0, 0.5) 60%, rgba(255, 0, 0, 0.1));",
+        "--d-veil: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, 0.5), rgba(255, 0, 0, 0.5) 60%, rgba(255, 0, 0, 0.1));",
+      ]) {
+        assert.ok(css.includes(line), line);
+      }
+      assert.ok(!css.includes("quiet"));
+      assert.ok(css.indexOf("--gradient-brand") > css.indexOf("--color-rose"));
+      void veil;
+    });
+
+    test("in an emit: false group, emits with its colors once a role points at it", () => {
+      const css = emitCss(resolveDefinition(source("", "    fog: [quiet.haze, quiet.haze]")), "plain");
+      assert.ok(css.includes("--color-quiet-mist: #eeeeee;"));
+      assert.ok(css.includes("--gradient-quiet-haze: linear-gradient(180deg, var(--color-quiet-mist), var(--color-paper));"));
+      assert.ok(css.includes("--d-fog: var(--gradient-quiet-haze);"));
+    });
+
+    test("is written for Tailwind and DTCG", () => {
+      const r = resolveDefinition(source("  brand: gradient(paper rose angle=90deg)", "    hero: [brand, brand]"));
+      const tailwind = emitCss(r, "tailwind");
+      assert.ok(tailwind.includes("@theme {\n  /* statics */\n  --color-paper: #ffffff;\n  --color-rose: #ff0000;\n}\n\n:root {\n  /* gradients */\n  --gradient-brand:"));
+      assert.ok(tailwind.includes("@utility bg-brand {\n  background-image: var(--gradient-brand);\n}"));
+      assert.ok(tailwind.includes("@utility bg-d-hero {\n  background-image: var(--d-hero);\n}"));
+      const d = emitDtcg(r) as any;
+      assert.equal(d.systems.static.brand.$type, "gradient");
+      assert.equal(d.systems.static.brand.$value[0].color, "{systems.static.paper}");
+      assert.deepEqual(d.systems.static.brand.$extensions["com.fifthrevision.dtg"].gradient, { kind: "linear", angle: 90, repeat: false, space: null });
+      assert.equal(d.roles.d.hero.$value, "{systems.static.brand}");
+    });
+
+    test("holds only the palette's own colors", () => {
+      const refused: [string, RegExp][] = [
+        ["gradient(paper sky(3))", /palette gradient "bad": sky\(3\) is not the palette's own/],
+        ["gradient(paper d.card)", /palette gradient "bad": d\.card is not the palette's own/],
+        ["gradient(quiet.haze angle=90deg)", /palette gradient "bad": gradient\(quiet\.haze angle=90deg\) is not the palette's own/],
+      ];
+      for (const [written, message] of refused) {
+        assert.throws(() => resolveDefinition(source(`  bad: ${written}`, "    card: [paper, rose]")), message, written);
+      }
+      assert.throws(
+        () => resolveDefinition(source("", "    card: [paper, rose]").replace('tint: "#001a28"', "tint: quiet.haze")),
+        /no constant "quiet\.haze"/,
+      );
+    });
+  });
+
+  test("a gradient's text is taken apart and written back for an editor to change one piece", () => {
+    const written = readGradient("gradient(d.card 0%  generated.sky(3 tint) transparent(reds.rose 50) 100% space=oklch angle=90deg)");
+    assert.deepEqual(written?.stops, [
+      { ref: "d.card", position: "0%" },
+      { ref: "generated.sky(3 tint)", position: null },
+      { ref: "transparent(reds.rose 50)", position: "100%" },
+    ]);
+    assert.deepEqual([...written!.named], [["space", "oklch"], ["angle", "90deg"]]);
+    assert.equal(
+      writeGradient(written!),
+      "gradient(d.card 0% generated.sky(3 tint) transparent(reds.rose 50) 100% angle=90deg space=oklch)",
+    );
+    assert.equal(writeGradient(readGradient("gradient(brand kind=radial)")!), "gradient(brand kind=radial)");
+    for (const unread of ["paper", "gradient(50% paper)", "gradient(paper angle=90deg shade)", "gradient(paper turn=1)"]) {
+      assert.equal(readGradient(unread), null, unread);
+    }
+  });
+
+  test("gradient() says what is wrong with it", () => {
+    const refused: [string, RegExp][] = [
+      ["gradient(paper)", /takes at least two colors, or one gradient to restyle — paper is a color/],
+      ["gradient(90 paper reds.rose)", /bare number 90 — a position is written 90% and follows its color, and the angle is written angle=90deg/],
+      ["gradient(90deg paper reds.rose)", /takes its angle as a named argument, after the colors — write angle=90deg/],
+      ["gradient(angle=90deg paper reds.rose)", /got paper after a named argument — positional arguments come first and named ones last/],
+      ["gradient(paper reds.rose angle=90)", /angle must be a number of degrees, as angle=90deg, got "90"/],
+      ["gradient(paper reds.rose turn=1)", /has no argument named turn — it takes kind, angle, x, y, shape, size, repeat, space/],
+      ["gradient(paper reds.rose kind=round)", /kind must be linear, radial or conic, got "round"/],
+      ["gradient(paper reds.rose shape=circle)", /takes shape when kind is radial, and this one is linear/],
+      ["gradient(paper reds.rose kind=radial angle=10deg)", /takes angle when kind is linear or conic, and this one is radial/],
+      ["gradient(paper reds.rose kind=radial x=30)", /x and y are percents, as x=30% y=20%, got "30"/],
+      ["gradient(paper reds.rose kind=radial size=big)", /size must be one of closest-side/],
+      ["gradient(paper reds.rose repeat=yes)", /repeat is true or false, got "yes"/],
+      ["gradient(paper reds.rose space=rgb)", /space must be one of srgb/],
+      ["gradient(paper reds.rose angle=1deg angle=2deg)", /got angle twice/],
+      ["gradient(10% paper reds.rose angle=90deg)", /position 10% has no color before it/],
+      ["gradient(paper 10% 20% reds.rose)", /position 20% has no color before it/],
+      ["gradient(paper d.other)", /got d\.other as a stop, and it is a gradient — a stop is a color; to restyle a gradient, give it alone/],
+      ["gradient(d.other 50%)", /got d\.other as a stop, and it is a gradient/],
+      ["gradient(paper #000000)", /an unquoted # after a space starts a YAML comment/],
+    ];
+    for (const [ref, message] of refused) {
+      assert.throws(
+        () =>
+          withRoles(`
+s:
+  d:
+    other: [gradient(paper reds.rose), gradient(paper reds.rose)]
+    bad:
+      - ${ref}
+      - gradient(paper reds.rose)
+`),
+        message,
+        ref,
+      );
+    }
+    assert.throws(
+      () => resolveDefinition(BASE.replace("  generated:", "  gradient:\n    algorithm: tint\n    params: { base: paper, tint: reds.rose }\n  generated:")),
+      /that name is taken by gradient\(\)/,
+    );
+  });
+
+  test("transparent() over a gradient fades every stop and demands nothing", () => {
+    const r = resolveDefinition(`
+dtg: 1
+modes: [light]
+palette: { paper: "#ffffff", rose: "#ff0000" }
+systems:
+  sky:
+    algorithm: tint
+    params: { base: "#fafdff", tint: "#001a28" }
+roles:
+  d:
+    hero: [gradient(paper rose 60% angle=45deg)]
+    veil: [transparent(d.hero 50)]
+    haze: [transparent(gradient(paper sky(3)) 20)]
+`);
+    const [, veil, haze] = r.roles.map((role) => role.perMode[0]);
+    if (veil.kind !== "gradient" || haze.kind !== "gradient") return assert.fail("both are gradients");
+    assert.deepEqual(veil.geometry, { kind: "linear", angle: 45 });
+    assert.deepEqual(veil.stops.map((stop) => [formatColor(stop.color.color, "srgb"), stop.position]), [
+      ["rgba(255, 255, 255, 0.5)", null],
+      ["rgba(255, 0, 0, 0.5)", 60],
+    ]);
+    assert.deepEqual(veil.target, { kind: "transparent", of: { kind: "role", group: "d", role: "hero" }, alpha: 50 });
+    assert.deepEqual(r.systems[0].steps, []);
+    const css = emitCss(r, "plain");
+    assert.ok(css.includes("--d-veil: linear-gradient(45deg, rgba(255, 255, 255, 0.5), rgba(255, 0, 0, 0.5) 60%);"));
+    assert.ok(css.includes("--d-haze: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(243, 246, 249, 0.2));"));
+  });
+
+  test("a role that is a gradient in one mode and a color in another resolves, with a problem that stops it being written", () => {
+    const r = withRoles(`
+s:
+  d:
+    hero: [gradient(paper reds.rose), paper]
+    echo: [d.hero, d.hero]
+`);
+    assert.deepEqual(r.roles[0].perMode.map((entry) => entry.kind), ["gradient", "color"]);
+    assert.deepEqual(r.roles[1].perMode.map((entry) => entry.kind), ["gradient", "color"]);
+    assert.deepEqual(r.problems, ["d.hero: modes mix a color and a gradient — a role is one or the other in every mode"]);
+    assert.throws(() => emitCss(r, "plain"), /definition errors:\n- d\.hero: modes mix a color and a gradient/);
+    assert.throws(() => emitDtcg(r), /modes mix a color and a gradient/);
+    assert.deepEqual(withRoles(`
+s:
+  d:
+    hero: [paper, paper]
+`).problems, []);
+  });
+
+  test("a number in a selector is one step however it is written", () => {
+    const r = resolveDefinition(`
+dtg: 1
+modes: [light]
+systems:
+  sky:
+    algorithm: tint
+    params: { base: "#fafdff", tint: "#001a28" }
+    emit: ["08.50"]
+    overrides: { "3.0": "#123456" }
+roles:
+  d:
+    a: [sky(3)]
+    b: [sky(3.0)]
+    c: [sky(03 tint)]
+    e: [sky(8.5)]
+`);
+    assert.deepEqual(r.systems[0].steps.map((step) => [step.selector, step.publicStep]), [
+      ["3", "3"],
+      ["3 tint", "3-tint"],
+      ["8.5", "8_5"],
+    ]);
+    assert.deepEqual(r.warnings, []);
+    assert.equal(r.roles[1].perMode[0].ref, "sky(3.0)");
+    assert.deepEqual(r.roles[1].perMode[0].target, { kind: "step", system: "sky", selector: "3" });
+    const css = emitCss(r, "plain");
+    assert.ok(css.includes("--color-sky-3: #123456;"));
+    assert.ok(css.includes("--d-b: var(--color-sky-3);"));
+    assert.ok(!css.includes("3_0"));
   });
 
   test("spacing inside a selector does not make a second step", () => {

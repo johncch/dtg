@@ -3,6 +3,7 @@ import type { EditTarget } from "../src/edit.js";
 import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { useTrying } from "./preview.js";
+import { Alert } from "./Alert.js";
 
 /** A choice param as its value; clicking it lists the options, each tried live on the page as it is picked. */
 export function ChoiceParam({
@@ -93,7 +94,7 @@ function ChoiceEditor({
           </label>
         ))}
       </div>
-      {edit && refusal && <p className="ref-error">{refusal.split("\n").find((line) => line.startsWith("- "))?.slice(2) ?? refusal}</p>}
+      {edit && refusal && <Alert className="inline-alert">{refusal.split("\n").find((line) => line.startsWith("- "))?.slice(2) ?? refusal}</Alert>}
       <button type="submit" hidden />
     </form>
   );

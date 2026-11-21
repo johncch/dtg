@@ -110,7 +110,7 @@ export function describeTarget(target: EditTarget): string {
 
 /** Unquoted, `#` starts a comment and flow punctuation ends the value; this is what can go without quotes. */
 function plainSafe(value: string): boolean {
-  return /^[A-Za-z][\w().%/ -]*$/.test(value) && !value.endsWith(" ");
+  return /^[A-Za-z][\w().%/= -]*$/.test(value) && !value.endsWith(" ");
 }
 
 /** A value as YAML source, in the quoting the value it replaces was written in where that is safe. */
@@ -619,8 +619,8 @@ function withEntryRenamed(text: string, target: EntryTarget | GroupTarget, name:
 /**
  * Every value that points at the constant `from`, with what it says once the
  * constant is `to`: a role's ref, `transparent(from …)`, or a color param.
- * For a system, every ref into it, `from(…)`; for a role, every other
- * role's ref to it, plain or `transparent(from …)`. Only where refs and params are
+ * For a system, every ref into it, `from(…)`, plain or inside
+ * `transparent(…)`; for a role, every other role's ref to it, likewise. Only where refs and params are
  * written — an `alias` or a changelog note that happens to read the same is
  * left alone. With `holds`, `from` is a group, and every value pointing at
  * something it holds is one: a path that only starts the same, into a group
@@ -643,20 +643,45 @@ function pointersAt(
   if (isSeq(node)) return node.items.flatMap((item) => pointersAt(item, keys, kind, from, to, holds));
   if (!isScalar(node) || typeof node.value !== "string" || !node.range) return [];
   const [top] = keys;
-  if (keys.includes("alias") || ["dtg", "modes", "palette", "changelog"].includes(top)) return [];
-  if (kind === "system") {
-    if (top === "systems" || top === "defaults" || !node.value.startsWith(`${from}(`)) return [];
-    return [{ node, renamed: to + node.value.slice(from.length) }];
-  }
-  if (kind === "role" && (top === "systems" || top === "defaults")) return [];
+  if (keys.includes("alias") || ["dtg", "modes", "changelog"].includes(top)) return [];
+  // In the palette only a gradient points at anything, and only at the palette's colors.
+  if (top === "palette" && !(kind === "constant" && node.value.startsWith("gradient("))) return [];
+  if (kind !== "constant" && (top === "systems" || top === "defaults")) return [];
   if (top === "systems" && !keys.includes("params")) return [];
   const moved = (name: string) => (holds ? (name.startsWith(`${from}.`) && holds(name) ? to + name.slice(from.length) : null) : name === from ? to : null);
-  const plain = moved(node.value);
-  if (plain != null) return [{ node, renamed: plain }];
-  const faded = /^transparent\(\s*(\S+)(\s[^)]*)?\)$/.exec(node.value);
-  const inside = faded && moved(faded[1]);
-  if (inside != null) return [{ node, renamed: `transparent(${inside}${faded![2] ?? ""})` }];
-  return [];
+  const renamedRef = (ref: string): string | null => {
+    const gradient = /^gradient\((.*)\)$/s.exec(ref);
+    if (gradient) {
+      const parts = partsOutsideParens(gradient[1]);
+      const renamedParts = parts.map((part) => renamedRef(part));
+      if (renamedParts.every((part) => part == null)) return null;
+      return `gradient(${parts.map((part, i) => renamedParts[i] ?? part).join("")})`;
+    }
+    const faded = /^(transparent\(\s*)(.+?)(\s+\S+\s*\))$/.exec(ref);
+    if (faded) {
+      const inside = renamedRef(faded[2]);
+      return inside == null ? null : faded[1] + inside + faded[3];
+    }
+    if (kind === "system") return ref.startsWith(`${from}(`) ? to + ref.slice(from.length) : null;
+    return moved(ref);
+  };
+  const renamed = renamedRef(node.value);
+  return renamed == null ? [] : [{ node, renamed }];
+}
+
+/** A `gradient(…)`'s inside as its words and the spaces between them, in order, so joining them gives it back. */
+function partsOutsideParens(text: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  for (const char of text) {
+    if (char === "(") depth++;
+    if (char === ")") depth--;
+    const space = /\s/.test(char) && depth === 0;
+    const last = parts.at(-1);
+    if (last != null && /^\s+$/.test(last) === space) parts[parts.length - 1] = last + char;
+    else parts.push(char);
+  }
+  return parts;
 }
 
 /** What a group says about itself, beside the entries it holds. */

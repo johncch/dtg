@@ -31,7 +31,7 @@ function wordsOf(text: string): string[] {
 }
 
 export type ParsedSelector = {
-  /** Each field's value as it was written, in field order. */
+  /** Each field's value in its one spelling, in field order: a number is written from its value, so `3.0` is `3`. */
   written: string[];
   values: Selector;
 };
@@ -47,7 +47,6 @@ export function parseSelector(
   if (words.length < fieldNames.length) {
     throw new Error(`${context}: expected ${fieldNames.join(" ")}`);
   }
-  const written = words.slice(0, fieldNames.length);
   const extra = words.slice(fieldNames.length);
   const forms = shape.forms ?? [];
   if (extra.length > 1 || (extra.length === 1 && !forms.includes(extra[0]))) {
@@ -57,8 +56,9 @@ export function parseSelector(
   }
 
   const values: Selector = { form: extra[0] ?? null };
+  const written: string[] = [];
   shape.fields.forEach((field, index) => {
-    const part = written[index];
+    const part = words[index];
     if (field.kind === "choice") {
       if (!field.options.includes(part)) {
         throw new Error(
@@ -66,6 +66,7 @@ export function parseSelector(
         );
       }
       values[field.name] = part;
+      written.push(part);
       return;
     }
     const number = Number(part);
@@ -75,8 +76,22 @@ export function parseSelector(
       );
     }
     values[field.name] = number;
+    written.push(String(number));
   });
   return { written, values };
+}
+
+/**
+ * A selector in its one spelling, which is what a step is identified and
+ * named by: `3.0` and `03` are the step `3`. Text that does not read as a
+ * selector comes back as it is, for the error that follows to quote.
+ */
+export function canonicalSelector(algorithm: string, shape: SelectorShape, text: string): string {
+  try {
+    return formatSelector(shape, parseSelector(algorithm, shape, text).values);
+  } catch {
+    return wordsOf(text).join(" ");
+  }
 }
 
 /** A selector as it would be written, from one value per field and a form. */
@@ -86,11 +101,7 @@ export function formatSelector(shape: SelectorShape, values: Selector): string {
   return words.join(" ");
 }
 
-/**
- * The public name fragment a selector emits as: `3.5 tint` → `3_5-tint`.
- * Built from the text as written, never from the parsed number — a round
- * trip through a float turns "3.5" into "3.5000000000000004".
- */
+/** The public name fragment a selector emits as: `3.5 tint` → `3_5-tint`. */
 export function publicStepOf(selector: ParsedSelector): string {
   const parts = selector.written.map((part) => part.replace(/\./g, "_"));
   if (selector.values.form != null) parts.push(String(selector.values.form));

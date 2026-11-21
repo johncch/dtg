@@ -4,6 +4,7 @@ import { emitEdit } from "./emit-list.js";
 import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { firstError, useTrying } from "./preview.js";
+import { Alert } from "./Alert.js";
 
 /** A system's `emit` list as it is written; clicking it opens the whole list as text, tried live on the page. */
 export function EmitParam({ system }: { system: SnapshotSystem }) {
@@ -69,8 +70,8 @@ function EmitEditor({ system, panel }: { system: SnapshotSystem; panel: PopupPan
         value={text}
         onChange={(event) => setText(event.target.value)}
       />
-      <p className="ref-error">Steps to publish even when no role uses them, separated by commas.</p>
-      {edit && refusal && <p className="ref-error ref-problem">{firstError(refusal)}</p>}
+      <p className="field-hint">Variables are generated for these steps, even when nothing uses them.</p>
+      {edit && refusal && <Alert className="inline-alert">{firstError(refusal)}</Alert>}
     </form>
   );
 }

@@ -14,11 +14,16 @@ import {
   publicPath,
   publicRoleName,
   publicSystemName,
+  rolesUnder,
+  type GradientStop,
   type Lineage,
+  type ResolvedColorRef,
   type ResolvedDefinition,
+  type ResolvedGradientRef,
   type ResolvedRef,
   type ResolvedRole,
   type ResolvedStatic,
+  type ResolvedStaticGradient,
   type ResolvedStep,
   type ResolvedSystem,
 } from "./resolve.js";
@@ -95,12 +100,10 @@ function sameAsParent(
   modeIndex: number,
 ): boolean {
   if (!role.inherited[modeIndex]) return false;
-  const target = role.perMode[modeIndex].target;
-  if (target.kind !== "role") return true;
-  const targetRole = findRole(resolved, target);
-  return (
-    targetRole !== undefined && sameAsParent(resolved, targetRole, modeIndex)
-  );
+  return rolesUnder(role.perMode[modeIndex]).every((under) => {
+    const targetRole = findRole(resolved, under.role);
+    return targetRole !== undefined && sameAsParent(resolved, targetRole, modeIndex);
+  });
 }
 
 /**
@@ -108,7 +111,9 @@ function sameAsParent(
  * leaves out every inherited role, because the parent's declaration is
  * selected for this mode too and its `var()` resolves here. Flat has no
  * cascade, so it can only leave out a value the parent's variable already
- * holds.
+ * holds. Neither does a role taken through transparent() or restyled by
+ * gradient(), alone or as a gradient's stop: it is written as its value,
+ * which the parent's declaration got from the parent's mode.
  */
 function leftOut(
   resolved: ResolvedDefinition,
@@ -116,7 +121,7 @@ function leftOut(
   modeIndex: number,
   modes: ModeRendering,
 ): boolean {
-  return modes === "flat"
+  return modes === "flat" || rolesUnder(role.perMode[modeIndex]).some((under) => under.inlined)
     ? sameAsParent(resolved, role, modeIndex)
     : role.inherited[modeIndex];
 }
@@ -141,38 +146,50 @@ function modeSelector(resolved: ResolvedDefinition, modeIndex: number): string {
   ].join(", ");
 }
 
+/** The even spread CSS gives stops written without a position, as percents. */
+export function stopPositions(stops: { position: number | null }[]): number[] {
+  const positions = stops.map((stop, i) => stop.position ?? (i === 0 ? 0 : i === stops.length - 1 ? 100 : null));
+  return positions.map((position, i) => {
+    if (position != null) return position;
+    let before = i;
+    while (positions[before] == null) before--;
+    let after = i;
+    while (positions[after] == null) after++;
+    return positions[before]! + ((positions[after]! - positions[before]!) * (i - before)) / (after - before);
+  });
+}
+
+/** `stopColors` is index-parallel to the gradient's stops: each one's color as CSS. */
+export function gradientCss(
+  gradient: Pick<ResolvedGradientRef, "geometry" | "repeat" | "space"> & { stops: { position: number | null }[] },
+  stopColors: string[],
+): string {
+  const stops = gradient.stops.map((stop, i) => stopColors[i] + (stop.position == null ? "" : ` ${stop.position}%`));
+  const { geometry } = gradient;
+  const line =
+    geometry.kind === "linear"
+      ? `${geometry.angle}deg`
+      : geometry.kind === "radial"
+        ? `${geometry.shape} ${geometry.size} at ${geometry.x}% ${geometry.y}%`
+        : `from ${geometry.angle}deg at ${geometry.x}% ${geometry.y}%`;
+  const space = gradient.space == null ? "" : ` in ${gradient.space}`;
+  return `${gradient.repeat ? "repeating-" : ""}${geometry.kind}-gradient(${line}${space}, ${stops.join(", ")})`;
+}
+
 /**
- * `inlined` is true when the value is the color itself rather than a
- * pointer at a primitive. Only an inlined value needs repeating in the
- * wide-gamut layer — a `var()` picks up whatever the primitive was
- * redefined to.
+ * `wide` is true when the value holds a color itself, rather than a pointer
+ * at a primitive, and that color leaves sRGB. Only such a value needs
+ * repeating in the wide-gamut layer, written in `space` — a `var()` picks up
+ * whatever the primitive was redefined to.
  */
 function cssValueFor(
   resolved: ResolvedDefinition,
   entry: ResolvedRef,
   mode: string,
   modes: ModeRendering,
-): { css: string; inlined: boolean } {
+  space: "srgb" | "display-p3" = "srgb",
+): { css: string; wide: boolean } {
   const target = entry.target;
-  if (target.kind === "step" && isOpaque(entry.color)) {
-    const system = resolved.systems.find((s) => s.system === target.system);
-    const step = system?.steps.find((s) => s.selector === target.selector);
-    if (system && step) {
-      return {
-        css: `var(--color-${publicSystemName(system, "css")}-${step.publicStep})`,
-        inlined: false,
-      };
-    }
-  }
-  if (target.kind === "constant" && isOpaque(entry.color)) {
-    const constant = resolved.statics.find((c) => c.path === target.name);
-    if (constant) {
-      return {
-        css: `var(--color-${publicPath(constant.segments, "css", "-")})`,
-        inlined: false,
-      };
-    }
-  }
   if (target.kind === "role") {
     const role = findRole(resolved, target);
     if (role) {
@@ -184,15 +201,61 @@ function cssValueFor(
       }
       return {
         css: `var(--${roleVarName(role, resolved.modes[owner], modes, resolved.modes.length)})`,
-        inlined: false,
+        wide: false,
+      };
+    }
+  }
+  if (entry.kind === "gradient" && target.kind === "constant") {
+    const named = resolved.gradients.find((gradient) => gradient.path === target.name);
+    if (named) return { css: `var(--gradient-${publicPath(named.segments, "css", "-")})`, wide: false };
+  }
+  if (entry.kind === "gradient") {
+    const stops = entry.stops.map((stop) => cssValueFor(resolved, stop.color, mode, modes, space));
+    return {
+      css: gradientCss(entry, stops.map((stop) => stop.css)),
+      wide: stops.some((stop) => stop.wide),
+    };
+  }
+  if (target.kind === "step" && isOpaque(entry.color)) {
+    const system = resolved.systems.find((s) => s.system === target.system);
+    const step = system?.steps.find((s) => s.selector === target.selector);
+    if (system && step) {
+      return {
+        css: `var(--color-${publicSystemName(system, "css")}-${step.publicStep})`,
+        wide: false,
+      };
+    }
+  }
+  if (target.kind === "constant" && isOpaque(entry.color)) {
+    const constant = resolved.statics.find((c) => c.path === target.name);
+    if (constant) {
+      return {
+        css: `var(--color-${publicPath(constant.segments, "css", "-")})`,
+        wide: false,
       };
     }
   }
   // transparent() results, overlay steps and literals have no primitive
   // variable to point at; they inline their computed value.
-  return { css: formatColor(entry.color, "srgb"), inlined: true };
+  return { css: formatColor(entry.color, space), wide: needsMapping(entry.color, "srgb") };
 }
 
+
+/** Nothing is written from a definition that resolved with problems. */
+function refuseProblems(resolved: ResolvedDefinition): void {
+  if (resolved.problems.length > 0) {
+    throw new Error(`definition errors:\n- ${resolved.problems.join("\n- ")}`);
+  }
+}
+
+export function emittedGradients(resolved: ResolvedDefinition): ResolvedStaticGradient[] {
+  return resolved.gradients.filter((gradient) => gradient.emitted);
+}
+
+/** A palette gradient written out. Its stops are the palette's own, so no mode changes what it comes to. */
+function paletteGradientCss(resolved: ResolvedDefinition, named: ResolvedStaticGradient, space: "srgb" | "display-p3") {
+  return cssValueFor(resolved, named.gradient, resolved.modes[0], "nested", space);
+}
 
 export function emittedStatics(resolved: ResolvedDefinition): ResolvedStatic[] {
   return resolved.statics.filter((constant) => constant.emitted);
@@ -203,6 +266,7 @@ export function emitCss(
   format: CssFormat = "plain",
   modes: ModeRendering = "nested",
 ): string {
+  refuseProblems(resolved);
   const lines: string[] = [];
   lines.push(
     "/* Generated by dtg from the definition file — do not edit. */",
@@ -225,6 +289,15 @@ export function emitCss(
     }
   }
   lines.push("}", "");
+  // Outside the block above on purpose: in the tailwind format that block is
+  // `@theme`, whose variables Tailwind reads as theme keys.
+  if (emittedGradients(resolved).length > 0) {
+    lines.push(":root {", "  /* gradients */");
+    for (const named of emittedGradients(resolved)) {
+      lines.push(`  --gradient-${publicPath(named.segments, "css", "-")}: ${paletteGradientCss(resolved, named, "srgb").css};`);
+    }
+    lines.push("}", "");
+  }
 
   if (modes === "flat") {
     lines.push(":root {");
@@ -270,20 +343,30 @@ export function emitCss(
       "/* Semantic tokens wired into Tailwind utilities */",
       "@theme inline {",
     );
-    const wired =
+    const wired = (roles: ResolvedRole[]) =>
       modes === "flat"
-        ? resolved.roles.flatMap((role) =>
+        ? roles.flatMap((role) =>
             resolved.modes.flatMap((mode, i) =>
               leftOut(resolved, role, i, modes)
                 ? []
                 : [roleVarName(role, mode, modes, resolved.modes.length)],
             ),
           )
-        : resolved.roles.map((role) => cssVarName(role));
-    for (const name of wired) {
+        : roles.map((role) => cssVarName(role));
+    const isGradient = (role: ResolvedRole) => role.perMode[0].kind === "gradient";
+    for (const name of wired(resolved.roles.filter((role) => !isGradient(role)))) {
       lines.push(`  --color-${name}: var(--${name});`);
     }
     lines.push("}");
+    // Tailwind has no theme namespace for an image, and one wired in as a
+    // color becomes `background-color`, which a gradient is not valid in.
+    for (const named of emittedGradients(resolved)) {
+      const name = publicPath(named.segments, "css", "-");
+      lines.push("", `@utility bg-${name} {`, `  background-image: var(--gradient-${name});`, "}");
+    }
+    for (const name of wired(resolved.roles.filter(isGradient))) {
+      lines.push("", `@utility bg-${name} {`, `  background-image: var(--${name});`, "}");
+    }
   }
   while (lines[lines.length - 1] === "") lines.pop();
   return lines.join("\n") + "\n";
@@ -300,6 +383,7 @@ export function emitCss(
  * a second structural answer.
  */
 export function emitScss(resolved: ResolvedDefinition): string {
+  refuseProblems(resolved);
   const lines = ["// Generated by dtg from the definition file — do not edit."];
   for (const [i, mode] of resolved.modes.entries()) {
     lines.push("");
@@ -312,7 +396,12 @@ export function emitScss(resolved: ResolvedDefinition): string {
         if (group) lines.push(`// ${group}`);
       }
       const name = roleVarName(role, mode, "flat", resolved.modes.length);
-      lines.push(`$${name}: ${formatColor(role.perMode[i].color, "srgb")};`);
+      const entry = role.perMode[i];
+      const value =
+        entry.kind === "gradient"
+          ? gradientCss(entry, entry.stops.map((stop) => formatColor(stop.color.color, "srgb")))
+          : formatColor(entry.color, "srgb");
+      lines.push(`$${name}: ${value};`);
     }
   }
   return lines.join("\n") + "\n";
@@ -350,6 +439,10 @@ function wideGamutLayer(
       `    --color-${publicPath(s.segments, "css", "-")}: ${formatColor(s.color, "display-p3")};`,
     );
   }
+  for (const named of emittedGradients(resolved)) {
+    const value = paletteGradientCss(resolved, named, "display-p3");
+    if (value.wide) primitives.push(`    --gradient-${publicPath(named.segments, "css", "-")}: ${value.css};`);
+  }
 
   const roleBlocks: string[] = [];
   const flatDecls: string[] = [];
@@ -357,11 +450,10 @@ function wideGamutLayer(
     const decls: string[] = [];
     for (const role of resolved.roles) {
       if (leftOut(resolved, role, i, modes)) continue;
-      const entry = role.perMode[i];
-      if (!cssValueFor(resolved, entry, mode, modes).inlined) continue;
-      if (!needsMapping(entry.color, "srgb")) continue;
+      const value = cssValueFor(resolved, role.perMode[i], mode, modes, "display-p3");
+      if (!value.wide) continue;
       decls.push(
-        `    --${roleVarName(role, mode, modes, resolved.modes.length)}: ${formatColor(entry.color, "display-p3")};`,
+        `    --${roleVarName(role, mode, modes, resolved.modes.length)}: ${value.css};`,
       );
     }
     if (decls.length === 0) return;
@@ -460,6 +552,7 @@ export function emitDtcg(
   resolved: ResolvedDefinition,
   colorSpace: Gamut = "srgb",
 ): unknown {
+  refuseProblems(resolved);
   const lineage = buildLineage(resolved);
   const meta: Record<string, unknown> = {
     modes: resolved.modes,
@@ -537,6 +630,25 @@ export function emitDtcg(
       });
     }
   }
+  if (emittedGradients(resolved).length > 0) {
+    const group = (systems.static ??= {}) as Record<string, unknown>;
+    for (const named of emittedGradients(resolved)) {
+      const { gradient } = named;
+      const description = groupDescriptionOf(resolved.groupDescriptions.palette, named.path);
+      placeAt(group, named.path, {
+        $type: "gradient",
+        $value: dtcgRef(resolved, gradient, colorSpace),
+        ...(description ? { $description: description } : {}),
+        $extensions: {
+          [DTCG_NS]: {
+            id: `static.${named.path}`,
+            name: `static/${publicPath(named.segments, "figma", "/")}`,
+            gradient: { ...gradient.geometry, repeat: gradient.repeat, space: gradient.space },
+          },
+        },
+      });
+    }
+  }
   out.systems = systems;
 
   for (const role of resolved.roles) {
@@ -544,8 +656,9 @@ export function emitDtcg(
     // Roles nest as deep as the definition nests them, so the group tree is
     // built from the path rather than assumed to be two levels.
     const path = role.segments.map((seg) => seg.name).join(".");
+    const gradient = role.perMode[0].kind === "gradient";
     placeAt(section, path, {
-      $type: "color",
+      $type: gradient ? "gradient" : "color",
       $value: dtcgRef(resolved, role.perMode[0], colorSpace),
       ...(role.description ? { $description: role.description } : {}),
       $extensions: {
@@ -558,6 +671,17 @@ export function emitDtcg(
           refs: Object.fromEntries(
             resolved.modes.map((m, i) => [m, role.perMode[i].ref]),
           ),
+          // DTCG's gradient is its stops alone; how they are laid out rides here.
+          ...(gradient
+            ? {
+                gradients: Object.fromEntries(
+                  resolved.modes.map((m, i) => {
+                    const entry = role.perMode[i];
+                    return [m, entry.kind === "gradient" ? { ...entry.geometry, repeat: entry.repeat, space: entry.space } : null];
+                  }),
+                ),
+              }
+            : {}),
           // Figma has no unset mode — it fills one with white — so every mode
           // carries a value. This is the silence the definition declared,
           // each mode against the one it extends, kept so a round trip can
@@ -642,17 +766,31 @@ function stepIdentity(
     .join(", ");
 }
 
+type DtcgGradientStop = { color: string | DtcgColor; position: number };
+
+function dtcgRef(resolved: ResolvedDefinition, entry: ResolvedColorRef, colorSpace: Gamut): string | DtcgColor;
+function dtcgRef(resolved: ResolvedDefinition, entry: ResolvedRef, colorSpace: Gamut): string | DtcgColor | DtcgGradientStop[];
 function dtcgRef(
   resolved: ResolvedDefinition,
   entry: ResolvedRef,
   colorSpace: Gamut,
-): string | DtcgColor {
+): string | DtcgColor | DtcgGradientStop[] {
   const target = entry.target;
   if (target.kind === "role") {
     const role = resolved.roles.find(
       (r) => r.group === target.group && r.role === target.role,
     );
     if (role) return `{${role.section}.${rolePath(role)}}`;
+  }
+  if (entry.kind === "gradient" && target.kind === "constant") {
+    return `{systems.static.${target.name}}`;
+  }
+  if (entry.kind === "gradient") {
+    const positions = stopPositions(entry.stops);
+    return entry.stops.map((stop, i) => ({
+      color: dtcgRef(resolved, stop.color, colorSpace),
+      position: Number((positions[i] / 100).toFixed(6)),
+    }));
   }
   if (target.kind === "constant" && isOpaque(entry.color)) {
     return `{systems.static.${target.name}}`;

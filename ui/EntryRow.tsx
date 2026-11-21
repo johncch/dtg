@@ -1,8 +1,9 @@
 import { Copy, GripVertical, Plus } from "lucide-react";
-import { useLayoutEffect, useState } from "react";
+import { useLayoutEffect, useState, type ReactNode } from "react";
 import { Hint } from "./Hint.js";
 import { EDITABLE } from "./mode.js";
 import { TrashIcon } from "./TrashIcon.js";
+import { Alert } from "./Alert.js";
 
 /**
  * What a table of named entries — roles, palette colors — is edited with:
@@ -34,6 +35,7 @@ function Retyped({
   shown,
   written,
   selectFrom = 0,
+  after,
   problemOf,
   onKeep,
 }: {
@@ -45,6 +47,8 @@ function Retyped({
   written: string;
   /** Where in `written` the selection starts when the field opens; it runs to the end. */
   selectFrom?: number;
+  /** Shown inline after the name, while it is not being retyped. */
+  after?: ReactNode;
   problemOf: (typed: string) => string | null;
   onKeep: (typed: string) => void;
 }) {
@@ -55,13 +59,14 @@ function Retyped({
     setTyped(written);
   }, [keys.join("\n")]);
 
-  if (!EDITABLE) return <code>{shown}</code>;
+  if (!EDITABLE) return <span className="entry-name"><code>{shown}</code>{after}</span>;
   if (typed == null) {
     return (
       <span className="entry-name">
         <code title="Double-click to rename" onDoubleClick={() => setTyped(written)}>
           {shown}
         </code>
+        {after}
       </span>
     );
   }
@@ -92,7 +97,7 @@ function Retyped({
           if (event.key === "Escape") setTyped(null);
         }}
       />
-      {problem && <span className="ref-error ref-problem entry-name-problem">{problem}</span>}
+      {problem && <Alert className="entry-name-problem">{problem}</Alert>}
     </span>
   );
 }
@@ -106,6 +111,7 @@ export function EntryName({
   keys,
   path,
   shown,
+  after,
   problemOf,
   onRepath,
 }: {
@@ -114,6 +120,8 @@ export function EntryName({
   path: string;
   /** What the row shows: the path, or its last part under a group's heading. */
   shown: string;
+  /** Shown inline after the name. */
+  after?: ReactNode;
   /** Why the entry cannot be at a path, for one whose every part is a name. */
   problemOf: (path: string) => string | null;
   onRepath: (path: string) => void;
@@ -124,6 +132,7 @@ export function EntryName({
       shown={shown}
       written={path}
       selectFrom={path.lastIndexOf(".") + 1}
+      after={after}
       problemOf={(typed) => (typed.split(".").every((part) => ENTRY_NAME.test(part)) ? problemOf(typed) : `${ENTRY_NAME_RULE} Dots separate groups.`)}
       onKeep={onRepath}
     />
@@ -170,6 +179,8 @@ export function EntryRemove({
   users,
   stays = null,
   hint = "Delete",
+  className = "entry-action entry-remove",
+  side,
   onRemove,
 }: {
   label: string;
@@ -178,15 +189,17 @@ export function EntryRemove({
   /** Why it cannot go, when it is not for being used. */
   stays?: string | null;
   hint?: string;
+  className?: string;
+  side?: "top" | "left";
   onRemove: () => void;
 }) {
   if (!EDITABLE) return null;
   const refusal = users.length > 0 ? usedByRefusal(users) : stays;
   return (
-    <Hint text={refusal ?? hint}>
+    <Hint text={refusal ?? hint} side={side}>
       <button
         type="button"
-        className="entry-action entry-remove"
+        className={className}
         aria-label={`Remove ${label}`}
         // Not `disabled`: a disabled button gets no pointer events, so its hint would never show.
         aria-disabled={refusal != null}
@@ -294,6 +307,20 @@ export function EntryGrip({
         <GripVertical size={12} aria-hidden />
       </button>
     </Hint>
+  );
+}
+
+/** The head of a table's last column, which holds each row's controls; it has no title. */
+export function ControlsHead() {
+  return <th className="entry-controls" aria-label="Actions" />;
+}
+
+/** A row's controls, in their own column so the first column holds only the name. */
+export function ControlsCell({ children }: { children: ReactNode }) {
+  return (
+    <td className="entry-controls">
+      <span className="entry-actions">{children}</span>
+    </td>
   );
 }
 

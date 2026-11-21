@@ -48,11 +48,13 @@ Canonical. The README carries the user-facing version of the same rules.
   inherited role whose target moved is written. DTCG fills every mode and
   records `inherits: { dark-hc: dark }`. What applies `.dark` to an element
   is the app's business, not the definition's.
-- `palette` holds the colors picked by hand: a **string** is a constant,
-  any other object a **group**, and groups nest, so a constant's identity is
+- `palette` holds the colors picked by hand: a **string** is a constant
+  (or, starting `gradient(`, a gradient made of them), any other object a
+  **group**, and groups nest, so a constant's identity is
   its dotted path. Every constant emits, unless its group says
   `emit: false`: then its colors are inputs, emitted only when a role points
-  at one, since a reference always emits what it names. A group of
+  at one, since a reference always emits what it names. `transparent()`
+  around one is a value, not a reference, and emits nothing. A group of
   constants is a palette in `dtg edit`. It is read before `systems`, so a param can name any
   constant wherever it is written. A string left in `systems` is refused
   with a pointer here.
@@ -107,12 +109,53 @@ Canonical. The README carries the user-facing version of the same rules.
     `warm-wash.red(6)` a tint in a group)
   - `group.role` — another decision in the same mode; just `role` for one
     written straight in its collection
-  - `transparent(paper 70)` — a constant at an opacity, constants only.
-    It is written like a system and read by the same parser, so no system
-    can be named `transparent`
+  - `transparent(paper 70)` — a color at an opacity, or a gradient with
+    every stop at it. Inside it goes any ref that resolves to a color: a constant, a literal, a step
+    (`transparent(sky(500) 70)`), or another role, which is followed mode
+    by mode. The opacity is the last word, and it multiplies an alpha the
+    color already has. It is written like a system, so no system can be
+    named `transparent`
   - a literal — `"#000000"`, `oklch(0 0 0)`, `color(display-p3 1 0 0)` —
-    emitted as its value. The same parser reads it, so no system can be
+    emitted as its value. Hex takes an alpha as CSS does, in a fourth or
+    eighth digit (`"#00000080"`); the others take it after `/`. The same parser reads it, so no system can be
     named `oklch`, `oklab` or `color` either
+  - `gradient(paper 0% sky(500) 100% angle=90deg)` — colors along a line.
+    A word in `%` is the position of the color before it, and every other
+    positional word is a stop, any ref that resolves to a color. Positions
+    left out are spread evenly. Everything else is a named argument:
+    `kind` (`linear` without it, or `radial`, `conic`), `angle` (a linear
+    one's direction, 180deg without it as in CSS, or a conic one's start),
+    `x` and `y` (the center of a radial or conic one, 50% each), `shape`
+    and `size` (radial, in CSS's words), `repeat=true`, and `space`, the
+    color space it is interpolated in. An argument its kind does not take
+    is an error. A long one wraps over lines as plain YAML. No system can
+    be named `gradient`
+- **Positional and named arguments.** Settled 2026-11-20. Inside the
+  parentheses a call has positional arguments, read in the order the callee
+  declares, and named ones, written `name=value`. Whoever is called
+  declares which of its arguments are which — an algorithm for its
+  selector, a function for its inputs — and the resolver checks every call
+  against that. An argument is one or the other, never both, so a call has
+  one spelling. Only trailing positional arguments may be left out, and
+  named arguments come after every positional one: a list is never split,
+  and "before or after" would be two spellings. `sky(10 tint)` is two
+  positional arguments, the second optional; `gradient(a b angle=90deg)`
+  is a list and a named argument. `=` because `: ` ends a YAML value.
+  "Content is positional, settings are named" was the first wording and
+  was turned down: it describes intent, which nothing can check, and it
+  needed `sky(10 tint)` as an exception on its first day.
+- **A step is identified by its selector's values, not its text.** `sky(3)`,
+  `sky(3.0)` and `sky(03)` are one step and one variable, `--color-sky-3`;
+  the same holds in `emit` and in `overrides` keys. Until 2026-11-20 the
+  name was built from the text as written, so `sky(3.0)` emitted a second
+  primitive, `sky-3_0`, with the same color.
+- **A ref function is declared once.** `src/ref-functions.ts` lists
+  `transparent` and `gradient` with what their ref arguments may resolve
+  to and which arguments are named. The resolver checks a call against
+  that line, the error names what the function takes, and TypeScript
+  infers from the same line what the implementation is handed — so
+  `transparent()` cannot treat its input as a color without handling a
+  gradient. The declaration also reserves the name against systems.
 - **One meaning each: `.` navigates, parentheses hand off.** Inside them,
   spaces separate, as in CSS's own color functions — a comma would end the
   item in a `[ ]` list and force quotes around every ref. A constant
@@ -125,6 +168,120 @@ Canonical. The README carries the user-facing version of the same rules.
   constant, since repetition is a constant waiting to be named. Settled
   2026-10-28, reversing the earlier rule that the semantic tier only points
   and derives: asking for a name before a color can be used was a detour.
+- **`transparent()` produces a value.** It emits as the color it works out
+  to and demands nothing: `transparent(sky(500) 70)` does not publish
+  `sky(500)`, and an `emit: false` constant used only through it stays
+  unpublished. Around a role, the value is written again in any mode where
+  the role under it differs, since no `var()` is there to follow it.
+  Settled 2026-11-20, reversing "constants only": the limit made a color
+  need a palette name before it could be faded. CSS could keep the link
+  with `color-mix()` instead; that is an emitter's choice, left for when
+  something needs it.
+- **A gradient is made of colors, and nothing but a gradient is made of a
+  gradient.** Settled 2026-11-20. A role holds one or points at one, and is
+  a gradient in every mode or in none; the palette can name one. A stop, a
+  param and an editor background each take a color and say so when handed
+  a gradient.
+  `transparent()` takes either, and a gradient comes back a gradient with
+  every stop at that opacity, written as values like any `transparent()`. So systems, steps and the algorithm
+  contract never meet one: everything upstream of the roles is still only
+  colors, and a gradient is an arrangement of colors that already resolved.
+  - It is a function, not a system. A system was considered, for overrides
+    at the ref (`brand(angle=15)`); nothing yet uses one gradient several
+    ways, and repetition is the signal to promote it. A function also takes
+    roles as stops, so one line follows every mode.
+  - Stops are composed colors (`wash.red(6)`), not full colors faded
+    afterwards. Fading inside the gradient would be `blend` again.
+  - Stops keep their references: CSS writes each stop as that ref would be
+    written alone, `var()` and all, so a step or constant stop is demanded
+    like any other. DTCG writes `$type: gradient` with a position for every
+    stop; its gradient is stops alone, so the kind, angle, center and the
+    rest ride in `$extensions` as `gradients`, per mode. Sass writes every stop as its
+    color.
+  - **A palette gradient is the reusable one.** A string in `palette` that
+    starts `gradient(` is a gradient with a name, pointed at by its path
+    like a color. It holds only the palette's own: its colors and colors
+    written out, plain or through `transparent()`. The palette is read
+    before systems and roles, so there is nothing else for it to name, and
+    nothing for one to loop back through. It emits as `--gradient-<path>`,
+    apart from `--color-`, which Tailwind reads as a color; in the
+    `tailwind` format it sits outside `@theme` and gets a `bg-<path>`
+    class. Like a palette color it always emits, unless its group says
+    `emit: false` and no role points at it. In the code the palette's gradients are
+    a list of their own, so the plot, Randomize, Harmonize and the locks,
+    which work on colors, never see them. The editor draws one where it is
+    written, among the group's colors, marked as passed over by those
+    tools. It opens the gradient's controls to edit, and it is renamed,
+    moved and deleted like a color; its lock is shown and cannot be turned, since nothing would
+    roll it. It is not a kind of thing the editor makes: there is no
+    control to add one, and it is written in the file.
+  - **`gradient()` restyles one gradient.** Where the colors would go it
+    takes one gradient instead, alone — a palette gradient or a gradient
+    role — and keeps its stops. What is named replaces what that gradient
+    had; the rest carries over, as long as the kind is still the one it
+    belonged to. `gradient(brand angle=135deg)` is brand turned;
+    `gradient(brand kind=radial)` is brand's stops out from the center.
+    This is what a gradient system with overrides at the ref would have
+    been for. A gradient among colors is refused, since stops and positions
+    have no one way to merge, and so are `extend=` and `inherit`
+    placeholders. A restyle emits a whole gradient of its own: CSS cannot
+    turn `var(--gradient-brand)`.
+  - **The editor's gradient controls rewrite the text.** A gradient is its
+    one string, in a role or in the palette. The controls take the string apart,
+    change one piece and write it back whole, named arguments in the order
+    the function declares them. The stops come first, since the colors are
+    what a gradient is. A ruler lays them left to right by position,
+    whatever the gradient's kind or angle, with a handle each: dragging a
+    handle is how a stop moves, so its order and its position are one
+    thing, and a click on the ruler adds one there. A stop with no written
+    position sits where CSS would spread it, and is given a position only
+    when it is dragged, or when another stop's move would shift it. Under
+    the ruler is a row per stop, in the ruler's order, opening the same
+    editor any color is chosen in, so a stop can be anything a stop can
+    be. Where there is a gradient it could restyle, the rows share
+    their place with a second tab, Use, which lists them: choosing one
+    makes this gradient a restyle of it, and going back to Stops gives it
+    that gradient's stops as its own, laid out as it was drawn. Under
+    those are its kind, the arguments that kind takes, and repeat, beside
+    a swatch of the gradient as it is really drawn. `space` has no control and is written in the file. A gradient
+    is changed many times in one sitting, so while its panel is open undo
+    and redo step through those changes one at a time, a whole drag or a
+    whole pick being one step; closed, the sitting is one step of the
+    page's. The text
+    shows only when it does not read as a gradient, to be typed right.
+  - A gradient with no `space` blends in the browser's default, which is
+    sRGB when every stop is an old-style color and OKLab otherwise — so a
+    stop outside sRGB, written twice for wide-gamut screens, blends
+    differently there. That is CSS working as specified, and `space=` is
+    there for whoever wants it pinned.
+  - `background-size` is not part of a gradient and stays in the
+    stylesheet.
+    Left out until something needs them: a conic stop's position in
+    degrees, and a hue direction such as `longer hue`.
+  - The `tailwind` format gives a gradient role a class of its own,
+    `@utility bg-<role> { background-image: var(--<role>) }`, where a color
+    role is wired into `@theme inline` as `--color-<role>`. Tailwind
+    documents no theme namespace for an image, and a gradient wired in as a
+    color becomes `background-color`, which it is not valid in. Checked in
+    Tailwind 4.3.3: the class takes variants like any other. A
+    `--background-image-*` theme variable makes the same class there, but
+    is not in Tailwind's documented namespaces, so it was not relied on.
+  - A hex color after a space starts a YAML comment, so a ref holding one
+    is quoted whole: `"gradient(paper #000000)"`.
+- **A definition can resolve and still not be writable.** Settled
+  2026-11-20. A role that is a gradient in one mode and a color in another
+  has a value in every mode, so it resolves and draws, and is reported in
+  `problems` rather than thrown. The emitters refuse a definition with
+  problems, so `dtg build` fails as it would on an error, and the editor
+  refuses to save one. This is what lets the editor change a role one
+  mode at a time: the state in between is kept, shown on the role's row,
+  and blocks Save until it is put right. An error is still what has no
+  value to draw: an unknown ref, a selector that does not read. A role
+  that says the same ref in every mode only follows the role it points
+  at, so the problem is reported where the mix is written. Writing a
+  color mode as a flat gradient was considered, to make the mix legal, and
+  turned down: the variable would change meaning by mode in ways the
+  definition does not show.
 - `none`, CSS's missing component, reads as `0` in any slot. It's a
   spelling: `oklch(70% 0 none)` and `oklch(70% 0 0)` are the same gray, and
   whether a color has a hue is decided by its chroma (see Color spaces).
@@ -468,8 +625,7 @@ doing so is in `project-algorithms.md`.
    palette color always emits. A system step exists because a ref demands
    it or the system's `emit` lists it — never because of which algorithm it
    is. A role emits as a reference to what it points at, and a literal
-   emits its value. `transparent()` demands only the unflattened form, not
-   the opaque step.
+   emits its value, and so does `transparent()`, which demands nothing.
 7. **Repetition is a promotion signal.** A derivation appearing twice is a
    named system trying to be born. New functions and algorithms arrive when a
    caller exists, never for symmetry. No generic `alpha()` until something
@@ -499,6 +655,9 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `contract.ts` — the `Algorithm` interface.
 - `params.ts` — a system's params checked against what its algorithm
   declares, and parsed.
+- `ref-functions.ts` — the functions a ref can call, each with what its
+  arguments accept and which are named; and a gradient's text taken apart
+  and written back, which is how the editor changes one piece of one.
 - `selector.ts` — how a selector is written, and the public name and
   ordering that follow from it. The only file that knows the spelling.
 - `algorithms/` — the three built-ins.

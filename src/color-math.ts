@@ -1,7 +1,7 @@
 export type Rgb = [number, number, number];
 
 const COLOR_FORMS =
-  "#rgb, #rrggbb, oklch(L C H), oklab(L a b), color(srgb r g b) or color(display-p3 r g b), each with an optional `/ alpha`";
+  "#rgb, #rrggbb, #rgba, #rrggbbaa, oklch(L C H), oklab(L a b), color(srgb r g b) or color(display-p3 r g b), each with an optional `/ alpha`";
 
 /**
  * A color with less chroma than this has no hue, however it was written.
@@ -24,16 +24,11 @@ export function parseColor(value: unknown, context: string): Color {
   }
   const text = value.trim();
 
-  const hex = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/.exec(text);
+  const hex = /^#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.exec(text);
   if (hex) {
-    const digits =
-      hex[1].length === 3
-        ? hex[1]
-            .split("")
-            .map((d) => d + d)
-            .join("")
-        : hex[1];
-    return colorFromHex("#" + digits.toLowerCase());
+    const digits = (hex[1].length <= 4 ? hex[1].replace(/./g, (d) => d + d) : hex[1]).toLowerCase();
+    const alpha = digits.length === 8 ? parseInt(digits.slice(6), 16) / 255 : 1;
+    return colorFromHex("#" + digits.slice(0, 6), alpha);
   }
 
   const call = /^([a-zA-Z-]+)\(([^()]*)\)$/.exec(text);
@@ -568,11 +563,14 @@ export function channelsIn(color: Color, gamut: Gamut): Rgb {
 
 /**
  * A color as a definition writes it: hex when sRGB holds it, because hex is
- * what people read and a hex step is far below what an eye can tell apart;
- * `oklch()` when it does not, or when it carries an alpha hex has no place for.
+ * what people read and a hex step is far below what an eye can tell apart,
+ * with an alpha as its last pair; `oklch()` when sRGB does not hold it.
  */
 export function formatAuthored(lab: Oklab, alpha = 1): string {
-  if (alpha >= 1 && inGamut(lab, HEX_SPACE)) return formatHex(lab);
+  if (inGamut(lab, HEX_SPACE)) {
+    if (alpha >= 1) return formatHex(lab);
+    return formatHex(lab) + Math.round(Math.max(0, alpha) * 255).toString(16).padStart(2, "0");
+  }
   const [L, C, H] = oklabToOklch(lab);
   const short = (n: number, digits: number) => String(Number(n.toFixed(digits)));
   const body = `${short(L, 4)} ${short(C, 4)} ${short(C < NO_HUE_BELOW_CHROMA ? 0 : H, 2)}`;

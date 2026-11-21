@@ -14,6 +14,7 @@ import {
   type Oklch,
 } from "../../src/color-math.js";
 import { isExactIn, NOTATIONS, type Box, type Notation, type NotationId } from "./notations.js";
+import { Hint } from "../Hint.js";
 
 const FIELD_WIDTH = 360;
 const FIELD_HEIGHT = 240;
@@ -68,17 +69,24 @@ export function Picker({
   value,
   gamut,
   axes = false,
+  stepped,
+  alpha,
   onChange,
+  onAlpha,
 }: {
   value: Oklch;
   gamut: Gamut;
   /** Captions naming what the field's two directions mean. */
   axes?: boolean;
+  /** The field snaps to a grid of lightness and chroma steps; the editor holds the switch. */
+  stepped: boolean;
+  /** 0 to 1. */
+  alpha: number;
   onChange: (next: Oklch) => void;
+  onAlpha: (next: number) => void;
 }) {
   const [L, C, H] = value;
   const share = chromaShare(value, gamut);
-  const [stepped, setStepped] = useState(false);
   const { canvasRef, paintGamut } = useField(H, gamut, stepped);
 
   const hueGradient = useMemo(() => vividHueGradient(gamut, paintGamut), [gamut, paintGamut]);
@@ -107,6 +115,8 @@ export function Picker({
     const hue = Math.min(359.999, across * 360);
     onChange([L, share * maxChroma(clamp01(L), hue, gamut), hue]);
   });
+  const alphaBar = useDrag((across) => onAlpha(Math.round(across * 100) / 100));
+  const opaque = formatIn(oklchToOklab([clamp01(L), C, H]), paintGamut);
 
   return (
     <>
@@ -123,16 +133,19 @@ export function Picker({
       <div className="hue" style={{ background: hueGradient }} {...hueBar}>
         <span className="dot" style={{ left: `${(H / 360) * 100}%` }} />
       </div>
-      <label className="picker-steps">
-        <input type="checkbox" checked={stepped} onChange={(event) => setStepped(event.target.checked)} />
-        steps
-      </label>
       {paintGamut === "srgb" && (
         <p className="cap">
           This browser did not give a Display P3 canvas, so colors past the sRGB line look the same as those on it.
         </p>
       )}
       <Values value={value} onChange={onChange} />
+      <div className="alpha-row">
+        <div className="hue alpha-bar" {...alphaBar}>
+          <span className="alpha-bar-color" style={{ background: `linear-gradient(to right, transparent, ${opaque})` }} />
+          <span className="dot" style={{ left: `${alpha * 100}%` }} />
+        </div>
+        <NumberField box={ALPHA_BOX} value={alpha * 100} note={undefined} onChange={(percent) => onAlpha(Math.min(100, Math.max(0, percent)) / 100)} />
+      </div>
     </>
   );
 }
@@ -253,6 +266,8 @@ function keepingHue(next: Oklch, current: Oklch): Oklch {
   return next[1] < NO_HUE_BELOW_CHROMA ? [next[0], 0, current[2]] : next;
 }
 
+const ALPHA_BOX: Box = { name: "Alpha (%)", min: 0, max: 100, step: 1, digits: 0 };
+
 /** The color as numbers: a notation to read it in, then that notation's boxes. */
 function Values({ value, onChange }: { value: Oklch; onChange: (next: Oklch) => void }) {
   const [format, setFormat] = useState(savedFormat);
@@ -262,29 +277,32 @@ function Values({ value, onChange }: { value: Oklch; onChange: (next: Oklch) => 
   return (
     <div>
       <div className="values">
-        <select
-          aria-label="Notation"
-          value={format}
-          onChange={(event) => {
-            const next = event.target.value as ValueFormat;
-            localStorage.setItem(FORMAT_SAVED, next);
-            setFormat(next);
-          }}
-        >
-          <option value="oklch">OKLCH</option>
-          <option value="hex">Hex</option>
-          <option value="rgb">RGB</option>
-          <option value="hsl">HSL</option>
-          <option value="hsb">HSB</option>
-          <option value="p3">Display P3</option>
-        </select>
+        <Hint text="Notation">
+          <select
+            aria-label="Notation"
+            value={format}
+            onChange={(event) => {
+              const next = event.target.value as ValueFormat;
+              localStorage.setItem(FORMAT_SAVED, next);
+              setFormat(next);
+            }}
+          >
+            <option value="oklch">OKLCH</option>
+            <option value="hex">Hex</option>
+            <option value="rgb">RGB</option>
+            <option value="hsl">HSL</option>
+            <option value="hsb">HSB</option>
+            <option value="p3">P3</option>
+          </select>
+        </Hint>
         {format === "hex" ? (
           <HexField value={value} note={approximate} onChange={onChange} />
         ) : (
           <NotationBoxes key={format} notation={NOTATIONS[format]} value={value} note={approximate} onChange={onChange} />
         )}
+
       </div>
-      <p className="values-note">{approximate}</p>
+      {approximate && <p className="values-note">{approximate}</p>}
     </div>
   );
 }
@@ -341,23 +359,24 @@ function NumberField({
   const [draft, setDraft] = useState<{ text: string; standsFor: number } | null>(null);
   const shown = trim(value, box.digits);
   return (
-    <input
-      type="number"
-      aria-label={box.name}
-      title={note ? `${box.name} — ${note}` : box.name}
-      min={box.min}
-      max={box.max}
-      step={box.step}
-      value={draft && trim(draft.standsFor, box.digits) === shown ? draft.text : shown}
-      onBlur={() => setDraft(null)}
-      onChange={(event) => {
-        const text = event.target.value;
-        const next = Number(text);
-        const usable = text !== "" && Number.isFinite(next);
-        setDraft({ text, standsFor: usable ? next : value });
-        if (usable) onChange(next);
-      }}
-    />
+    <Hint text={note ? `${box.name} — ${note}` : box.name}>
+      <input
+        type="number"
+        aria-label={box.name}
+        min={box.min}
+        max={box.max}
+        step={box.step}
+        value={draft && trim(draft.standsFor, box.digits) === shown ? draft.text : shown}
+        onBlur={() => setDraft(null)}
+        onChange={(event) => {
+          const text = event.target.value;
+          const next = Number(text);
+          const usable = text !== "" && Number.isFinite(next);
+          setDraft({ text, standsFor: usable ? next : value });
+          if (usable) onChange(next);
+        }}
+      />
+    </Hint>
   );
 }
 
@@ -374,25 +393,26 @@ function HexField({
   const hex = formatHex(oklchToOklab(value));
   const [draft, setDraft] = useState<{ text: string; standsFor: string } | null>(null);
   return (
-    <input
-      type="text"
-      aria-label="Hex"
-      title={note ? `Hex — ${note}` : "Hex"}
-      spellCheck={false}
-      autoComplete="off"
-      value={draft && draft.standsFor === hex ? draft.text : hex}
-      onBlur={() => setDraft(null)}
-      onChange={(event) => {
-        const text = event.target.value;
-        try {
-          const typed = oklabToOklch(toOklab(parseColor(text.startsWith("#") ? text : `#${text}`, "hex")));
-          const next = keepingHue(typed, value);
-          setDraft({ text, standsFor: formatHex(oklchToOklab(next)) });
-          onChange(next);
-        } catch {
-          setDraft({ text, standsFor: hex });
-        }
-      }}
-    />
+    <Hint text={note ? `Hex — ${note}` : "Hex"}>
+      <input
+        type="text"
+        aria-label="Hex"
+        spellCheck={false}
+        autoComplete="off"
+        value={draft && draft.standsFor === hex ? draft.text : hex}
+        onBlur={() => setDraft(null)}
+        onChange={(event) => {
+          const text = event.target.value;
+          try {
+            const typed = oklabToOklch(toOklab(parseColor(text.startsWith("#") ? text : `#${text}`, "hex")));
+            const next = keepingHue(typed, value);
+            setDraft({ text, standsFor: formatHex(oklchToOklab(next)) });
+            onChange(next);
+          } catch {
+            setDraft({ text, standsFor: hex });
+          }
+        }}
+      />
+    </Hint>
   );
 }

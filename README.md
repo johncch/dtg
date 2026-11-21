@@ -121,7 +121,13 @@ core:
 ```
 
 A ref is a constant by path, a step, another role, a literal color, or
-`transparent(name pct)`. A role is one ref per mode, and nothing else. `emit` publishes steps
+`transparent(ref pct)`, any of those at an opacity. A role can also be a
+gradient of them, `gradient(paper 0% sky(500) 100% angle=90deg)`: colors with
+optional positions, then named arguments. `kind=radial` or `kind=conic`
+changes its shape, with `x`, `y`, `shape` and `size` to place it;
+`repeat=true` and `space=oklch` do what they say. A gradient written in the
+palette has a name: point at it like a color, or restyle it where it is
+used, `gradient(brand angle=135deg)`. A role is one ref per mode, and nothing else. `emit` publishes steps
 no role asks for, `defaults` shares params across systems of one algorithm,
 `alias` and `omit` shape public names. The full grammar and the reasoning
 behind it are in [`docs/how-this-works.md`](docs/how-this-works.md).
@@ -191,6 +197,17 @@ gamut: srgb # the widest colors you mean to author; default display-p3
 Name no outputs and you get CSS beside the definition, named after it:
 `colors.dtg.yaml` gives `colors.generated.css`. Flags override the config.
 `dtg --help` lists every flag and output.
+
+In the `tailwind` format a color role becomes the usual utilities
+(`bg-surface-card`, `text-surface-card`). A gradient role becomes one class,
+`bg-surface-hero`, which sets `background-image`. Two things to know:
+
+- `bg-linear-(--surface-hero)` is not the class for it. That one expects a
+  list of stops and wraps them in a second `linear-gradient()`.
+- `tailwind-merge` reads an unknown `bg-` class as a background color, so it
+  drops a color written beside the gradient and will not let `bg-none` remove
+  it. Add the gradient classes to its `bg-image` group, or write
+  `bg-(image:--surface-hero)`, which it reads correctly.
 
 The editor shows each mode on white or black, by its scheme. To view a mode
 on another background, set it on the Settings page, which keeps it in the

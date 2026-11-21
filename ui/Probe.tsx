@@ -6,6 +6,7 @@ import type { SnapshotSystem } from "../src/snapshot.js";
 import { ColorFacts } from "./ColorTip.js";
 import { probeOf } from "./engine.js";
 import { carriedOver, StepControls } from "./picker/StepControls.js";
+import { Alert } from "./Alert.js";
 
 type Answer = { kind: "color"; color: Color } | { kind: "refused"; error: string };
 
@@ -28,7 +29,7 @@ export function Probe({ system, definition, gamut }: { system: SnapshotSystem; d
         </div>
         <div className="probe-controls">
           <StepControls step={{ kind: "step", system, selector }} onChange={(next) => setSelector(next.selector)} />
-          {answer.kind === "refused" && <p className="ref-error">{answer.error}</p>}
+          {answer.kind === "refused" && <Alert className="inline-alert">{answer.error}</Alert>}
         </div>
       </div>
     </section>

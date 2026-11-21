@@ -18,7 +18,7 @@ type OklchScaleParams = {
 export const scale: Algorithm = {
   name: "scale",
   description:
-    "A chromatic scale through the base color in OKLCH. The selector is a position from 0 to 1000: 0 is the light target, 500 the base, 1000 the dark target. midpoint is how much of the base shows at 250 and 750 — 0.5 is an even line, lower keeps the ends paler and deeper for longer. Hue is held near the base hue — hueShift 0 locks it entirely, 100 follows the natural interpolated path.",
+    "A light-to-dark ramp through one color.",
 
   params: {
     base: { kind: "color" },

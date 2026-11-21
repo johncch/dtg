@@ -3,39 +3,48 @@ import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties
 import { colorFromOklab, formatAuthored, oklabToOklch, oklchToOklab, toOklab, type Oklab } from "../../src/color-math.js";
 import type { ConstantTarget, Edit } from "../../src/edit.js";
 import { addToPalette, harmonizePalette, harmonyHues, randomColor, rollPalette, type Harmony, type RollStyle } from "../../src/palette-roll.js";
-import type { Snapshot, SnapshotConstant } from "../../src/snapshot.js";
+import type { Snapshot, SnapshotConstant, SnapshotGradient } from "../../src/snapshot.js";
+import { NO_LOCK, NotAColor, paletteRows } from "../PaletteEntries.js";
 import type { Change } from "../../src/working-copy.js";
 import { EditableChip } from "../ColorChip.js";
-import { CONSTANT_COLUMNS, ConstantRow, RESERVED } from "../ConstantRow.js";
 import { ColorTip } from "../ColorTip.js";
+import { CONSTANT_COLUMN_COUNT, ConstantsHead, ConstantName, ConstantRow, constantUsers, RESERVED } from "../ConstantRow.js";
 import { GripIcon } from "../GripIcon.js";
 import { LockIcon } from "../LockIcon.js";
 import { Hint } from "../Hint.js";
 import { EDITABLE } from "../mode.js";
 import { colorNameOf } from "../names.js";
-import { paintCss } from "../paint.js";
-import { AddRow, ENTRY_NAME, ENTRY_NAME_RULE, GroupName, openNameOf } from "../EntryRow.js";
+import { isGradient, leadColor, paintCss, type Paint } from "../paint.js";
+import { AddRow, ENTRY_NAME, ENTRY_NAME_RULE, EntryRemove, GroupName, openNameOf } from "../EntryRow.js";
 import { PaletteExplorer } from "../PaletteExplorer.js";
 import type { PaletteEntry } from "../PalettePlots.js";
 import { Popup, type PopupPanel } from "../Popup.js";
 import { firstError, useTrying } from "../preview.js";
-import { TrashIcon } from "../TrashIcon.js";
 import { labelColorOn } from "../Strip.js";
+import { Alert } from "../Alert.js";
 
 /** A group of constants: `group` is its path in `systems`. */
-type Palette = { group: string; entries: PaletteEntry[] };
+export type Palette = { group: string; entries: PaletteEntry[] };
 
-/** Each group that holds constants of its own, in the order written. Constants in no group are not a palette. */
-export function palettesOf(constants: SnapshotConstant[]): Palette[] {
+/**
+ * Each group that holds palette entries of its own, in the order written.
+ * Entries in no group are not a palette. `entries` are its colors, which is
+ * what the color tools work on; a group of gradients alone has none.
+ */
+export function palettesOf(constants: SnapshotConstant[], gradients: SnapshotGradient[]): Palette[] {
   const palettes: Palette[] = [];
-  for (const { path, written, color } of constants) {
+  const paletteAt = (path: string) => {
     const cut = path.lastIndexOf(".");
-    if (cut === -1) continue;
+    if (cut === -1) return null;
     const group = path.slice(0, cut);
     let palette = palettes.find((candidate) => candidate.group === group);
     if (!palette) palettes.push((palette = { group, entries: [] }));
-    palette.entries.push({ name: path.slice(cut + 1), path, written, color });
+    return palette;
+  };
+  for (const { path, written, color } of constants) {
+    paletteAt(path)?.entries.push({ name: path.slice(path.lastIndexOf(".") + 1), path, written, color });
   }
+  for (const { path } of gradients) paletteAt(path);
   return palettes;
 }
 
@@ -54,7 +63,7 @@ const HARMONIES: { value: Harmony; label: string }[] = [
 ];
 const ROLL_STYLE_KEY = "dtg.palette.roll-style";
 
-function storedRollStyle(): RollStyle {
+export function storedRollStyle(): RollStyle {
   try {
     const stored = localStorage.getItem(ROLL_STYLE_KEY);
     return ROLL_STYLES.find((style) => style.value === stored)?.value ?? "anything";
@@ -172,7 +181,7 @@ function PaletteForm({ working, panel }: { working: Snapshot; panel: PopupPanel 
           }}
         />
       </label>
-      {(problem ?? refused) && <p className="ref-error ref-problem">{problem ?? refused}</p>}
+      {(problem ?? refused) && <Alert className="inline-alert">{problem ?? refused}</Alert>}
       <div className="system-form-actions">
         <button type="submit" className="btn btn-primary" disabled={name === "" || problem != null || busy}>
           Add palette
@@ -211,6 +220,16 @@ function isTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLElement && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName));
 }
 
+/** Whether a palette color was added since the last save. */
+export function addedSinceSave(changes: Change[], path: string): boolean {
+  return changes.some((change) => change.action === "set" && change.from == null && change.target.kind === "constant" && change.target.path === path);
+}
+
+/** The color a new entry in a palette gets: one that fits the colors there, in the Randomize style, around `base` or the first locked one. */
+export function newColorFor(palette: Palette, isLocked: (path: string) => boolean, style: RollStyle, base: string | null): Oklab {
+  return addToPalette(palette.entries.map((entry) => ({ path: entry.path, lab: toOklab(entry.color), locked: isLocked(entry.path) })), style, base);
+}
+
 /**
  * A color the file has starts locked; one added since the last save starts
  * unlocked. Toggling a lock is the browser's alone: it is kept until reload,
@@ -218,8 +237,7 @@ function isTextField(target: EventTarget | null): boolean {
  */
 function useLocks(changes: Change[]) {
   const [toggled, setToggled] = useState<Record<string, boolean>>({});
-  const added = (path: string) =>
-    changes.some((change) => change.action === "set" && change.from == null && change.target.kind === "constant" && change.target.path === path);
+  const added = (path: string) => addedSinceSave(changes, path);
   const isLocked = (path: string) => toggled[path] ?? !added(path);
   const toggle = (path: string) => setToggled({ ...toggled, [path]: !isLocked(path) });
   return { added, isLocked, toggle };
@@ -230,6 +248,8 @@ export function PalettePage({
   note,
   written,
   constants,
+  gradients,
+  order,
   named,
   changes,
 }: {
@@ -239,11 +259,14 @@ export function PalettePage({
   /** Every path the systems block holds, constants and systems alike. */
   written: string[];
   constants: SnapshotConstant[];
+  gradients: SnapshotGradient[];
+  /** Every palette entry's path, in the order written. */
+  order: string[];
   /** Every other name a ref can start with: the systems and the role groups. */
   named: string[];
   changes: Change[];
 }) {
-  const { commitStep, refusal } = useTrying();
+  const { commitStep, stepRefusal: refusal } = useTrying();
   const { added, isLocked, toggle } = useLocks(changes);
   const [selected, setSelected] = useState<string | null>(null);
   const [swatchSize, setSwatchSize] = useState(storedSwatchSize);
@@ -301,9 +324,9 @@ export function PalettePage({
     }
     boxesBeforeReorder.current.clear();
   }, [dragOrder]);
-  useEffect(() => { setDragOrder(null); }, [palette.entries, refusal]);
+  useEffect(() => { setDragOrder(null); }, [palette.entries, gradients, refusal]);
   const startDrag = (path: string, pointer: { x: number; y: number }) => {
-    const original = palette.entries.map((entry) => entry.path);
+    const original = tilePaths;
     const element = entryElements().find((entry) => entry.dataset.path === path);
     if (!element) return;
     let order = original;
@@ -353,7 +376,7 @@ export function PalettePage({
     addEventListener("pointercancel", onEnd);
   };
   const nudge = (path: string, by: -1 | 1) => {
-    const order = palette.entries.map((entry) => entry.path);
+    const order = [...tilePaths];
     const index = order.indexOf(path);
     const to = index + by;
     if (to < 0 || to >= order.length) return;
@@ -361,21 +384,21 @@ export function PalettePage({
     order.splice(to, 0, path);
     moveTo(path, order);
   };
-  const shownEntries = dragOrder
-    ? dragOrder.flatMap((path) => palette.entries.find((entry) => entry.path === path) ?? [])
-    : palette.entries;
   const taken = takenIn(palette.group, written);
-  const listed = constants.filter((constant) => palette.entries.some((entry) => entry.path === constant.path));
+  const rows = paletteRows(palette.group, constants, gradients, order);
+  const paths = [...constants, ...gradients].map((entry) => entry.path);
+  const tilePaths = rows.map((row) => row.path);
+  // The order shown, which a drag changes; the definition changes only when it is dropped.
+  const tiles = (dragOrder ?? tilePaths).flatMap((path): Tile[] => {
+    const row = rows.find((candidate) => candidate.path === path);
+    return row ? [{ name: path.slice(palette.group.length + 1), path, written: row.written, color: row.paint, users: constantUsers(row) }] : [];
+  });
   const add = async (color?: Oklab, after?: string, openName = false) => {
     if (operating.current) return;
     operating.current = true;
     setBusy(true);
     try {
-      const lab = color ?? addToPalette(
-        palette.entries.map((entry) => ({ path: entry.path, lab: toOklab(entry.color), locked: isLocked(entry.path) })),
-        rollStyle,
-        selected,
-      );
+      const lab = color ?? newColorFor(palette, isLocked, rollStyle, selected);
       const key = keyFor((await colorNameOf(colorFromOklab(lab))) ?? UNNAMED, taken);
       const path = `${palette.group}.${key}`;
       if (openName) openNameOf(path);
@@ -536,7 +559,7 @@ export function PalettePage({
         )}
       </div>
       {note && <p className="note">{note}</p>}
-      {refusal && <p className="ref-error" role="alert">{refusal}</p>}
+      {refusal && <Alert className="page-alert">{firstError(refusal)}</Alert>}
       {EDITABLE && palette.entries.length === 0 && (
         <p>
           <button type="button" className="btn palette-empty-add" disabled={busy} onClick={() => add()}>
@@ -545,36 +568,31 @@ export function PalettePage({
         </p>
       )}
       {swatchSize === "small" ? (
-        <table>
-          <thead>
-            <tr>
-              {CONSTANT_COLUMNS.map((column) => (
-                <th key={column}>{column}</th>
-              ))}
-            </tr>
-          </thead>
+        <table className="palette-table">
+          <ConstantsHead />
           <tbody>
-            {listed.map((constant) => (
+            {rows.map((row) => (
               <ConstantRow
-                key={constant.path}
-                constant={constant}
-                constants={constants}
+                key={row.path}
+                constant={row}
+                paths={paths}
                 named={named}
-                siblings={listed}
+                siblings={rows}
                 onPalettePage
-                lock={EDITABLE ? { locked: isLocked(constant.path), onToggle: () => toggle(constant.path) } : null}
+                lock={EDITABLE ? { locked: isLocked(row.path), onToggle: () => toggle(row.path) } : null}
               />
             ))}
-            <AddRow label="New color" columns={CONSTANT_COLUMNS.length} busy={busy} onAdd={() => add(undefined, undefined, true)} />
+            <AddRow label="New color" columns={CONSTANT_COLUMN_COUNT} busy={busy} onAdd={() => add(undefined, undefined, true)} />
           </tbody>
         </table>
       ) : (
         <div ref={row} className={`palette-row palette-row-${swatchSize}${dragged ? " is-reordering" : ""}`}>
-          {shownEntries.map((entry) => (
+          {tiles.map((entry) => (
             <PaletteEntry
               key={entry.path}
               entry={entry}
-              taken={taken}
+              paths={paths}
+              named={named}
               locked={isLocked(entry.path)}
               large={swatchSize === "large"}
               onToggleLock={() => toggle(entry.path)}
@@ -591,8 +609,8 @@ export function PalettePage({
                 setSelected(entry.path);
                 setToolsOpen(true);
               }}
-              onRename={(name) => { if (selected === entry.path) setSelected(`${palette.group}.${name}`); }}
-              lastOfPalette={palette.entries.length === 1}
+              onRepath={(path) => { if (selected === entry.path) setSelected(path); }}
+              lastOfPalette={rows.length === 1}
             />
           ))}
         </div>
@@ -680,9 +698,13 @@ export function PalettePage({
   );
 }
 
+/** A palette entry as its tile draws it: a color, or a gradient written among the colors. */
+type Tile = Omit<PaletteEntry, "color"> & { color: Paint; users: string[] };
+
 function PaletteEntry({
   entry,
-  taken,
+  paths,
+  named,
   locked,
   large,
   onToggleLock,
@@ -692,11 +714,14 @@ function PaletteEntry({
   onNudge,
   selected,
   onToggleSelect,
-  onRename,
+  onRepath,
   lastOfPalette,
 }: {
-  entry: PaletteEntry;
-  taken: string[];
+  entry: Tile;
+  /** Every path written in the palette, its own among them. */
+  paths: string[];
+  /** Every other name a ref can start with: the systems and the role groups. */
+  named: string[];
   locked: boolean;
   /** Removing it removes the palette, and with it this page. */
   lastOfPalette: boolean;
@@ -709,13 +734,15 @@ function PaletteEntry({
   onNudge: (by: -1 | 1) => void;
   selected: boolean;
   onToggleSelect: () => void;
-  onRename: (name: string) => void;
+  onRepath: (path: string) => void;
 }) {
   const { commit } = useTrying();
   const target: ConstantTarget = { kind: "constant", path: entry.path };
   const swatch = <span className="palette-entry-fill" style={{ background: paintCss(entry.color) }} />;
   const value = <span className="palette-entry-value">{entry.written}</span>;
-  const onColor = { "--palette-entry-on": labelColorOn(entry.color) } as CSSProperties;
+  const onColor = { "--palette-entry-on": labelColorOn(leadColor(entry.color)) } as CSSProperties;
+  /** A gradient is no color for the tools to work on: it is not a base, and never rolled, so its lock cannot be turned. */
+  const gradient = isGradient(entry.color);
   const hintSide = "left";
   const selectControl = (
     <button
@@ -728,7 +755,8 @@ function PaletteEntry({
       <Target size={14} aria-hidden />
     </button>
   );
-  const select = <Hint text={selected ? "Base" : "Set base"}>{selectControl}</Hint>;
+  const held = locked && !gradient;
+  const select = gradient ? <NotAColor className="palette-entry-mark" /> : <Hint text={selected ? "Base" : "Set base"}>{selectControl}</Hint>;
   const handle = (
     <Hint text="Drag to reorder" side={hintSide}>
       <button
@@ -765,44 +793,40 @@ function PaletteEntry({
   }
   return (
     <div className={`palette-entry${selected ? " is-selected" : ""}${dragging ? " is-dragging" : ""}`} style={onColor} data-path={entry.path}>
-      <EditableChip color={entry.color} value={entry.written} target={target} className="palette-entry-color" tipInside={large} onUnlock={locked ? onToggleLock : undefined}>
+      <EditableChip color={entry.color} value={entry.written} target={target} className="palette-entry-color" tipInside={large} onUnlock={locked && !gradient ? onToggleLock : undefined}>
         {swatch}
       </EditableChip>
       <div className="palette-entry-foot">
         <span className="palette-entry-actions">
-          <Hint text={locked ? "Unlock" : "Lock"} side={hintSide}>
+          <Hint text={gradient ? NO_LOCK : locked ? "Unlock" : "Lock"} side={hintSide}>
             <button
               type="button"
-              className={locked ? "palette-entry-lock palette-entry-locked" : "palette-entry-lock"}
-              aria-label={locked ? `Unlock ${entry.name}` : `Lock ${entry.name}`}
-              aria-pressed={locked}
-              onClick={onToggleLock}
+              className={locked && !gradient ? "palette-entry-lock palette-entry-locked" : "palette-entry-lock"}
+              aria-label={gradient ? `${entry.name} has no lock` : locked ? `Unlock ${entry.name}` : `Lock ${entry.name}`}
+              aria-pressed={gradient ? undefined : locked}
+              // Not `disabled`: a disabled button gets no pointer events, so its hint would never show.
+              aria-disabled={gradient}
+              onClick={gradient ? undefined : onToggleLock}
             >
-              <LockIcon locked={locked} />
+              <LockIcon locked={gradient || locked} />
             </button>
           </Hint>
           {handle}
-          <Hint text={locked ? "Unlock to delete" : lastOfPalette ? "Delete, and the palette with it" : "Delete"} side={hintSide}>
-            <button
-              type="button"
-              className="palette-entry-remove"
-              aria-label={`Remove ${entry.name}`}
-              // Not `disabled`: a disabled button gets no pointer events, so its hint would never show.
-              aria-disabled={locked}
-              onClick={() => {
-                if (locked) return;
-                commit({ action: "remove", target });
-              }}
-            >
-              <TrashIcon />
-            </button>
-          </Hint>
+          <EntryRemove
+            label={entry.path}
+            users={entry.users}
+            stays={held ? "Unlock to delete" : null}
+            hint={lastOfPalette ? "Delete, and the palette with it" : "Delete"}
+            className="palette-entry-remove"
+            side={hintSide}
+            onRemove={() => commit({ action: "remove", target })}
+          />
         </span>
         {select}
         {value}
-        <Popup title="Rename" className="palette-entry-name" label={entry.name} focus="field">
-          {(panel) => <Rename target={target} name={entry.name} taken={taken} panel={panel} onRename={onRename} />}
-        </Popup>
+        <span className="palette-entry-name">
+          <ConstantName path={entry.path} paths={paths} named={named} onRepath={onRepath} />
+        </span>
       </div>
       <span className="palette-entry-gap">
         <Hint text="Add color">
@@ -812,57 +836,5 @@ function PaletteEntry({
         </Hint>
       </span>
     </div>
-  );
-}
-
-/** A new name for the entry, kept on dismiss like every other edit; one that cannot be used is dropped. */
-function Rename({ target, name, taken, panel, onRename }: { target: ConstantTarget; name: string; taken: string[]; panel: PopupPanel; onRename: (name: string) => void }) {
-  const { commit } = useTrying();
-  const [text, setText] = useState(name);
-  const wanted = text.trim();
-  const problem =
-    wanted === name
-      ? null
-      : !ENTRY_NAME.test(wanted)
-        ? "A name starts with a letter and holds letters, digits, - and _."
-        : taken.includes(wanted)
-          ? `${wanted} is taken.`
-          : null;
-  const rename = wanted !== name && problem == null ? wanted : null;
-  const latest = useRef(rename);
-  latest.current = rename;
-  useEffect(
-    () => () => {
-      if (latest.current && !panel.escaped()) {
-        commit({ action: "rename", target, name: latest.current });
-        onRename(latest.current);
-      }
-    },
-    [],
-  );
-  return (
-    <form
-      className="ref-editor"
-      onSubmit={(event) => {
-        event.preventDefault();
-        panel.dismiss();
-      }}
-    >
-      <div className="editor-head" {...panel.handle}>
-        <span className="ref-editor-heading">Rename {name}</span>
-        {panel.close}
-      </div>
-      <input
-        className="ref-input"
-        type="text"
-        aria-label="Name"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        spellCheck={false}
-        autoComplete="off"
-        autoCapitalize="off"
-      />
-      {problem && <p className="ref-error">{problem}</p>}
-    </form>
   );
 }

@@ -15,9 +15,11 @@ type Trying = {
   commitStep(edits: Edit[], opening?: Opening): string | null;
   /** Why the edit being tried cannot be drawn, or null when it can. */
   refusal: string | null;
+  /** Why the last step made was not kept: a refusal that was not merely tried. An editor that is open says its own. */
+  stepRefusal: string | null;
 };
 
-const TryingContext = createContext<Trying>({ preview: () => {}, previewStep: () => {}, commit: () => null, commitStep: () => null, refusal: null });
+const TryingContext = createContext<Trying>({ preview: () => {}, previewStep: () => {}, commit: () => null, commitStep: () => null, refusal: null, stepRefusal: null });
 
 export function useTrying(): Trying {
   return useContext(TryingContext);
@@ -43,6 +45,7 @@ export function TryingProvider({
   const store = useStore();
   const [tried, setTried] = useState<Drawn | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
+  const [stepRefused, setStepRefused] = useState(false);
   const wanted = useRef<Edit[] | null>(null);
   const frame = useRef<number | null>(null);
   const latestBase = useRef(base);
@@ -68,6 +71,7 @@ export function TryingProvider({
       } catch (e) {
         setRefusal((e as Error).message);
       }
+      setStepRefused(false);
     });
   }, []);
 
@@ -81,9 +85,11 @@ export function TryingProvider({
       } catch (e) {
         setTried(null);
         setRefusal((e as Error).message);
+        setStepRefused(true);
         return (e as Error).message;
       }
       setRefusal(null);
+      setStepRefused(false);
       if (opening) openOnceThere(opening);
       store.commit(edits).catch(() => {
         setTried(null);
@@ -96,6 +102,7 @@ export function TryingProvider({
       if (edits == null) {
         setTried(null);
         setRefusal(null);
+        setStepRefused(false);
       } else schedule();
     };
     return {
@@ -104,8 +111,9 @@ export function TryingProvider({
       commit: (edit, opening) => commitStep([edit], opening),
       commitStep,
       refusal,
+      stepRefusal: stepRefused ? refusal : null,
     };
-  }, [schedule, refusal, store]);
+  }, [schedule, refusal, stepRefused, store]);
 
   return <TryingContext.Provider value={trying}>{children(tried ?? base)}</TryingContext.Provider>;
 }

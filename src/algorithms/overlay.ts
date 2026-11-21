@@ -8,7 +8,7 @@ import type { Color } from "../color-math.js";
 export const overlay: Algorithm = {
   name: "overlay",
   description:
-    "A color at selector % opacity, never flattened. For values that only exist over unknown content: shadows, scrims.",
+    "One color at a range of opacities, for anything that sits over content you don't control.",
 
   params: {
     color: { kind: "color" },

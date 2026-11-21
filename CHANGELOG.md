@@ -2,6 +2,38 @@
 
 ## Unreleased
 
+- A hex color can carry an alpha, as CSS writes it: `#rrggbbaa` or
+  `#rgba`. `"#00000080"` used to be refused; it is black at about 50%.
+  The editor writes a translucent color sRGB holds that way too, where it
+  used to switch to `oklch(… / a)`; a color outside sRGB is still
+  `oklch()`.
+
+- A number in a selector is one step however it is written: `sky(3.0)` and
+  `sky(03)` are `sky(3)` and emit `--color-sky-3`. They used to emit a
+  second variable, `--color-sky-3_0`, with the same color.
+- A role can be a gradient: `gradient(paper 0% sky(500) 100% angle=90deg)`, colors,
+  each with an optional position, then named arguments: `angle`, or
+  `kind=radial` and `kind=conic` with `x`, `y`, `shape` and `size`, and
+  `repeat` and `space`. A stop is
+  any ref that resolves to a color, and the CSS keeps its reference. Plain
+  CSS, Sass and DTCG write it. The `tailwind` format gives a gradient role
+  a `bg-<role>` class that sets `background-image`, where a color role is
+  wired into the theme. `transparent()` takes a gradient too, and fades
+  every stop. A gradient written in the palette is named and reusable: it
+  emits as `--gradient-<name>`, a role points at it by path, and
+  `gradient(name angle=135deg)` restyles it, keeping its stops. The
+  editor draws it where it is written, among the palette's colors, marked
+  as left out of Randomize, Harmonize and the plot. In the editor a ref's sources gain Gradient: a
+  ruler with a handle per stop to drag, a row per stop opening the usual
+  color editor, then its kind, angle or center, shape and size, and
+  repeat. A role that is a gradient in one mode and a color in
+  another loads and draws, marked on its row, and neither saves nor builds
+  until it is one or the other.
+- `transparent()` takes any ref that resolves to a color, not only a
+  palette color: a step (`transparent(sky(500) 70)`), a literal, or another
+  role, which it follows mode by mode. It emits as its value and publishes
+  nothing by itself, so a palette color in an `emit: false` group that is
+  used only through `transparent()` is no longer written out.
 - Palette groups gain two circular views: a 2D hue/chroma disk and a
   fixed-camera 3D view adding lightness as height. Hue runs clockwise from
   the top. Switching views smoothly tilts the disk and raises or lowers
@@ -67,9 +99,41 @@
   the pointer where you clicked, not below the thing clicked. Opened from
   the keyboard, a panel still opens below its button.
 
+- The value editor:
+  - Its sources are a row of icons along the top, as a design tool marks a
+    fill: Solid color, Gradient, Palette, Systems and Roles, with Inherit
+    first on a mode that extends another.
+  - Functions, after them, wraps whatever the source chose in
+    `transparent()` with an opacity, solid colors included. It replaces the
+    transparent checkbox that only Palette had.
+  - Solid color has alpha: a bar under the hue bar and a percent field
+    beside it. Steps moved to the top right, Display P3 is listed as P3,
+    and each number field names itself on hover.
+  - Choosing a palette color or a role no longer closes the panel.
+  - The ← reset shows only where the value was a solid color.
+  - A value that is refused says why in the panel, in a few words, and
+    closing the panel drops it.
+
+- Tables and pages:
+  - A row's controls (lock, copy, delete) have a column of their own beside
+    its name, so a narrow table no longer breaks names letter by letter.
+  - The page of all colors edits every group's colors, not only the ones in
+    no group: each group ends with New color, which adds the color the
+    group's own page would. Under a group's heading a row shows the last
+    part of its name.
+  - In a palette's Grid and Strip, a color is renamed by double-click, as in
+    a table, which can also move it to another palette; it can no longer be
+    deleted while something uses it.
+  - "Used by" no longer marks a use as translucent.
+  - A refused edit shows as an alert box on every page and panel.
+
+- The sidebar nests palette groups like role groups, with each group's
+  description on hover. Below 900px wide (it was 640px) it becomes a bar
+  across the top with a menu button that opens the navigation.
+
 - A role can hold a color directly: `surface: "#000000"` or
   `oklch(0 0 0)`. It emits as a value, not a reference, and the editor's
-  role picker gains a Picker tab to choose one. dtg warns when the same color
+  role picker gains a Solid color source to choose one. dtg warns when the same color
   is written twice or matches a constant. Systems can no longer be named
   `oklch`, `oklab` or `color`.
 
