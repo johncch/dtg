@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.5.0] - 2026-11-20
 
 - A hex color can carry an alpha, as CSS writes it: `#rrggbbaa` or
   `#rgba`. `"#00000080"` used to be refused; it is black at about 50%.
