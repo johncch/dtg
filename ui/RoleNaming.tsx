@@ -104,22 +104,27 @@ function GroupForm({ working, section, panel }: { working: Snapshot; section: st
   );
 }
 
-/** Closes a group's rows: adds a role after `siblings`, holding the refs of the last of them, and opens its name. */
-export function NewRoleRow({ siblings, columns }: { siblings: SnapshotRole[]; columns: number }) {
+/**
+ * Closes a group's rows: adds a role after `siblings`, holding the refs of
+ * the last of them, and opens its name. With no siblings, `empty` says where
+ * the first role goes and what it holds.
+ */
+export function NewRoleRow({ siblings, columns, empty }: { siblings: SnapshotRole[]; columns: number; empty?: { section: string; refs: string[] } }) {
   const { commit } = useTrying();
   const last = siblings.at(-1);
-  if (!last) return null;
+  const start = last ? { at: last, refs: refsOf(last) } : empty ? { at: { section: empty.section, group: "" }, refs: empty.refs } : null;
+  if (!start) return null;
   return (
     <AddRow
       label="New role"
       columns={columns}
       onAdd={() => {
-        const target = targetOf({ ...last, role: freshName(siblings.map((role) => role.role)) });
+        const target = targetOf({ ...start.at, role: freshName(siblings.map((role) => role.role)) });
         openNameOf(JSON.stringify(target));
         commit({
           action: "add",
           target,
-          value: JSON.stringify(refsOf(last)),
+          value: JSON.stringify(start.refs),
         });
       }}
     />

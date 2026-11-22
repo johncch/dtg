@@ -17,6 +17,7 @@ import { ConstantsPage } from "./pages/ConstantsPage.js";
 import { DefinitionPage } from "./pages/DefinitionPage.js";
 import { ModesPage } from "./pages/ModesPage.js";
 import { GroupPage, RolesPage } from "./pages/GroupPage.js";
+import { NewCollection } from "./CollectionNaming.js";
 import { NewPalette, PalettePage, palettesOf } from "./pages/PalettePage.js";
 import { SystemPage } from "./pages/SystemPage.js";
 import { Link, useRoute, type Route } from "./router.js";
@@ -138,7 +139,7 @@ function Brand({
 }
 
 function Nav({ snapshot, working }: { snapshot: Snapshot; working: Snapshot }) {
-  const sections = [...new Set(snapshot.roles.map((role) => role.section))];
+  const sections = snapshot.sections;
   return (
     <>
       <nav>
@@ -191,6 +192,11 @@ function Nav({ snapshot, working }: { snapshot: Snapshot; working: Snapshot }) {
             </div>
           </div>
         ))}
+        {EDITABLE && (
+          <div className="nav-section nav-new-collection-section">
+            <NewCollection working={working} />
+          </div>
+        )}
       </nav>
     </>
   );
@@ -374,8 +380,8 @@ function Page({ route, snapshot, working }: { route: Route; snapshot: Snapshot; 
     const system = snapshot.systems.find((candidate) => candidate.system === route.name);
     return system ? <SystemPage system={system} snapshot={snapshot} working={working} /> : <NotFound what={`system "${route.name}"`} />;
   }
-  if (route.page === "roles" && route.section != null && !snapshot.roles.some((role) => role.section === route.section)) {
-    return <NotFound what={`section "${route.section}"`} />;
+  if (route.page === "roles" && route.section != null && !snapshot.sections.includes(route.section)) {
+    return <NotFound what={`collection "${route.section}"`} />;
   }
-  return <RolesPage key={route.page === "roles" ? (route.section ?? "") : ""} snapshot={snapshot} section={route.page === "roles" ? route.section : undefined} />;
+  return <RolesPage key={route.page === "roles" ? (route.section ?? "") : ""} snapshot={snapshot} working={working} section={route.page === "roles" ? route.section : undefined} />;
 }

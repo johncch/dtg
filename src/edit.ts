@@ -25,7 +25,9 @@ export type EditTarget =
    */
   | { kind: "mode"; name: string }
   /** The `scheme` a mode writes; `""` when it writes none. */
-  | { kind: "scheme"; mode: string };
+  | { kind: "scheme"; mode: string }
+  /** A collection of roles: a top-level key that is not one the grammar keeps. Its value is `{}`. */
+  | { kind: "collection"; name: string };
 
 export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
 export type SystemTarget = Extract<EditTarget, { kind: "system" }>;
@@ -33,6 +35,7 @@ export type RoleTarget = Extract<EditTarget, { kind: "role" }>;
 export type GroupTarget = Extract<EditTarget, { kind: "group" }>;
 type EmitTarget = Extract<EditTarget, { kind: "emit" }>;
 export type ModeTarget = Extract<EditTarget, { kind: "mode" }>;
+export type CollectionTarget = Extract<EditTarget, { kind: "collection" }>;
 type SchemeTarget = Extract<EditTarget, { kind: "scheme" }>;
 /** What is added, renamed and removed whole. */
 export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
@@ -57,15 +60,17 @@ export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
  * list. Adding a mode to a definition without `modes` names the one it had
  * `default` and writes each role's bare ref as a list. Removing a mode
  * takes its place out of every ref list; one another mode extends, or the
- * last mode, stays.
+ * last mode, stays. A collection is added empty at the end of the file,
+ * renamed, and removed with every role in it; refs name roles without their
+ * collection, so none is rewritten.
  */
 export type Edit =
   | { action: "set"; target: EditTarget; value: string }
-  | { action: "add"; target: EntryTarget | ModeTarget; value: string; after?: string }
-  | { action: "rename"; target: EntryTarget | GroupTarget | ModeTarget; name: string }
+  | { action: "add"; target: EntryTarget | ModeTarget | CollectionTarget; value: string; after?: string }
+  | { action: "rename"; target: EntryTarget | GroupTarget | ModeTarget | CollectionTarget; name: string }
   | { action: "place"; target: ConstantTarget | RoleTarget; path: string }
   | { action: "move"; target: ConstantTarget | RoleTarget; after: string | null }
-  | { action: "remove"; target: EntryTarget | ModeTarget };
+  | { action: "remove"; target: EntryTarget | ModeTarget | CollectionTarget };
 
 /** Where a constant or a role is after it is placed at `path`. */
 export function placedTarget<Target extends ConstantTarget | RoleTarget>(target: Target, path: string): Target {
@@ -73,8 +78,8 @@ export function placedTarget<Target extends ConstantTarget | RoleTarget>(target:
 }
 
 /** Where a constant, a system, a role, a group or a mode is after it is renamed. */
-export function renamedTarget<Target extends EntryTarget | GroupTarget | ModeTarget>(target: Target, name: string): Target {
-  if (target.kind === "mode") return { ...target, name };
+export function renamedTarget<Target extends EntryTarget | GroupTarget | ModeTarget | CollectionTarget>(target: Target, name: string): Target {
+  if (target.kind === "mode" || target.kind === "collection") return { ...target, name };
   const renamed = (path: string) => [...path.split(".").slice(0, -1), name].join(".");
   return { ...target, path: renamed(target.path) };
 }
@@ -107,6 +112,8 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
       return ["modes", target.name];
     case "scheme":
       return ["modes", target.mode, "scheme"];
+    case "collection":
+      return [target.name];
   }
 }
 
@@ -131,6 +138,8 @@ export function describeTarget(target: EditTarget): string {
       return `the mode ${target.name}`;
     case "scheme":
       return `the scheme of ${target.mode}`;
+    case "collection":
+      return `the collection ${target.name}`;
   }
 }
 
@@ -159,7 +168,12 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
   let text = yamlText;
   for (const edit of edits) {
     if (edit.action === "rename") {
-      text = edit.target.kind === "mode" ? withModeRenamed(text, edit.target, edit.name) : withEntryRenamed(text, edit.target, edit.name);
+      text =
+        edit.target.kind === "mode"
+          ? withModeRenamed(text, edit.target, edit.name)
+          : edit.target.kind === "collection"
+            ? withCollectionRenamed(text, edit.target, edit.name)
+            : withEntryRenamed(text, edit.target, edit.name);
       continue;
     }
     if (edit.action === "place") {
@@ -173,6 +187,8 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
     if (edit.action === "remove") {
       text = edit.target.kind === "mode"
         ? withModeRemoved(text, edit.target)
+        : edit.target.kind === "collection"
+        ? withCollectionRemoved(text, edit.target)
         : edit.target.kind === "system" ? withEntryRemoved(text, edit.target) : withGroupedRemoved(text, edit.target);
       continue;
     }
@@ -180,6 +196,8 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       text =
         edit.target.kind === "mode"
           ? withModeAdded(text, edit.target, edit.value)
+          : edit.target.kind === "collection"
+          ? withCollectionAdded(text, edit.target)
           : edit.target.kind === "system"
           ? withSystemAdded(text, edit.target, edit.value)
           : edit.target.kind === "role"
@@ -190,7 +208,7 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
     if (edit.target.kind === "role" || edit.target.kind === "group") {
       throw new Error(`${describeTarget(edit.target)} is edited one ref at a time`);
     }
-    if (edit.target.kind === "mode") throw new Error(`${describeTarget(edit.target)} is added and renamed, not set`);
+    if (edit.target.kind === "mode" || edit.target.kind === "collection") throw new Error(`${describeTarget(edit.target)} is added and renamed, not set`);
     if (edit.target.kind === "scheme") {
       text = withSchemeSet(text, edit.target, edit.value);
       continue;
@@ -260,6 +278,7 @@ export function readValue(yamlText: string, target: EditTarget): string | null {
   }
   if (target.kind === "group") return isGroup(writtenAt(yamlText, target)) ? "{}" : null;
   if (target.kind === "mode" || target.kind === "scheme") return modeValue(yamlText, target);
+  if (target.kind === "collection") return collectionPair(parseDocument(yamlText), target.name) ? "{}" : null;
   if (structureAt(yamlText, target)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
   const node = nodeAt(yamlText, target);
   if (node) return node.value == null ? INHERIT : String(node.value);
@@ -567,6 +586,12 @@ function withEntryAdded(
     throw new Error(`${describeTarget(target)} is already written, ${alreadyWritten}`);
   }
   const entry = `${keySource(name)}: ${valueSource}`;
+  // A collection is added as `{}`; its first role makes it a block, the way collections are written.
+  const holding = mapKeys.length === 1 && set.flow && set.items.length === 0 ? (parseDocument(text).contents as YAMLMap).items.find((item) => isScalar(item.key) && item.key.value === mapKeys[0]) : undefined;
+  if (holding && isScalar(holding.key) && holding.key.range) {
+    const lines = valueBlock ? [`${keySource(name)}:`, ...valueBlock.map((line) => `  ${line}`)] : [entry];
+    return `${text.slice(0, holding.key.range[1])}:${lines.map((line) => `\n  ${line}`).join("")}${text.slice(set.range[1])}`;
+  }
   const before = after == null ? undefined : set.items.find((item) => isScalar(item.key) && item.key.value === after);
   const beforeNode = before && ((before.value ?? before.key) as Node);
   if (set.flow) {
@@ -779,7 +804,7 @@ function withGroupedRemoved(text: string, target: RoleTarget | ConstantTarget): 
  */
 function withEntryRemoved(
   text: string,
-  target: EntryTarget | EmitTarget | SchemeTarget,
+  target: EntryTarget | EmitTarget | SchemeTarget | CollectionTarget,
   { doc, keys, set, pair }: Entry = entryAt(text, target as EntryTarget | EmitTarget),
   /** Stands apart from its neighbors by a blank line; one of the two around it goes with it. */
   spaced = target.kind === "system",
@@ -1015,4 +1040,39 @@ function withSchemeSet(text: string, target: SchemeTarget, scheme: string): stri
   const source = modes.flow ? `: { scheme: ${scheme} }` : `:\n${indent}  scheme: ${scheme}`;
   const colon = mapped.indexOf(":", keyEnd);
   return mapped.slice(0, keyEnd) + source + mapped.slice(Math.max(colon + 1, valueEnd));
+}
+
+function collectionPair(doc: Document, name: string): Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node> | null {
+  if (TOP_LEVEL_RESERVED.includes(name) || !isMap(doc.contents)) return null;
+  const pair = doc.contents.items.find((item) => isScalar(item.key) && String(item.key.value) === name);
+  if (!pair || !isMap(pair.value) || !isScalar(pair.key) || !pair.key.range) return null;
+  return pair as Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node>;
+}
+
+/** Why `name` cannot be a collection's: the grammar keeps it, or the file has it. */
+function collectionNameTaken(doc: Document, name: string, target: EditTarget): void {
+  if (TOP_LEVEL_RESERVED.includes(name)) throw new Error(`${name} is a key the definition keeps for itself, not ${describeTarget(target)}`);
+  if (isMap(doc.contents) && doc.contents.has(name)) throw new Error(`${name} is already written`);
+}
+
+/** A new collection, empty, after everything the file holds, set off by a blank line. */
+function withCollectionAdded(text: string, target: CollectionTarget): string {
+  collectionNameTaken(parseDocument(text), target.name, target);
+  const body = text.replace(/\s*$/, "");
+  return `${body}${body === "" ? "" : "\n\n"}${keySource(target.name)}: {}\n`;
+}
+
+function withCollectionRenamed(text: string, target: CollectionTarget, name: string): string {
+  const doc = parseDocument(text);
+  const pair = collectionPair(doc, target.name);
+  if (!pair) throw new Error(`nothing written for ${describeTarget(target)} to edit`);
+  collectionNameTaken(doc, name, { kind: "collection", name });
+  return text.slice(0, pair.key.range[0]) + keySource(name) + text.slice(pair.key.range[1]);
+}
+
+function withCollectionRemoved(text: string, target: CollectionTarget): string {
+  const doc = parseDocument(text);
+  const pair = collectionPair(doc, target.name);
+  if (!pair) throw new Error(`nothing written for ${describeTarget(target)} to edit`);
+  return withEntryRemoved(text, target, { doc, keys: [target.name], set: doc.contents as YAMLMap, pair: pair as Entry["pair"] }, true);
 }

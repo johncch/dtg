@@ -1,5 +1,5 @@
 import { isMap, isScalar, isSeq, parseDocument } from "yaml";
-import { applyEdits, placedTarget, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget, type GroupTarget, type ModeTarget, type RoleTarget } from "./edit.js";
+import { applyEdits, placedTarget, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget, type GroupTarget, type ModeTarget, type CollectionTarget, type RoleTarget } from "./edit.js";
 
 /**
  * The definition as it is on disk, the edits made since that are not yet
@@ -69,9 +69,9 @@ export function discard(copy: WorkingCopy): WorkingCopy {
  */
 export type Change =
   | { action: "set"; target: EditTarget; from: string | null; to: string }
-  | { action: "rename"; target: EntryTarget | GroupTarget | ModeTarget; to: EntryTarget | GroupTarget | ModeTarget }
+  | { action: "rename"; target: EntryTarget | GroupTarget | ModeTarget | CollectionTarget; to: EntryTarget | GroupTarget | ModeTarget | CollectionTarget }
   | { action: "move"; target: ConstantTarget | RoleTarget }
-  | { action: "remove"; target: EntryTarget | ModeTarget; from: string };
+  | { action: "remove"; target: EntryTarget | ModeTarget | CollectionTarget; from: string };
 
 function modeNames(text: string): string[] {
   const modes = parseDocument(text).get("modes", true);
@@ -114,6 +114,11 @@ function carried(target: EditTarget, from: EditTarget, to: EditTarget): EditTarg
   if (from.kind === "system" && to.kind === "system" && (target.kind === "param" || target.kind === "emit")) {
     return target.system === from.path ? { ...target, system: to.path } : target;
   }
+  if (from.kind === "collection" && to.kind === "collection") {
+    if ((target.kind === "role" || target.kind === "ref") && target.section === from.name) return { ...target, section: to.name };
+    if (target.kind === "group" && target.root === from.name) return { ...target, root: to.name };
+    return target;
+  }
   if (from.kind === "mode" && to.kind === "mode" && target.kind === "scheme") {
     return target.mode === from.name ? { ...target, mode: to.name } : target;
   }
@@ -128,8 +133,11 @@ function carried(target: EditTarget, from: EditTarget, to: EditTarget): EditTarg
   return target;
 }
 
-/** Whether `target` is written inside the entry `holder`: a role's ref, or a system's param or emit list. */
+/** Whether `target` is written inside `holder`: a role's ref, a system's param or emit list, or anything in a collection. */
 function heldBy(target: EditTarget, holder: EditTarget): boolean {
+  if (holder.kind === "collection") {
+    return ((target.kind === "role" || target.kind === "ref") && target.section === holder.name) || (target.kind === "group" && target.root === holder.name);
+  }
   if (holder.kind === "role") return target.kind === "ref" && target.section === holder.section && target.role === holder.path;
   if (holder.kind === "system") return (target.kind === "param" || target.kind === "emit") && target.system === holder.path;
   return false;
@@ -232,10 +240,10 @@ export function changesOf(copy: WorkingCopy): Change[] {
     }
     const from = readValue(copy.diskText, inFile)!;
     if (now == null) {
-      push({ action: "remove", target: inFile as EntryTarget | ModeTarget, from });
+      push({ action: "remove", target: inFile as EntryTarget | ModeTarget | CollectionTarget, from });
       continue;
     }
-    if (!sameTarget(now, unrenamed)) push({ action: "rename", target: inFile as EntryTarget | GroupTarget | ModeTarget, to: now as EntryTarget | GroupTarget | ModeTarget });
+    if (!sameTarget(now, unrenamed)) push({ action: "rename", target: inFile as EntryTarget | GroupTarget | ModeTarget | CollectionTarget, to: now as EntryTarget | GroupTarget | ModeTarget | CollectionTarget });
     if (moved) push({ action: "move", target: now as ConstantTarget | RoleTarget });
     if (value != null && value !== from) push({ action: "set", target: now, from, to: value });
   }

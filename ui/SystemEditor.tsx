@@ -226,14 +226,14 @@ function SystemForm({ working, editing, panel }: { working: Snapshot; editing: S
       )}
       {attempt.status === "refused" && <Alert className="inline-alert">{attempt.problem}</Alert>}
       <div className="system-form-actions">
-        <button type="submit" className="btn btn-primary" disabled={attempt.status !== "ready"}>
-          {editing ? "Apply" : "Add system"}
-        </button>
         {editing && (
           <button type="button" className="btn system-form-remove" onClick={remove}>
-            Remove
+            Delete
           </button>
         )}
+        <button type="submit" className="btn btn-primary" disabled={attempt.status !== "ready"}>
+          {editing ? "Update" : "Add system"}
+        </button>
       </div>
       {removal && <Alert className="inline-alert">{removal}</Alert>}
     </form>

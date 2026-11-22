@@ -16,6 +16,12 @@
   any other. A `modes: [light, dark]` list is written as a map once a scheme
   or a new mode needs one; a definition without `modes` gets one, naming its
   one mode `default`, with each role's ref written as a list.
+- Collections can be added, renamed and removed in the editor. New
+  collection, at the bottom of the sidebar, adds one empty; the settings
+  button on a collection's page renames it or removes it with its roles,
+  which is refused while roles elsewhere point into it. An empty collection
+  shows in the sidebar, and its page adds its first role. `Snapshot.sections`
+  lists every collection, an empty one too.
 - `ResolvedDefinition.problems` is a list of `{ path, message }`, where it
   was a list of strings. `problemText(problem)` gives the old string,
   `"<path>: <message>"`; the CLI and the editor's save refusal word them as

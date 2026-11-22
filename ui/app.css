@@ -195,13 +195,15 @@ button.system-settings[data-state="open"] {
 .system-form-note {
   font-size: var(--text-caption);
 }
+/* The confirming button on the right; Remove, where there is one, on the left. */
 .system-form-actions {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px;
 }
 .system-form-remove {
+  margin-right: auto;
   color: var(--danger);
 }
 aside nav a,
@@ -2924,4 +2926,28 @@ tr.group-row .group-note {
   display: inline-flex;
   color: var(--label-secondary);
   cursor: help;
+}
+/* Set off like a section's heading, and inset like its links. */
+.nav-new-collection-section {
+  margin-top: 16px;
+}
+button.nav-new-collection {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  height: 28px;
+  margin: 0 -8px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--muted);
+  cursor: pointer;
+}
+button.nav-new-collection:hover,
+button.nav-new-collection[data-state="open"] {
+  background: var(--hover);
+  color: var(--fg);
+}
+.collection-form-actions {
+  margin-top: 24px;
 }

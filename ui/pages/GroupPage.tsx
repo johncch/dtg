@@ -6,6 +6,8 @@ import { ColorChip } from "../ColorChip.js";
 import { ControlsCell, ControlsHead, entryRowProps } from "../EntryRow.js";
 import { NewRoleRow, RoleDuplicate, RoleGrip, roleUsers, RoleGroupName, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
 import { Link, useScrollToHash } from "../router.js";
+import { CollectionSettings } from "../CollectionNaming.js";
+import { EDITABLE } from "../mode.js";
 import { INHERIT, rolePath } from "../../src/selector.js";
 import { stepAnchor } from "../Strip.js";
 import { constantAnchor } from "../ConstantRow.js";
@@ -47,7 +49,7 @@ export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: stri
  * so the mode columns line up. Roles written straight in a section have no
  * group and no heading row.
  */
-export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?: string }) {
+export function RolesPage({ snapshot, working, section }: { snapshot: Snapshot; working: Snapshot; section?: string }) {
   const hash = useScrollToHash(section ?? "roles");
   const shown = section ? snapshot.roles.filter((role) => role.section === section) : snapshot.roles;
   const groups = [...new Set(shown.map((role) => role.group))];
@@ -55,7 +57,10 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
   const users = useMemo(() => roleUsers(snapshot.roles), [snapshot.roles]);
   return (
     <>
-      <h1>{section ?? "All roles"}</h1>
+      <div className="system-head">
+        <h1>{section ?? "All roles"}</h1>
+        {EDITABLE && section != null && <CollectionSettings key={section} working={working} section={section} />}
+      </div>
       <p className="sub">
         {shown.length} {shown.length === 1 ? "role" : "roles"}{named > 0 ? ` in ${named} ${named === 1 ? "group" : "groups"}` : ""}
       </p>
@@ -97,6 +102,9 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
               </Fragment>
             );
           })}
+          {section != null && groups.length === 0 && snapshot.constants.length > 0 && (
+            <NewRoleRow siblings={[]} columns={snapshot.modes.length + 2} empty={{ section, refs: snapshot.modes.map(() => snapshot.constants[0].path) }} />
+          )}
         </tbody>
       </table>
     </>

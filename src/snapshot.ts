@@ -55,6 +55,8 @@ export type Snapshot = {
   /** Every palette entry's path, colors and gradients together, in the order written. */
   paletteOrder: string[];
   roles: SnapshotRole[];
+  /** Every collection of roles, in the order written, an empty one too. */
+  sections: string[];
   /** Hand-written descriptions of groups, by dotted path: system groups, palette groups, and role groups. */
   groupNotes: { systems: Record<string, string>; palette: Record<string, string>; roles: Record<string, string> };
 };
@@ -358,6 +360,7 @@ export function buildSnapshot({
       ),
     })),
     groupNotes: resolved.groupDescriptions,
+    sections: resolved.sections.map((section) => section.name),
     roles: resolved.roles.map((role) => ({
       section: role.section,
       group: role.group,

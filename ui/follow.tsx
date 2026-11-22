@@ -19,6 +19,7 @@ export function openOnceThere(next: Opening | null): void {
 function pageAbove(route: Route, working: Snapshot): Address | null {
   if (route.page === "palette") return working.constants.some((constant) => groupOf(constant.path) === route.name) ? { page: "constants" } : null;
   if (route.page === "system") return working.systems.some((system) => system.system === route.name) ? { page: "definition" } : null;
+  if (route.page === "roles" && route.section != null) return working.sections.includes(route.section) ? { page: "definition" } : null;
   if (route.page !== "group") return null;
   const held = working.roles.find((role) => role.group === route.name);
   return held ? { page: "roles", section: held.section } : null;
@@ -27,7 +28,7 @@ function pageAbove(route: Route, working: Snapshot): Address | null {
 /**
  * Keeps the address with the working copy. The page an edit asked for opens
  * once what it shows has arrived. A group, a palette or a system goes with
- * its last entry, or with an undo, and the page that showed it then goes to
+ * its last entry, or with an undo, as a collection goes when removed, and the page that showed it then goes to
  * the one above; an address that never named anything stays, to say so.
  *
  * Before paint, so an address just renamed away from never shows as missing.

@@ -1,4 +1,4 @@
-import { Plus, SlidersHorizontal, Target, X } from "lucide-react";
+import { GraphStar, Plus, Target, X } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
 import { colorFromOklab, formatAuthored, oklabToOklch, oklchToOklab, toOklab, type Oklab } from "../../src/color-math.js";
 import type { ConstantTarget, Edit } from "../../src/edit.js";
@@ -532,18 +532,18 @@ export function PalettePage({
             </button>
           ))}
         </div>
-        <Hint text="Settings">
+        <Hint text="Color tools">
           <button
             ref={toolsToggle}
             type="button"
             className="palette-tools-toggle"
-            aria-label="Palette settings"
+            aria-label="Color tools"
             aria-expanded={toolsOpen}
             aria-controls={toolsId}
             data-state={toolsOpen ? "open" : "closed"}
             onClick={() => setToolsOpen(!toolsOpen)}
           >
-            <SlidersHorizontal size={16} aria-hidden />
+            <GraphStar size={16} aria-hidden />
           </button>
         </Hint>
         {EDITABLE && (
@@ -618,7 +618,7 @@ export function PalettePage({
       <section
         id={toolsId}
         className="palette-tools"
-        aria-label="Palette settings"
+        aria-label="Color tools"
         hidden={!toolsOpen}
         onKeyDown={(event) => {
           if (event.key === "Escape" && !document.querySelector(".popover")) {
@@ -633,12 +633,12 @@ export function PalettePage({
               ref={toolsClose}
               type="button"
               className="editor-close palette-tools-close"
-              aria-label="Close palette settings"
+              aria-label="Close color tools"
               onClick={() => setToolsOpen(false)}
             >
               <X size={16} aria-hidden />
             </button>
-            <h2 className="palette-tools-title">Settings</h2>
+            <h2 className="palette-tools-title">Color tools</h2>
             <div className="palette-tools-body">
               {EDITABLE && (
                 <section className="palette-tools-section">

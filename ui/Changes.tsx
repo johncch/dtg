@@ -27,6 +27,8 @@ function nameOf(target: EditTarget, modes: string[]): string {
       return `mode ${target.name}`;
     case "scheme":
       return `${target.mode} scheme`;
+    case "collection":
+      return `collection ${target.name}`;
   }
 }
 
@@ -65,6 +67,7 @@ export function Changes({ working }: { working: Snapshot }) {
     if (change.action === "rename") return `${name}: renamed to ${nameOf(change.to, modes)}`;
     if (change.action === "move") return `${name}: moved`;
     if (change.target.kind === "mode" && change.action === "remove") return `${name}: removed`;
+    if (change.target.kind === "collection") return change.action === "remove" ? `${name}: removed` : `${name}: added`;
     if (change.target.kind === "mode" && change.action === "set") return `${name}: added (${change.to})`;
     if (change.target.kind === "scheme" && change.action === "set") return `${name}: ${change.from || "not set"} → ${change.to || "not set"}`;
     if (change.target.kind === "system") {
