@@ -2252,8 +2252,15 @@ ul.plain li {
 .dock:empty {
   display: none;
 }
+/* Thirds, the name's third holding its controls too. */
+table.modes {
+  table-layout: fixed;
+}
 table.modes th {
-  width: 33%;
+  width: 33.333%;
+}
+table.modes th:first-child {
+  width: auto;
 }
 table.modes th.entry-controls {
   width: 80px;
@@ -2907,4 +2914,14 @@ tr.group-row .group-note {
 .export-preview code {
   color: inherit;
   font-size: inherit;
+}
+.th-with-info {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.th-info {
+  display: inline-flex;
+  color: var(--label-secondary);
+  cursor: help;
 }

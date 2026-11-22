@@ -15,7 +15,7 @@ import { ProjectGamutProvider } from "./gamut.js";
 import { TryingProvider } from "./preview.js";
 import { ConstantsPage } from "./pages/ConstantsPage.js";
 import { DefinitionPage } from "./pages/DefinitionPage.js";
-import { SettingsPage } from "./pages/SettingsPage.js";
+import { ModesPage } from "./pages/ModesPage.js";
 import { GroupPage, RolesPage } from "./pages/GroupPage.js";
 import { NewPalette, PalettePage, palettesOf } from "./pages/PalettePage.js";
 import { SystemPage } from "./pages/SystemPage.js";
@@ -145,7 +145,7 @@ function Nav({ snapshot, working }: { snapshot: Snapshot; working: Snapshot }) {
         <div className="nav-section">
           <div className="nav-links">
             <Link to={{ page: "definition" }}>Definition</Link>
-            {SAVABLE && <Link to={{ page: "settings" }}>Settings</Link>}
+            {SAVABLE && <Link to={{ page: "modes" }}>Modes</Link>}
           </div>
         </div>
         {(snapshot.constants.length > 0 || EDITABLE) && (
@@ -330,7 +330,7 @@ function NotFound({ what }: { what: string }) {
 function Page({ route, snapshot, working }: { route: Route; snapshot: Snapshot; working: Snapshot }) {
   if (route.page === "unknown") return <NotFound what={route.path} />;
   if (route.page === "definition") return <DefinitionPage definition={snapshot.definition} warnings={snapshot.warnings} />;
-  if (route.page === "settings" && SAVABLE) return <SettingsPage configPath={snapshot.configPath} snapshot={snapshot} />;
+  if (route.page === "modes" && SAVABLE) return <ModesPage snapshot={snapshot} />;
   const named = [...snapshot.systems.map((system) => system.system), ...snapshot.roles.map((role) => role.group || role.role)].map((path) => path.split(".")[0]);
   if (route.page === "constants") {
     return snapshot.constants.length > 0 || EDITABLE ? (

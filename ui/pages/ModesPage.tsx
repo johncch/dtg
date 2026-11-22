@@ -1,4 +1,4 @@
-import { Link } from "lucide-react";
+import { Info, Link } from "lucide-react";
 import { useEffect, useState } from "react";
 import { parseColor, type Color } from "../../src/color-math.js";
 import { readValue } from "../../src/edit.js";
@@ -26,13 +26,7 @@ import { useTrying } from "../preview.js";
  * never one of the unsaved changes and undo does not reach it; saving a
  * renamed mode moves its background to the new name.
  */
-export function SettingsPage({
-  configPath,
-  snapshot,
-}: {
-  configPath: string;
-  snapshot: Snapshot;
-}) {
+export function ModesPage({ snapshot }: { snapshot: Snapshot }) {
   const [failure, setFailure] = useState<string | null>(null);
   const store = useStore();
   const modes = snapshot.modeDetails;
@@ -51,16 +45,10 @@ export function SettingsPage({
 
   return (
     <>
-      <h1>Settings</h1>
+      <h1>Modes</h1>
       <p className="sub">
-        <code>{configPath}</code>
-      </p>
-      <h2>Modes</h2>
-      <p className="sub">
-        The definition's modes. Each one's colors are seen on its background:
-        white for a light scheme, black for a dark one, or any color or ref set
-        here, which is kept under <code>editor.backgrounds</code> in the config. A
-        ref resolves in that mode.
+        Modes are the sets of colors your roles switch between, such as light
+        and dark.
       </p>
       <table className="modes">
         <thead>
@@ -68,7 +56,16 @@ export function SettingsPage({
             <th>Mode</th>
             <ControlsHead />
             <th>Scheme</th>
-            <th>Editor background</th>
+            <th>
+              <span className="th-with-info">
+                Editor background
+                <Hint text="This value is stored in the project's dtg.config.yaml file">
+                  <span className="th-info" tabIndex={0} aria-label="This value is stored in the project's dtg.config.yaml file">
+                    <Info size={14} aria-hidden />
+                  </span>
+                </Hint>
+              </span>
+            </th>
           </tr>
         </thead>
         <tbody>

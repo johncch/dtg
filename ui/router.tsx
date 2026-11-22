@@ -3,7 +3,7 @@ import { STATIC } from "./mode.js";
 
 export type Route =
   | { page: "definition" }
-  | { page: "settings" }
+  | { page: "modes" }
   | { page: "system"; name: string }
   | { page: "group"; name: string }
   /** Every role, or a section's. */
@@ -20,7 +20,7 @@ function parse(pathname: string): Route {
   if (kind === "system" && name) return { page: "system", name };
   if (kind === "group" && name) return { page: "group", name };
   if (kind === "roles") return name ? { page: "roles", section: name } : { page: "roles" };
-  if (kind === "settings" && !name) return { page: "settings" };
+  if (kind === "modes" && !name) return { page: "modes" };
   if (kind === "definition" && !name) return { page: "definition" };
   if (kind === "constants" && !name) return { page: "constants" };
   if (kind === "palette" && name) return { page: "palette", name };

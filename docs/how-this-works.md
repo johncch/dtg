@@ -694,7 +694,7 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   it, with `~` holding any modes in between.
 - `dev-settings.ts` — what a project keeps under `editor` in `dtg.config.yaml` for the
   editor's own use: today the background to view each mode on. The server reads
-  it, watches it, and writes it straight to the file when the Settings page
+  it, watches it, and writes it straight to the file when the Modes page
   changes it. It is config, not the definition, so it stays out of the
   working copy and its undo, and `emit` never reads it.
 - `working-copy.ts` — the file's text plus the edits not yet written to it.

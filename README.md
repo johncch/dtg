@@ -210,7 +210,7 @@ In the `tailwind` format a color role becomes the usual utilities
   `bg-(image:--surface-hero)`, which it reads correctly.
 
 The editor shows each mode on white or black, by its scheme. To view a mode
-on another background, set it on the Settings page, which keeps it in the
+on another background, set it on the Modes page, which keeps it in the
 config:
 
 ```yaml
