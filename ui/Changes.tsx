@@ -1,8 +1,11 @@
-import { Redo2, Undo2 } from "lucide-react";
+import { ChevronRight, TriangleAlert, Redo2, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Edit, EditTarget } from "../src/edit.js";
 import type { Snapshot } from "../src/snapshot.js";
+import { rolePath } from "../src/selector.js";
 import type { Change } from "../src/working-copy.js";
+import { Popup } from "./Popup.js";
+import { Link } from "./router.js";
 import { useStore } from "./store.js";
 
 function nameOf(target: EditTarget, modes: string[]): string {
@@ -87,14 +90,66 @@ export function Changes({ working }: { working: Snapshot }) {
     return () => removeEventListener("keydown", onKey);
   }, []);
 
-  if (changes.length === 0 && !undo && !redo) return null;
+  const errors = failure ? [...problems, { path: `Could not ${failure.step}`, message: failure.message }] : problems;
+  if (changes.length === 0 && errors.length === 0) return null;
 
   return (
-    <div className="changes">
+    <div className="changes glass-surface">
       <div className="changes-row">
         <span className="changes-count" title={changes.map(summary).join("\n")}>
           {changes.length === 0 ? "No changes" : `${changes.length} ${changes.length === 1 ? "change" : "changes"}`}
         </span>
+        {errors.length > 0 && (
+          <Popup
+            title="Errors"
+            className="changes-errors"
+            label={
+              <>
+                <TriangleAlert size={14} aria-hidden />
+                {errors.length} {errors.length === 1 ? "error" : "errors"}
+              </>
+            }
+            focus="panel"
+          >
+            {(panel) => (
+              <div className="ref-editor">
+                <div className="editor-head" {...panel.handle}>
+                  <span className="ref-editor-heading">Errors</span>
+                  {panel.close}
+                </div>
+                <ul className="changes-error-list">
+                  {errors.map((error) => {
+                    const role = working.roles.find((candidate) => rolePath(candidate) === error.path);
+                    return (
+                      <li key={`${error.path}: ${error.message}`}>
+                        {role ? (
+                          <Link
+                            className="changes-error changes-error-link"
+                            to={role.group ? { page: "group", name: role.group } : { page: "roles", section: role.section }}
+                            hash={role.role}
+                          >
+                            <span className="changes-error-text">
+                              <code>{error.path}</code>
+                              {error.message}
+                            </span>
+                            <ChevronRight size={14} aria-hidden className="changes-errors-open" />
+                          </Link>
+                        ) : (
+                          <div className="changes-error">
+                            <span className="changes-error-text">
+                              <code>{error.path}</code>
+                              {error.message}
+                            </span>
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </Popup>
+        )}
         <button
           className="btn btn-small changes-step"
           aria-label="Undo"
@@ -114,35 +169,28 @@ export function Changes({ working }: { working: Snapshot }) {
           <Redo2 size={14} aria-hidden />
         </button>
       </div>
-      {changes.length > 0 && (
-        <div className="changes-row">
-          <button className="btn btn-small" title="Drop every unsaved change. Redo brings them back." onClick={() => run("discard")}>
-            discard
+      <div className="changes-row">
+        <button
+          className="btn btn-small"
+          disabled={changes.length === 0}
+          title={changes.length === 0 ? "Nothing to discard" : "Drop every unsaved change. Redo brings them back."}
+          onClick={() => run("discard")}
+        >
+          Discard
+        </button>
+        {store.save ? (
+          <button
+            className="btn btn-small changes-save"
+            disabled={changes.length === 0 || problems.length > 0}
+            title={changes.length === 0 ? "Nothing to save" : problems.length > 0 ? "Fix the errors to save" : undefined}
+            onClick={() => run("save")}
+          >
+            Save
           </button>
-          {store.save ? (
-            <button
-              className="btn btn-small changes-save"
-              disabled={problems.length > 0}
-              title={problems.length > 0 ? "Fix what is listed below to save" : undefined}
-              onClick={() => run("save")}
-            >
-              save
-            </button>
-          ) : (
-            <span className="muted changes-save">not saved</span>
-          )}
-        </div>
-      )}
-      {problems.map((problem) => (
-        <p key={problem} className="changes-error">
-          {problem}
-        </p>
-      ))}
-      {failure && (
-        <p className="changes-error">
-          Could not {failure.step}: {failure.message}
-        </p>
-      )}
+        ) : (
+          <span className="muted changes-save">Not saved</span>
+        )}
+      </div>
     </div>
   );
 }

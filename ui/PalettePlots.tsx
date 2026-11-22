@@ -343,7 +343,7 @@ function CircularPlot({ entries, active, chromaMax, hovered, onHover, onSelect, 
               onBlur={() => onHover(null)}
             >
               <span className="palette-plot-dot-color" style={{ background: paintCss(point.color) }} />
-              {locked && <span className="palette-plot-lock" style={{ color: labelColorOn(point.color) }}><LockIcon locked /></span>}
+              {locked && <span className="palette-plot-lock" style={{ color: labelColorOn(point.color) }}><LockIcon locked size={12} /></span>}
               {showName && <span className="palette-plot-dot-name">{point.name}</span>}
             </button>
           );

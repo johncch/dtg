@@ -1,9 +1,8 @@
 import { Fragment, useMemo, type ReactNode } from "react";
-import { mixesKinds, throughTransparent, type RefTarget } from "../../src/resolve.js";
+import { throughTransparent, type RefTarget } from "../../src/resolve.js";
 import type { Snapshot, SnapshotRole } from "../../src/snapshot.js";
 import type { EditTarget } from "../../src/edit.js";
 import { ColorChip } from "../ColorChip.js";
-import { Alert } from "../Alert.js";
 import { ControlsCell, ControlsHead, entryRowProps } from "../EntryRow.js";
 import { NewRoleRow, RoleDuplicate, RoleGrip, roleUsers, RoleGroupName, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
 import { Link, useScrollToHash } from "../router.js";
@@ -22,7 +21,6 @@ export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: stri
       </h1>
       {snapshot.groupNotes.roles[group] && <p className="note">{snapshot.groupNotes.roles[group]}</p>}
       <p className="sub">{roles.length} roles</p>
-      <MixedRoles roles={roles} />
       <table className="roles-table">
         <thead>
           <tr>
@@ -59,9 +57,8 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
     <>
       <h1>{section ?? "All roles"}</h1>
       <p className="sub">
-        {shown.length} roles{named > 0 ? ` in ${named} ${named === 1 ? "group" : "groups"}` : ""}
+        {shown.length} {shown.length === 1 ? "role" : "roles"}{named > 0 ? ` in ${named} ${named === 1 ? "group" : "groups"}` : ""}
       </p>
-      <MixedRoles roles={shown} />
       <table className="roles-table">
         <thead>
           <tr>
@@ -103,24 +100,6 @@ export function RolesPage({ snapshot, section }: { snapshot: Snapshot; section?:
         </tbody>
       </table>
     </>
-  );
-}
-
-/** The roles on a page that are a gradient in some modes and a color in others, which keeps the definition from being saved. */
-function MixedRoles({ roles }: { roles: SnapshotRole[] }) {
-  const mixed = roles.filter((role) => mixesKinds(role.perMode));
-  if (mixed.length === 0) return null;
-  return (
-    <Alert className="page-alert">
-      <strong>Gradient in some modes, color in others:</strong>{" "}
-      {mixed.map((role, index) => (
-        <Fragment key={rolePath(role)}>
-          {index > 0 && ", "}
-          <code>{rolePath(role)}</code>
-        </Fragment>
-      ))}
-      . Make each one or the other to save.
-    </Alert>
   );
 }
 

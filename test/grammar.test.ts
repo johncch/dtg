@@ -406,9 +406,9 @@ s:
 `);
     assert.deepEqual(r.roles[0].perMode.map((entry) => entry.kind), ["gradient", "color"]);
     assert.deepEqual(r.roles[1].perMode.map((entry) => entry.kind), ["gradient", "color"]);
-    assert.deepEqual(r.problems, ["d.hero: modes mix a color and a gradient — a role is one or the other in every mode"]);
-    assert.throws(() => emitCss(r, "plain"), /definition errors:\n- d\.hero: modes mix a color and a gradient/);
-    assert.throws(() => emitDtcg(r), /modes mix a color and a gradient/);
+    assert.deepEqual(r.problems, [{ path: "d.hero", message: "A role must be all solid colors or all gradients." }]);
+    assert.throws(() => emitCss(r, "plain"), /definition errors:\n- d\.hero: A role must be all solid colors or all gradients\./);
+    assert.throws(() => emitDtcg(r), /A role must be all solid colors or all gradients/);
     assert.deepEqual(withRoles(`
 s:
   d:

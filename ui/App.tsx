@@ -1,9 +1,9 @@
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { Menu, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { version } from "../package.json";
-import type { Snapshot, SnapshotSystem } from "../src/snapshot.js";
-import { Backgrounds } from "./Backgrounds.js";
+import type { Snapshot, SnapshotBackground, SnapshotSystem } from "../src/snapshot.js";
+import { Appearance } from "./Appearance.js";
 import { Changes } from "./Changes.js";
 import { LiveCss } from "./LiveCss.js";
 import { FollowWorkingCopy } from "./follow.js";
@@ -68,19 +68,16 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
       <ProjectGamutProvider value={snapshot.gamut}>
         <PaletteColorsProvider value={working.constants}>
           <aside data-menu={menuOpen ? "open" : "closed"}>
-            <Brand menuOpen={menuOpen} onMenu={() => setMenuOpen(!menuOpen)} />
+            <Brand backgrounds={snapshot.backgrounds} menuOpen={menuOpen} onMenu={() => setMenuOpen(!menuOpen)} />
             <div className="sidebar-body">
               <Nav snapshot={snapshot} working={working} />
-              <div className="dock">
-                {EDITABLE && <Changes working={working} />}
-                <Backgrounds backgrounds={snapshot.backgrounds} />
-              </div>
             </div>
           </aside>
           <main>
             <div className="page">
               <Banner snapshot={snapshot} />
               <Page route={route} snapshot={snapshot} working={working} />
+              <div className="dock">{EDITABLE && <Changes working={working} />}</div>
             </div>
           </main>
           <FollowWorkingCopy route={route} working={working} />
@@ -91,7 +88,7 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
 }
 
 /** The title, and below the width a sidebar fits in, the button that opens the navigation as a menu. */
-function Brand({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void }) {
+function Brand({ backgrounds, menuOpen, onMenu }: { backgrounds: SnapshotBackground[]; menuOpen: boolean; onMenu: () => void }) {
   return (
     <div className="brand">
       <h1>
@@ -99,11 +96,14 @@ function Brand({ menuOpen, onMenu }: { menuOpen: boolean; onMenu: () => void }) 
           dtg <span className="version">{version}</span>
         </Link>
       </h1>
-      <a className="brand-github" href="https://github.com/johncch/dtg" target="_blank" rel="noreferrer" aria-label="dtg on GitHub" title="dtg on GitHub">
-        <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
-          <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
-        </svg>
-      </a>
+      <div className="brand-actions">
+        <Appearance backgrounds={backgrounds} />
+        <a className="nav-add" href="https://github.com/johncch/dtg" target="_blank" rel="noreferrer" aria-label="dtg on GitHub" title="dtg on GitHub">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z" />
+          </svg>
+        </a>
+      </div>
       <button type="button" className="menu-toggle" aria-label={menuOpen ? "Close menu" : "Menu"} aria-expanded={menuOpen} onClick={onMenu}>
         {menuOpen ? <X size={18} aria-hidden /> : <Menu size={18} aria-hidden />}
       </button>
@@ -188,22 +188,38 @@ function systemTree(systems: SnapshotSystem[]): SystemNode[] {
   return roots;
 }
 
-function SystemLinks({ nodes, notes }: { nodes: SystemNode[]; notes: Record<string, string> }) {
+function SystemLinks({ nodes, notes, depth = 0 }: { nodes: SystemNode[]; notes: Record<string, string>; depth?: number }) {
   return nodes.map((node) =>
     node.system ? (
-      <Link key={node.name} to={{ page: "system", name: node.system.system }}>
+      <Link key={node.name} to={{ page: "system", name: node.system.system }} style={depthStyle(depth)}>
         {node.name} <span className="algorithm">{node.system.algorithm}</span>
       </Link>
     ) : (
-      <div key={node.name} className="nav-group">
-        <div className="nav-group-name" title={notes[node.path]}>
-          {node.name}
-        </div>
-        <div className="nav-group-items">
-          <SystemLinks nodes={node.children} notes={notes} />
-        </div>
-      </div>
+      <NavGroup key={node.name} name={node.name} note={notes[node.path]} depth={depth}>
+        <SystemLinks nodes={node.children} notes={notes} depth={depth + 1} />
+      </NavGroup>
     ),
+  );
+}
+
+function depthStyle(depth: number) {
+  return { "--depth": depth } as CSSProperties;
+}
+
+function NavGroup({ name, note, depth, children }: { name: string; note: string | undefined; depth: number; children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="nav-group">
+      <button type="button" className="nav-group-toggle" style={depthStyle(depth)} title={note} aria-expanded={open} onClick={() => setOpen(!open)}>
+        {name}
+        <svg viewBox="0 0 8 8" width={8} height={8} aria-hidden><path d="M2.5 1.5 6.5 4 2.5 6.5Z" fill="currentColor" stroke="currentColor" strokeWidth="1" strokeLinejoin="round" /></svg>
+      </button>
+      {open && (
+        <div className="nav-group-items">
+          {children}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -230,29 +246,33 @@ function GroupLinks({
   notes,
   pageOf,
   prefix = "",
+  depth = 0,
 }: {
   nodes: GroupNode[];
   notes: Record<string, string>;
   /** The page a group with entries of its own links to. */
   pageOf: (group: string) => Exclude<Route, { page: "unknown" }>;
   prefix?: string;
+  depth?: number;
 }) {
   return nodes.map((node) => {
     const path = prefix + node.name;
+    const children = <GroupLinks nodes={node.children} notes={notes} pageOf={pageOf} prefix={`${path}.`} depth={depth + 1} />;
+    if (!node.group) {
+      return (
+        <NavGroup key={node.name} name={node.name} note={notes[path]} depth={depth}>
+          {children}
+        </NavGroup>
+      );
+    }
     return (
       <div key={node.name} className="nav-group">
-        {node.group ? (
-          <Link to={pageOf(node.group)} title={notes[path]}>
-            {node.name}
-          </Link>
-        ) : (
-          <div className="nav-group-name" title={notes[path]}>
-            {node.name}
-          </div>
-        )}
+        <Link to={pageOf(node.group)} title={notes[path]} style={depthStyle(depth)}>
+          {node.name}
+        </Link>
         {node.children.length > 0 && (
           <div className="nav-group-items">
-            <GroupLinks nodes={node.children} notes={notes} pageOf={pageOf} prefix={`${path}.`} />
+            {children}
           </div>
         )}
       </div>

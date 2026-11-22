@@ -228,7 +228,7 @@ export function EntryDuplicate({ label, onDuplicate }: { label: string; onDuplic
   return (
     <Hint text="Duplicate">
       <button type="button" className="entry-action" aria-label={`Duplicate ${label}`} onClick={onDuplicate}>
-        <Copy size={12} aria-hidden />
+        <Copy size={14} aria-hidden />
       </button>
     </Hint>
   );
@@ -304,7 +304,7 @@ export function EntryGrip({
           addEventListener("pointercancel", onEnd);
         }}
       >
-        <GripVertical size={12} aria-hidden />
+        <GripVertical size={14} aria-hidden />
       </button>
     </Hint>
   );

@@ -17,7 +17,7 @@ import {
 } from "./dev-settings.js";
 import { writeOutputs } from "./outputs.js";
 import { describeTarget, type Edit } from "./edit.js";
-import { resolveDefinition } from "./resolve.js";
+import { problemText, resolveDefinition } from "./resolve.js";
 import { appShell } from "./app-shell.js";
 import type { DevState } from "./dev-state.js";
 import { watchDefinition } from "./watch.js";
@@ -248,7 +248,7 @@ export function startDevServer(
         const { text } = workingText({ ...state.copy, diskText: readDisk() });
         const { problems } = resolveDefinition(text, [], gamut);
         if (problems.length > 0) {
-          sendJson(409, { error: problems.join("; ") });
+          sendJson(409, { error: problems.map(problemText).join("; ") });
           return;
         }
         writeFileSync(definitionPath, text);

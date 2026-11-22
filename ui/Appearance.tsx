@@ -1,3 +1,4 @@
+import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { parseColor, toOklab, type Color } from "../src/color-math.js";
 import type { SnapshotBackground } from "../src/snapshot.js";
@@ -15,7 +16,7 @@ const DARK_BELOW = 0.6;
  * iframe, the host page can override it with `{ type: "dtg:background",
  * color }` (hex or `oklch()`); `color: null` hands the choice back.
  */
-export function Backgrounds({ backgrounds }: { backgrounds: SnapshotBackground[] }) {
+export function Appearance({ backgrounds }: { backgrounds: SnapshotBackground[] }) {
   const [activeName, setActiveName] = useState(() => localStorage.getItem(ACTIVE));
   const [hostColor, setHostColor] = useState<Color | null>(null);
   const active = backgrounds.find((background) => background.modes.includes(activeName ?? "")) ?? backgrounds[0];
@@ -51,43 +52,36 @@ export function Backgrounds({ backgrounds }: { backgrounds: SnapshotBackground[]
   }, []);
 
   return (
-    <Popup
-      title="Background"
-      className="chip chip-small chip-editable bg-chip"
-      label={
-        <>
-          <span className="swatch">
-            <span className="swatch-color" style={{ background: css }} />
-          </span>
-          {active.modes.join(", ")}
-        </>
-      }
-      focus="panel"
-    >
+    <Popup title="Appearance" className="nav-add" label={<>{dark ? <Moon size={16} aria-hidden /> : <Sun size={16} aria-hidden />}<span className="sr-only">Appearance</span></>} focus="panel">
       {(panel) => (
-        <div className="bg-menu editor-palette-colors">
-          {backgrounds.map((background) => {
-            const chosen = paintCss(background.color) === css;
-            return (
-              <button
-                key={background.modes[0]}
-                type="button"
-                className={chosen ? "editor-palette-color editor-palette-chosen" : "editor-palette-color"}
-                aria-pressed={chosen}
-                onClick={() => {
-                  localStorage.setItem(ACTIVE, background.modes[0]);
-                  setActiveName(background.modes[0]);
-                  setHostColor(null);
-                  panel.dismiss();
-                }}
-              >
-                <span className="swatch editor-before">
-                  <span className="swatch-color" style={{ background: paintCss(background.color) }} />
-                </span>
-                {background.modes.join(", ")}
-              </button>
-            );
-          })}
+        <div className="ref-editor">
+          <div className="editor-head" {...panel.handle}>
+            <span className="ref-editor-heading">Appearance</span>
+            {panel.close}
+          </div>
+          <div className="editor-palette-colors">
+            {backgrounds.map((background) => {
+              const chosen = paintCss(background.color) === css;
+              return (
+                <button
+                  key={background.modes[0]}
+                  type="button"
+                  className={chosen ? "editor-palette-color editor-palette-chosen" : "editor-palette-color"}
+                  aria-pressed={chosen}
+                  onClick={() => {
+                    localStorage.setItem(ACTIVE, background.modes[0]);
+                    setActiveName(background.modes[0]);
+                    setHostColor(null);
+                  }}
+                >
+                  <span className="swatch editor-before">
+                    <span className="swatch-color" style={{ background: paintCss(background.color) }} />
+                  </span>
+                  {background.modes.join(", ")}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
     </Popup>

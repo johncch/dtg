@@ -26,6 +26,7 @@ import {
   type ResolvedStaticGradient,
   type ResolvedStep,
   type ResolvedSystem,
+  problemText,
 } from "./resolve.js";
 import { formatRef, rolePath } from "./selector.js";
 
@@ -244,7 +245,7 @@ function cssValueFor(
 /** Nothing is written from a definition that resolved with problems. */
 function refuseProblems(resolved: ResolvedDefinition): void {
   if (resolved.problems.length > 0) {
-    throw new Error(`definition errors:\n- ${resolved.problems.join("\n- ")}`);
+    throw new Error(`definition errors:\n- ${resolved.problems.map(problemText).join("\n- ")}`);
   }
 }
 

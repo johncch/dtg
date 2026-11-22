@@ -15,6 +15,7 @@ import {
   type ResolvedCurve,
   type ResolvedDefinition,
   type ModeScheme,
+  type Problem,
 } from "./resolve.js";
 import { formatRef, parseCall, rolePath } from "./selector.js";
 
@@ -46,7 +47,7 @@ export type Snapshot = {
   modeDetails: SnapshotMode[];
   warnings: string[];
   /** What keeps the definition from being saved or written out, though it draws. */
-  problems: string[];
+  problems: Problem[];
   systems: SnapshotSystem[];
   constants: SnapshotConstant[];
   /** The palette's gradients, kept apart from its colors. */

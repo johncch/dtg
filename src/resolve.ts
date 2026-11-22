@@ -503,6 +503,13 @@ export type ResolvedMode = {
   scheme?: ModeScheme;
 };
 
+/** What is wrong, and the dotted path of the role or entry it is wrong in. */
+export type Problem = { path: string; message: string };
+
+export function problemText(problem: Problem): string {
+  return `${problem.path}: ${problem.message}`;
+}
+
 export type ResolvedDefinition = {
   modes: string[];
   /** Index-parallel to `modes`. */
@@ -526,7 +533,7 @@ export type ResolvedDefinition = {
    * there to draw, but the whole is not to be written out. The emitters
    * refuse while any is here, and so does saving from the editor.
    */
-  problems: string[];
+  problems: Problem[];
   /** Index-parallel to the `probes` asked for. */
   probed: Probe[];
 };
@@ -634,7 +641,7 @@ export function resolveDefinition(
   const doc = parse(yamlText) as Record<string, unknown>;
   const errors: string[] = [];
   const warnings: string[] = [];
-  const problems: string[] = [];
+  const problems: Problem[] = [];
   const algorithms = registryOf(extraAlgorithms);
 
   const grammar = doc.dtg;
@@ -1166,9 +1173,10 @@ export function resolveDefinition(
     const complete = perMode.length === modes.length;
     const sameKind = new Set(perMode.map((entry) => entry.kind)).size === 1;
     if (complete && mixesKinds(perMode)) {
-      problems.push(
-        `${path}: modes mix a color and a gradient — a role is one or the other in every mode`,
-      );
+      problems.push({
+        path,
+        message: "A role must be all solid colors or all gradients.",
+      });
     }
     if (complete && sameKind && new Set(perMode.map((entry) => entry.kind === "color" && isOpaque(entry.color))).size > 1) {
       warnings.push(

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- `ResolvedDefinition.problems` is a list of `{ path, message }`, where it
+  was a list of strings. `problemText(problem)` gives the old string,
+  `"<path>: <message>"`; the CLI and the editor's save refusal word them as
+  before.
+
 ## [0.5.0] - 2026-11-20
 
 - A hex color can carry an alpha, as CSS writes it: `#rrggbbaa` or
