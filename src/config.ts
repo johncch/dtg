@@ -64,7 +64,7 @@ modes:
 
 palette:
   hues:
-    emit: false
+    publish: false
     accent: "#0066ff"
 
 systems:
@@ -80,7 +80,7 @@ systems:
   accent:
     algorithm: scale
     params: { base: hues.accent, toward: ["#ffffff", "#111111"] }
-    emit: [100, 200, 400, 600, 800]
+    publish: [100, 200, 400, 600, 800]
 
 roles:
   surface:

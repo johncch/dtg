@@ -225,7 +225,7 @@ export type SnapshotSystem = {
   /** What a ref into this system is made of, so the page can draw a control for each part. */
   selector: SelectorShape;
   steps: SnapshotStep[];
-  /** The selectors the system's `emit` lists; a step among them is published whether or not anything uses it. */
+  /** The selectors the system's `publish` lists; a step among them is published whether or not anything uses it. */
   emit: string[];
 };
 
@@ -241,7 +241,7 @@ export type SnapshotGradient = {
 export type SnapshotConstant = {
   path: string;
   cssName: string;
-  /** False for an input: its group is `emit: false` and no role points at it. */
+  /** False for an input: its group is `publish: false` and no role points at it. */
   emitted: boolean;
   /** The color as the definition writes it, which an editor opens on. */
   written: string;

@@ -52,10 +52,11 @@ Canonical. The README carries the user-facing version of the same rules.
 - `palette` holds the colors picked by hand: a **string** is a constant
   (or, starting `gradient(`, a gradient made of them), any other object a
   **group**, and groups nest, so a constant's identity is
-  its dotted path. Every constant emits, unless its group says
-  `emit: false`: then its colors are inputs, emitted only when a role points
-  at one, since a reference always emits what it names. `transparent()`
-  around one is a value, not a reference, and emits nothing. A group of
+  its dotted path. Every constant is published, unless its group says
+  `publish: false`: then its colors are inputs, published only when a role
+  points at one, since a reference always publishes what it names.
+  `transparent()` around one is a value, not a reference, and publishes
+  nothing. A group of
   constants is a palette in `dtg edit`. It is read before `systems`, so a param can name any
   constant wherever it is written. A string left in `systems` is refused
   with a pointer here.
@@ -65,8 +66,9 @@ Canonical. The README carries the user-facing version of the same rules.
   resolves: picks, then recipes, then decisions.
 - A system node's keys are the tool's: `algorithm` (a string naming it),
   `params` (the algorithm's inputs, in their own block), `alias`,
-  `overrides`, `emit`. `emit` lists selectors the system publishes whether
-  or not a ref asks — `emit: [50, 100, 500]` — each checked against the
+  `overrides`, `publish`. `publish` lists selectors the system publishes
+  whether or not a ref asks — `publish: [50, 100, 500]` — each checked
+  against the
   algorithm's selector and named by the usual rule. What a system writes
   out is that list plus what refs demand; an algorithm never decides it. Params are contained rather than passed through, so the
   reserved list can grow without colliding with a parameter name.
@@ -147,7 +149,7 @@ Canonical. The README carries the user-facing version of the same rules.
   needed `sky(10 tint)` as an exception on its first day.
 - **A step is identified by its selector's values, not its text.** `sky(3)`,
   `sky(3.0)` and `sky(03)` are one step and one variable, `--color-sky-3`;
-  the same holds in `emit` and in `overrides` keys. Until 2026-11-20 the
+  the same holds in `publish` and in `overrides` keys. Until 2026-11-20 the
   name was built from the text as written, so `sky(3.0)` emitted a second
   primitive, `sky-3_0`, with the same color.
 - **A ref function is declared once.** `src/ref-functions.ts` lists
@@ -171,7 +173,7 @@ Canonical. The README carries the user-facing version of the same rules.
   and derives: asking for a name before a color can be used was a detour.
 - **`transparent()` produces a value.** It emits as the color it works out
   to and demands nothing: `transparent(sky(500) 70)` does not publish
-  `sky(500)`, and an `emit: false` constant used only through it stays
+  `sky(500)`, and a `publish: false` constant used only through it stays
   unpublished. Around a role, the value is written again in any mode where
   the role under it differs, since no `var()` is there to follow it.
   Settled 2026-11-20, reversing "constants only": the limit made a color
@@ -207,8 +209,8 @@ Canonical. The README carries the user-facing version of the same rules.
     nothing for one to loop back through. It emits as `--gradient-<path>`,
     apart from `--color-`, which Tailwind reads as a color; in the
     `tailwind` format it sits outside `@theme` and gets a `bg-<path>`
-    class. Like a palette color it always emits, unless its group says
-    `emit: false` and no role points at it. In the code the palette's gradients are
+    class. Like a palette color it is always published, unless its group
+    says `publish: false` and no role points at it. In the code the palette's gradients are
     a list of their own, so the plot, Randomize, Harmonize and the locks,
     which work on colors, never see them. The editor draws one where it is
     written, among the group's colors, marked as passed over by those
@@ -291,12 +293,21 @@ Canonical. The README carries the user-facing version of the same rules.
 Removed spellings are still detected and error with a pointer, rather than
 being silently ignored: a top-level `emit:` block (replaced by inline
 `alias`/`omit`), `emits:` on a system (renamed to `alias`; the error also
-points at `emit`), a color written in `systems` (moved to `palette`), scale's
-`stops` (replaced by its 0–1000 selector, `midpoint` and `emit`), `blend` and
+points at `publish`), a color written in `systems` (moved to `palette`), scale's
+`stops` (replaced by its 0–1000 selector, `midpoint` and `publish`), `blend` and
 `compose` (replaced by a group of tints), the algorithm
 names `ink-ramp` and `oklch-scale` (now `tint` and `scale`), and the slash
 spelling of a ref (`sky/3/ink`, now `sky(3 tint)`), where the error spells out
 the replacement. Keep that pattern for any future grammar change.
+
+One renamed key is still read instead: `emit`, on a palette group or a
+system, is the earlier spelling of `publish` (renamed 2026-11-21) and means
+the same. It was too widely written to refuse. A block that writes both is
+an error, and the editor edits whichever one the file has, writing `publish`
+when there is neither. When the editor reads a file that still writes `emit`,
+it offers rewriting each one as `publish` as one unsaved change, renaming
+only the keys; Discard drops it, and it is offered again the next time the
+file is read. The docs and examples use only `publish`.
 
 ## Algorithms
 
@@ -568,7 +579,7 @@ base hue, which made a gray base lock to noise.
   order (a number in a range, or a choice among options the params supply)
   and the `forms` it offers.
 - There is no emit hook. What can be *addressed* is the selector's; what
-  is written out is the definition's — a system's `emit` list plus demand.
+  is written out is the definition's — a system's `publish` list plus demand.
 - `resolve(selector, params)` returns a color. The selector arrives parsed,
   one value per field plus `form`. It throws with a human-readable message
   on a selector the system cannot produce.
@@ -622,9 +633,9 @@ doing so is in `project-algorithms.md`.
    warns when the two overlap. Hand-tunes are
    explicit, visible, and survive regeneration. Exceptions either get
    promoted into the system later or stay flagged, never silent.
-6. **Constants emit, systems publish what they list, roles reference.** A
-   palette color always emits. A system step exists because a ref demands
-   it or the system's `emit` lists it — never because of which algorithm it
+6. **Constants are published, systems publish what they list, roles
+   reference.** A palette color is always published. A system step exists
+   because a ref demands it or the system's `publish` lists it — never because of which algorithm it
    is. A role emits as a reference to what it points at, and a literal
    emits its value, and so does `transparent()`, which demands nothing.
 7. **Repetition is a promotion signal.** A derivation appearing twice is a
@@ -682,7 +693,7 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   `transparent()` and color param naming it is rewritten in the same splice,
   while an `alias` or changelog note that reads the same is not. Systems and
   roles are added, renamed and removed whole the same way, and a system's
-  `emit` list is set whole. A constant or a role can be moved within its
+  `publish` list is set whole. A constant or a role can be moved within its
   group, or placed at another dotted path, which writes the groups on the
   way that are not there. A group is not edited apart from what it holds: it
   is written with its first entry and goes with its last, and renaming one
@@ -763,8 +774,8 @@ Anything outside those three is a real defect. Promoting this check into a
       renames, removes, locks and randomizes its colors (space rolls every
       unlocked one); a color the file does not have yet is renamed after its
       nearest color name on each roll, and once saved its name stays. Every
-      palette color emits, since apps use them directly, unless its group
-      says `emit: false`; an unsaved roll never reaches the outputs anyway.
+      palette color is published, since apps use them directly, unless its
+      group says `publish: false`; an unsaved roll never reaches the outputs anyway.
 - [x] Palette groups have a circular visualization prototype with two views:
       a 2D HC disk and a fixed-camera 3D HCL volume. Hue runs clockwise from
       0° at the top/back; chroma is radius in both views, and lightness is

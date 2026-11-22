@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `emit` is now spelled `publish`: `publish: false` on a palette group, and
+  `publish: [50, 500]` on a system. `emit` still works and means the same;
+  writing both on one block is an error. The editor keeps whichever one a
+  file has and writes `publish` where there is neither. Opening a definition
+  that still writes `emit` offers rewriting it as `publish` as an unsaved
+  change, which Save writes and Discard drops.
 - The editor has an Export window, the download button by the title, that
   copies or downloads the definition as CSS, Tailwind, SCSS or DTCG, unsaved
   edits included. It works in a copy written by `dtg docs` too.

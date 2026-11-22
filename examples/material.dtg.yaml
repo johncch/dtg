@@ -18,7 +18,7 @@
 # red reach about 0.02 at their worst: the chromas here were tuned on purple,
 # and Material's fixed chroma means a little more or less in OKLCH per hue.
 # Left out: Material's fixed and inverse roles, shadow, scrim, surface tint.
-# Roles emit under Material's own token names (--md-sys-color-primary, …).
+# Roles are published under Material's own token names (--md-sys-color-primary, …).
 #
 #   npx dtg edit --definition examples/material.dtg.yaml
 
@@ -28,7 +28,7 @@ modes: [light, dark]
 
 palette:
   material:
-    emit: false
+    publish: false
     purple: "#6750a4"
     blue: "#3b82f6"
     green: "#16a34a"
@@ -62,8 +62,8 @@ systems:
     params: { anchor: material.error, chroma: 0.202 }
 
 scheme:
-  # Material's own token names: `md-sys-color` emits as part of every name,
-  # so roles come out as --md-sys-color-primary and so on. Each family is a
+  # Material's own token names: `md-sys-color` stays in every name, so
+  # roles come out as --md-sys-color-primary and so on. Each family is a
   # group for browsing, left out of names with `omit: true`.
   md-sys-color:
     description: >-

@@ -48,7 +48,7 @@ systems:
   theme:
     algorithm: scale
     params: { base: "#03a2e8" }
-    emit: [50, 500, 950]
+    publish: [50, 500, 950]
 
   shadow:
     algorithm: overlay

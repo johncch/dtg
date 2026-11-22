@@ -7,7 +7,7 @@ export type EditTarget =
   | { kind: "constant"; path: string }
   /** A whole system, by its dotted path under `systems`. */
   | { kind: "system"; path: string }
-  /** The selectors a system publishes whether or not a ref asks, as a JSON list; an empty one takes `emit` out. */
+  /** The selectors a system publishes whether or not a ref asks, as a JSON list; an empty one takes `publish` out. */
   | { kind: "emit"; system: string }
   | { kind: "param"; system: string; path: string }
   /** A param written once in `defaults` and shared by every system of that algorithm. */
@@ -27,7 +27,13 @@ export type EditTarget =
   /** The `scheme` a mode writes; `""` when it writes none. */
   | { kind: "scheme"; mode: string }
   /** A collection of roles: a top-level key that is not one the grammar keeps. Its value is `{}`. */
-  | { kind: "collection"; name: string };
+  | { kind: "collection"; name: string }
+  /**
+   * How a key the grammar renamed is written: its earlier spelling while any
+   * block still writes it, its current one otherwise. Setting the current
+   * spelling rewrites every earlier one.
+   */
+  | { kind: "spelling"; key: RespelledKey };
 
 export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
 export type SystemTarget = Extract<EditTarget, { kind: "system" }>;
@@ -90,8 +96,10 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
       return ["palette", ...target.path.split(".")];
     case "system":
       return ["systems", ...target.path.split(".")];
-    case "emit":
-      return ["systems", ...target.system.split("."), "emit"];
+    case "emit": {
+      const system = ["systems", ...target.system.split(".")];
+      return [...system, doc.hasIn([...system, "emit"]) && !doc.hasIn([...system, "publish"]) ? "emit" : "publish"];
+    }
     case "param":
       return ["systems", ...target.system.split("."), "params", ...target.path.split(".")];
     case "default":
@@ -114,6 +122,8 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
       return ["modes", target.mode, "scheme"];
     case "collection":
       return [target.name];
+    case "spelling":
+      return [];
   }
 }
 
@@ -123,7 +133,7 @@ export function describeTarget(target: EditTarget): string {
     case "system":
       return target.path;
     case "emit":
-      return `${target.system} emit`;
+      return `${target.system} publish`;
     case "param":
       return `${target.system} ${target.path}`;
     case "default":
@@ -140,7 +150,47 @@ export function describeTarget(target: EditTarget): string {
       return `the scheme of ${target.mode}`;
     case "collection":
       return `the collection ${target.name}`;
+    case "spelling":
+      return `the spelling of ${target.key}`;
   }
+}
+
+/**
+ * Keys the grammar renamed whose earlier spelling it still reads, and the
+ * blocks each can be written on. The editor offers to write the current one.
+ */
+const RESPELLINGS = {
+  publish: {
+    earlier: "emit",
+    blocks: (doc: Document): YAMLMap[] => [
+      ...mapsUnder(doc.get("palette", true), () => true),
+      ...mapsUnder(doc.get("systems", true), (map) => map.has("algorithm")),
+    ],
+  },
+} satisfies Record<string, { earlier: string; blocks: (doc: Document) => YAMLMap[] }>;
+
+export type RespelledKey = keyof typeof RESPELLINGS;
+export const RESPELLED_KEYS = Object.keys(RESPELLINGS) as RespelledKey[];
+export const earlierSpelling = (key: RespelledKey): string => RESPELLINGS[key].earlier;
+
+function mapsUnder(node: unknown, keep: (map: YAMLMap) => boolean): YAMLMap[] {
+  if (!isMap(node)) return [];
+  return node.items.flatMap((item) => (isMap(item.value) ? [...(keep(item.value) ? [item.value] : []), ...mapsUnder(item.value, keep)] : []));
+}
+
+/** The keys written in the earlier spelling, on blocks that do not also write the current one. */
+function earlierSpellings(doc: Document, key: RespelledKey): Located[] {
+  const { earlier, blocks } = RESPELLINGS[key];
+  return blocks(doc)
+    .filter((block) => !block.has(key))
+    .flatMap((block) => block.items.filter((item) => isScalar(item.key) && item.key.value === earlier && item.key.range).map((item) => item.key as Located));
+}
+
+function withRespelled(text: string, key: RespelledKey, value: string): string {
+  if (value !== key) throw new Error(`${key} is written as ${key}; ${RESPELLINGS[key].earlier} is only read`);
+  return earlierSpellings(parseDocument(text), key)
+    .sort((a, b) => b.range[0] - a.range[0])
+    .reduce((written, at) => written.slice(0, at.range[0]) + key + written.slice(at.range[1]), text);
 }
 
 /** Unquoted, `#` starts a comment and flow punctuation ends the value; this is what can go without quotes. */
@@ -209,6 +259,10 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       throw new Error(`${describeTarget(edit.target)} is edited one ref at a time`);
     }
     if (edit.target.kind === "mode" || edit.target.kind === "collection") throw new Error(`${describeTarget(edit.target)} is added and renamed, not set`);
+    if (edit.target.kind === "spelling") {
+      text = withRespelled(text, edit.target.key, edit.value);
+      continue;
+    }
     if (edit.target.kind === "scheme") {
       text = withSchemeSet(text, edit.target, edit.value);
       continue;
@@ -279,6 +333,7 @@ export function readValue(yamlText: string, target: EditTarget): string | null {
   if (target.kind === "group") return isGroup(writtenAt(yamlText, target)) ? "{}" : null;
   if (target.kind === "mode" || target.kind === "scheme") return modeValue(yamlText, target);
   if (target.kind === "collection") return collectionPair(parseDocument(yamlText), target.name) ? "{}" : null;
+  if (target.kind === "spelling") return earlierSpellings(parseDocument(yamlText), target.key).length > 0 ? RESPELLINGS[target.key].earlier : target.key;
   if (structureAt(yamlText, target)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
   const node = nodeAt(yamlText, target);
   if (node) return node.value == null ? INHERIT : String(node.value);
@@ -485,7 +540,7 @@ function withEmitSet(text: string, target: EmitTarget, value: string): string {
   const emit = writtenAt(text, target);
   if (emit == null) {
     if (!listed) return text;
-    return withEntryAdded(text, keysOf(target, parseDocument(text)).slice(0, -1) as string[], "emit", structureSource(value)!, target, "but not as a list");
+    return withEntryAdded(text, keysOf(target, parseDocument(text)).slice(0, -1) as string[], "publish", structureSource(value)!, target, "but not as a list");
   }
   if (!isSeq(emit) || !emit.range) throw new Error(`nothing written for ${describeTarget(target)} to edit`);
   if (!listed) return withEntryRemoved(text, target);
@@ -641,7 +696,7 @@ function keySource(name: string): string {
 
 type Entry = { doc: Document; keys: string[]; set: YAMLMap; pair: Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node> };
 
-/** The constant, system, role, group or emit list a target names, with the map it is in. Throws when the file has no such entry. */
+/** The constant, system, role, group or publish list a target names, with the map it is in. Throws when the file has no such entry. */
 function entryAt(text: string, target: EntryTarget | EmitTarget | GroupTarget): Entry {
   const doc = parseDocument(text);
   const keys = keysOf(target, doc) as string[];
@@ -748,7 +803,7 @@ function partsOutsideParens(text: string): string[] {
 }
 
 /** What a group says about itself, beside the entries it holds. */
-const GROUP_KEYS = { role: ["alias", "omit", "description"], constant: ["alias", "emit", "description"] };
+const GROUP_KEYS = { role: ["alias", "omit", "description"], constant: ["alias", "publish", "emit", "description"] };
 
 /**
  * The group's entries in a new order. Each entry's own text moves, a block

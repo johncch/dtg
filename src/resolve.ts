@@ -138,7 +138,15 @@ export const TOP_LEVEL_RESERVED = [
 ];
 // A system node's keys. Params live in their own block, so this list can
 // grow without ever colliding with an algorithm's parameter names.
-const SYSTEM_RESERVED = ["algorithm", "params", "alias", "overrides", "emit", "description"];
+const SYSTEM_RESERVED = ["algorithm", "params", "alias", "overrides", "publish", "emit", "description"];
+
+/** A block's `publish`, or `emit`, its earlier spelling, which stays accepted. */
+function publishOf(block: Record<string, unknown>, where: string): { value?: unknown; error?: string } {
+  if (block.publish !== undefined && block.emit !== undefined) {
+    return { error: `${where}: \`emit\` is the earlier spelling of \`publish\` — write one of them` };
+  }
+  return { value: block.publish ?? block.emit };
+}
 
 const RENAMED_ALGORITHMS: Record<string, string> = {
   "ink-ramp": "tint",
@@ -303,7 +311,7 @@ export type ResolvedSystem = {
   /** What a ref into this system is made of. */
   selector: SelectorShape;
   steps: ResolvedStep[];
-  /** The selectors the system's `emit` lists, which it publishes whether or not a ref asks. */
+  /** The selectors the system's `publish` lists, which it publishes whether or not a ref asks. */
   emit: string[];
   /** Written by hand in the definition; the algorithm's own is `algorithmDescription`. */
   description?: string;
@@ -330,7 +338,7 @@ export type ResolvedStaticGradient = {
   segments: PathSegment[];
   written: string;
   gradient: ResolvedGradientRef;
-  /** False for one in a group marked `emit: false` that no role points at. */
+  /** False for one in a group marked `publish: false` that no role points at. */
   emitted: boolean;
 };
 
@@ -341,7 +349,7 @@ export type ResolvedStatic = {
   /** The color as the definition writes it. */
   written: string;
   color: Color;
-  /** False for a color in a group marked `emit: false` that no role points at. */
+  /** False for a color in a group marked `publish: false` that no role points at. */
   emitted: boolean;
 };
 
@@ -745,12 +753,13 @@ export function resolveDefinition(
   // colors. A string is a color and any object a group; groups nest, so a
   // path is the identity.
   const paletteBlock = doc.palette ?? {};
-  // `emit: false` on a group makes its colors inputs: they emit only when a
-  // role points at one, since a reference always emits what it names.
+  // `publish: false` on a group makes its colors inputs: they are published
+  // only when a role points at one, since a reference always publishes what
+  // it names. `emit` is the earlier spelling of `publish`, still read.
   const silent = new Set<string>();
   function walkPalette(node: Record<string, unknown>, prefix: PathSegment[], emits: boolean) {
     for (const [key, raw] of Object.entries(node)) {
-      if ((key === "alias" || key === "emit" || key === "description") && prefix.length > 0) continue;
+      if ((key === "alias" || key === "publish" || key === "emit" || key === "description") && prefix.length > 0) continue;
       const segments = [...prefix, { name: key }];
       const path = segments.map((seg) => seg.name).join(".");
       if (typeof raw === "string") paletteOrder.push(path);
@@ -777,8 +786,13 @@ export function resolveDefinition(
         errors.push(`palette "${path}": a palette holds colors and groups — a system goes under \`systems\``);
         continue;
       }
-      if (block.emit !== undefined && typeof block.emit !== "boolean") {
-        errors.push(`palette "${path}": \`emit\` on a group is true or false`);
+      const publish = publishOf(block, `palette "${path}"`);
+      if (publish.error) {
+        errors.push(publish.error);
+        continue;
+      }
+      if (publish.value !== undefined && typeof publish.value !== "boolean") {
+        errors.push(`palette "${path}": \`publish\` on a group is true or false`);
         continue;
       }
       const paletteDescription = descriptionOf(block.description, `palette "${path}"`);
@@ -786,7 +800,7 @@ export function resolveDefinition(
       walkPalette(
         block,
         [...prefix, { name: key, alias: parseAlias(block.alias, `palette "${path}"`) }],
-        (block.emit as boolean | undefined) ?? emits,
+        (publish.value as boolean | undefined) ?? emits,
       );
     }
   }
@@ -815,7 +829,7 @@ export function resolveDefinition(
       const block = raw as Record<string, unknown>;
       if (block.emits !== undefined) {
         errors.push(
-          `system "${path}": \`emits\` is not a key — a public name is \`alias\`, and the steps to publish are listed under \`emit\``,
+          `system "${path}": \`emits\` is not a key — a public name is \`alias\`, and the steps to publish are listed under \`publish\``,
         );
         continue;
       }
@@ -867,11 +881,16 @@ export function resolveDefinition(
         );
         continue;
       }
-      if (block.emit !== undefined && !Array.isArray(block.emit)) {
-        errors.push(`system "${path}": \`emit\` is a list of the selectors to publish, as [50, 100] or ["red 6"]`);
+      const publish = publishOf(block, `system "${path}"`);
+      if (publish.error) {
+        errors.push(publish.error);
         continue;
       }
-      const emit = ((block.emit ?? []) as unknown[]).map((selector) => String(selector).trim().split(/\s+/).join(" "));
+      if (publish.value !== undefined && !Array.isArray(publish.value)) {
+        errors.push(`system "${path}": \`publish\` is a list of the selectors to publish, as [50, 100] or ["red 6"]`);
+        continue;
+      }
+      const emit = ((publish.value ?? []) as unknown[]).map((selector) => String(selector).trim().split(/\s+/).join(" "));
       const paramsBlock = block.params;
       if (
         paramsBlock != null &&
@@ -886,7 +905,7 @@ export function resolveDefinition(
       };
       if (algoName === "scale" && writtenParams.stops !== undefined) {
         errors.push(
-          `system "${path}": scale's \`stops\` are gone — its selector is any stop 0–1000, \`midpoint\` shapes the curve, and the stops to publish are listed under \`emit\``,
+          `system "${path}": scale's \`stops\` are gone — its selector is any stop 0–1000, \`midpoint\` shapes the curve, and the stops to publish are listed under \`publish\``,
         );
         continue;
       }
@@ -1532,9 +1551,9 @@ export function resolveDefinition(
 
   const resolvedSystems: ResolvedSystem[] = [];
   for (const [name, sys] of systems) {
-    // What a system publishes is what its `emit` lists plus what refs demand.
+    // What a system publishes is what its `publish` lists plus what refs demand.
     for (const selector of sys.emit) {
-      const step = resolveStep(name, selector, `system "${name}" emit`);
+      const step = resolveStep(name, selector, `system "${name}" publish`);
       if (step) demandedSteps.add(formatRef(name, step.selector));
     }
     const steps = [...stepCache.entries()]

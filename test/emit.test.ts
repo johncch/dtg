@@ -673,7 +673,7 @@ roles:
   });
 
   test("takes only true or false", () => {
-    assert.throws(() => resolveDefinition(SRC.replace("emit: false", "emit: no-thanks")), /`emit` on a group is true or false/);
+    assert.throws(() => resolveDefinition(SRC.replace("emit: false", "emit: no-thanks")), /`publish` on a group is true or false/);
   });
 });
 

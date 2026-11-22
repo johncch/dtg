@@ -78,7 +78,7 @@ export function SystemPage({ system, snapshot, working }: { system: SnapshotSyst
                   {system.emit.includes(step.selector) && (
                     <span className="muted">
                       {step.usedBy.length > 0 && ", "}
-                      emit
+                      published
                     </span>
                   )}
                 </td>
@@ -120,7 +120,7 @@ function Params({ system, constants }: { system: SnapshotSystem; constants: Read
         </div>
       ))}
       <div className="param">
-        emit
+        publish
         <div className="param-value">
           <EmitParam key={system.system} system={system} />
         </div>

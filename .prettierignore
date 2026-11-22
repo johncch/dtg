@@ -1,0 +1,11 @@
+# Prettier formats Markdown only; the code keeps its own style.
+*.ts
+*.tsx
+*.js
+*.mjs
+*.cjs
+*.css
+*.html
+*.json
+*.yaml
+*.yml

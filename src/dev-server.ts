@@ -29,6 +29,7 @@ import {
   redo,
   undo,
   withEdits,
+  withSpellingsOffered,
   withoutEdits,
   workingText,
   type WorkingCopy,
@@ -95,7 +96,7 @@ export function startDevServer(
     console.error((e as Error).message);
     process.exit(1);
   }
-  let state: State = settle(openFile(readDisk()));
+  let state: State = settle(withSpellingsOffered(openFile(readDisk())));
   const sseClients = new Set<ServerResponse>();
   const tellBrowsers = (message: "changed" | "reload") => {
     for (const client of sseClients) client.write(`data: ${message}\n\n`);
@@ -159,7 +160,7 @@ export function startDevServer(
   watchDefinition(definitionPath, () => {
     // Unsaved edits ride along: they name colors, not lines, so they are
     // applied again to whatever the file says now.
-    adopt({ ...state.copy, diskText: readDisk() });
+    adopt(withSpellingsOffered({ ...state.copy, diskText: readDisk() }));
     emitFromDisk();
   });
 

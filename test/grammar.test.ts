@@ -980,17 +980,17 @@ s: { d: { r: [theme(250)] } }
   });
 
   test("an emitted selector the algorithm cannot produce is an error", () => {
-    assert.throws(() => withEmit("    emit: [1200]"), /system "theme" emit: .*stop must be a number 0–1000/);
+    assert.throws(() => withEmit("    emit: [1200]"), /system "theme" publish: .*stop must be a number 0–1000/);
   });
 
   test("emit is a list", () => {
-    assert.throws(() => withEmit("    emit: 50"), /`emit` is a list of the selectors to publish/);
+    assert.throws(() => withEmit("    emit: 50"), /`publish` is a list of the selectors to publish/);
   });
 
   test("scale's old stops point at midpoint and emit", () => {
     assert.throws(
       () => resolveDefinition(`dtg: 1\ndefaults:\n  scale: { stops: { "500": 1 } }\nsystems:\n  theme:\n    algorithm: scale\n    params: { base: "#03a2e8", toward: ["#ffffff", "#000000"] }\n`),
-      /scale's `stops` are gone .* `midpoint` shapes the curve, and the stops to publish are listed under `emit`/,
+      /scale's `stops` are gone .* `midpoint` shapes the curve, and the stops to publish are listed under `publish`/,
     );
   });
 });

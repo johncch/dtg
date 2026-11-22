@@ -1,5 +1,5 @@
 import { isMap, isScalar, isSeq, parseDocument } from "yaml";
-import { applyEdits, placedTarget, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget, type GroupTarget, type ModeTarget, type CollectionTarget, type RoleTarget } from "./edit.js";
+import { applyEdits, placedTarget, readValue, renamedTarget, RESPELLED_KEYS, type Edit, type EditTarget, type ConstantTarget, type EntryTarget, type GroupTarget, type ModeTarget, type CollectionTarget, type RoleTarget } from "./edit.js";
 
 /**
  * The definition as it is on disk, the edits made since that are not yet
@@ -15,6 +15,21 @@ export type WorkingCopy = { diskText: string; steps: Edit[][]; undone: Edit[][] 
 
 export function openFile(diskText: string): WorkingCopy {
   return { diskText, steps: [], undone: [] };
+}
+
+/**
+ * The copy with a step that writes each renamed key in its current spelling,
+ * when the text still has the earlier one. Offered when the file is read, so
+ * it is an unsaved change like any other.
+ */
+export function withSpellingsOffered(copy: WorkingCopy): WorkingCopy {
+  const text = workingText(copy).text;
+  const edits: Edit[] = RESPELLED_KEYS.filter((key) => readValue(text, { kind: "spelling", key }) !== key).map((key) => ({
+    action: "set",
+    target: { kind: "spelling", key },
+    value: key,
+  }));
+  return edits.length > 0 ? withEdits(copy, edits) : copy;
 }
 
 /** Every unsaved edit, in the order it was made. */

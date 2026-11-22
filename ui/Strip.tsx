@@ -33,7 +33,7 @@ export function stepDeltaE(a: Color, b: Color): string | null {
  * row; ΔE between neighbors only means something on the flattened one.
  */
 export function Strip({ system, withDeltas = false }: { system: SnapshotSystem; withDeltas?: boolean }) {
-  if (system.steps.length === 0) return <p className="sub">No steps yet: nothing uses this system, and its <code>emit</code> lists none.</p>;
+  if (system.steps.length === 0) return <p className="sub">No steps yet: nothing uses this system, and its <code>publish</code> lists none.</p>;
   const opaque = system.steps.filter((step) => isOpaque(step.color));
   const translucent = system.steps.filter((step) => !isOpaque(step.color));
   const captioned = opaque.length > 0 && translucent.length > 0;

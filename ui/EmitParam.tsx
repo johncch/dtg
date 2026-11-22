@@ -6,7 +6,7 @@ import { Popup, type PopupPanel } from "./Popup.js";
 import { firstError, useTrying } from "./preview.js";
 import { Alert } from "./Alert.js";
 
-/** A system's `emit` list as it is written; clicking it opens the whole list as text, tried live on the page. */
+/** A system's `publish` list as it is written; clicking it opens the whole list as text, tried live on the page. */
 export function EmitParam({ system }: { system: SnapshotSystem }) {
   const label =
     system.emit.length === 0 ? (
@@ -16,7 +16,7 @@ export function EmitParam({ system }: { system: SnapshotSystem }) {
     );
   if (!EDITABLE) return <span className="chip">{label}</span>;
   return (
-    <Popup title="Edit emit" className="chip chip-editable" label={label} focus="field">
+    <Popup title="Edit publish" className="chip chip-editable" label={label} focus="field">
       {(panel) => <EmitEditor system={system} panel={panel} />}
     </Popup>
   );
@@ -57,13 +57,13 @@ function EmitEditor({ system, panel }: { system: SnapshotSystem; panel: PopupPan
       }}
     >
       <div className="editor-head" {...panel.handle}>
-        <span className="ref-editor-heading">emit</span>
+        <span className="ref-editor-heading">publish</span>
         {panel.close}
       </div>
       <input
         className="ref-input"
         type="text"
-        aria-label="emit"
+        aria-label="publish"
         autoComplete="off"
         data-1p-ignore
         placeholder="50, 500, 950"

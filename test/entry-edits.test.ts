@@ -243,9 +243,15 @@ describe("a system's emit list", () => {
     assert.ok(text.includes(`    params: { base: paper, tint: ink.body }\n\nroles:`));
   });
 
-  test("setting adds the key to a system without one", () => {
+  test("setting adds the key to a system without one, as publish", () => {
     const text = edited([{ action: "set", target: emit, value: "[10]" }], SRC.replace("    emit: [50]\n", ""));
-    assert.ok(text.includes(`    params: { base: paper, tint: ink.body }\n    emit: [10]\n`));
+    assert.ok(text.includes(`    params: { base: paper, tint: ink.body }\n    publish: [10]\n`));
+  });
+
+  test("written as publish, reads and sets under that key", () => {
+    const text = SRC.replace("    emit: [50]", "    publish: [50]");
+    assert.equal(readValue(text, emit), "[50]");
+    assert.ok(edited([{ action: "set", target: emit, value: "[50,90]" }], text).includes(`    publish: [50, 90]\n`));
   });
 
   test("reads as one change against the file's list", () => {

@@ -1,6 +1,6 @@
 import { ChevronRight, TriangleAlert, Redo2, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import type { Edit, EditTarget } from "../src/edit.js";
+import { earlierSpelling, type Edit, type EditTarget } from "../src/edit.js";
 import type { Snapshot } from "../src/snapshot.js";
 import { rolePath } from "../src/selector.js";
 import type { Change } from "../src/working-copy.js";
@@ -18,7 +18,7 @@ function nameOf(target: EditTarget, modes: string[]): string {
     case "system":
       return target.path;
     case "emit":
-      return `${target.system} emit`;
+      return `${target.system} publish`;
     case "param":
       return `${target.system} ${target.path}`;
     case "default":
@@ -29,6 +29,8 @@ function nameOf(target: EditTarget, modes: string[]): string {
       return `${target.mode} scheme`;
     case "collection":
       return `collection ${target.name}`;
+    case "spelling":
+      return target.key;
   }
 }
 
@@ -49,6 +51,7 @@ export function Changes({ working }: { working: Snapshot }) {
   const describeEdit = (edit: Edit) => {
     const name = nameOf(edit.target, modes);
     if (edit.action === "add" && edit.target.kind === "mode") return `add ${name} (${edit.value})`;
+    if (edit.action === "set" && edit.target.kind === "spelling") return `write ${earlierSpelling(edit.target.key)} as ${edit.value}`;
     if (edit.action === "set" && edit.target.kind === "scheme") return `${name} → ${edit.value || "not set"}`;
     if (edit.action === "rename") return `rename ${name} to ${edit.name}`;
     if (edit.action === "place") return `move ${name} to ${edit.path}`;
@@ -69,6 +72,7 @@ export function Changes({ working }: { working: Snapshot }) {
     if (change.target.kind === "mode" && change.action === "remove") return `${name}: removed`;
     if (change.target.kind === "collection") return change.action === "remove" ? `${name}: removed` : `${name}: added`;
     if (change.target.kind === "mode" && change.action === "set") return `${name}: added (${change.to})`;
+    if (change.target.kind === "spelling" && change.action === "set") return `${change.from} written as ${change.to}`;
     if (change.target.kind === "scheme" && change.action === "set") return `${name}: ${change.from || "not set"} → ${change.to || "not set"}`;
     if (change.target.kind === "system") {
       if (change.action === "remove") return `${name}: system removed`;

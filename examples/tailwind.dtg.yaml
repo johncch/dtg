@@ -19,7 +19,7 @@ dtg: 1
 
 palette:
   tailwind:
-    emit: false
+    publish: false
     red: "oklch(63.7% 0.237 25.331)"
     orange: "oklch(70.5% 0.213 47.604)"
     amber: "oklch(76.9% 0.188 70.08)"
@@ -56,131 +56,131 @@ systems:
   red:
     algorithm: curve
     params: { anchor: tailwind.red, hue: { from: -8, to: 1 } }
-    emit: &steps [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
+    publish: &steps [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950]
   orange:
     algorithm: curve
     params: { anchor: tailwind.orange, hue: { from: 26, to: -11 } }
-    emit: *steps
+    publish: *steps
   amber:
     algorithm: curve
     params: { anchor: tailwind.amber, hue: { from: 25, to: -24 } }
-    emit: *steps
+    publish: *steps
   yellow:
     algorithm: curve
     params: { anchor: tailwind.yellow, hue: { from: 16, to: -32 } }
-    emit: *steps
+    publish: *steps
   lime:
     algorithm: curve
     params: { anchor: tailwind.lime, hue: { from: -10, to: 1 } }
-    emit: *steps
+    publish: *steps
   green:
     algorithm: curve
     params: { anchor: tailwind.green, hue: { from: 6, to: 3 } }
-    emit: *steps
+    publish: *steps
   emerald:
     algorithm: curve
     params: { anchor: tailwind.emerald, hue: { from: 4, to: 10 } }
-    emit: *steps
+    publish: *steps
   teal:
     algorithm: curve
     params: { anchor: tailwind.teal, hue: { from: -2, to: 10 } }
-    emit: *steps
+    publish: *steps
   cyan:
     algorithm: curve
     params: { anchor: tailwind.cyan, hue: { from: -14, to: 14 } }
-    emit: *steps
+    publish: *steps
   sky:
     algorithm: curve
     params: { anchor: tailwind.sky, hue: { from: -1, to: 6 } }
-    emit: *steps
+    publish: *steps
   blue:
     algorithm: curve
     params: { anchor: tailwind.blue, hue: { from: -5, to: 8 } }
-    emit: *steps
+    publish: *steps
   indigo:
     algorithm: curve
     params: { anchor: tailwind.indigo, hue: { from: -5, to: 4 } }
-    emit: *steps
+    publish: *steps
   violet:
     algorithm: curve
     params: { anchor: tailwind.violet, hue: { from: 1, to: -2 } }
-    emit: *steps
+    publish: *steps
   purple:
     algorithm: curve
     params: { anchor: tailwind.purple, hue: { from: 4, to: -1 } }
-    emit: *steps
+    publish: *steps
   fuchsia:
     algorithm: curve
     params: { anchor: tailwind.fuchsia, hue: { from: -2, to: 4 } }
-    emit: *steps
+    publish: *steps
   pink:
     algorithm: curve
     params: { anchor: tailwind.pink, hue: { from: -11, to: 10 } }
-    emit: *steps
+    publish: *steps
   rose:
     algorithm: curve
     params: { anchor: tailwind.rose, hue: { from: -4, to: -4 } }
-    emit: *steps
+    publish: *steps
   slate:
     algorithm: curve
     params:
       anchor: tailwind.slate
       lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
       chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
-    emit: *steps
+    publish: *steps
   gray:
     algorithm: curve
     params:
       anchor: tailwind.gray
       lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
       chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
-    emit: *steps
+    publish: *steps
   zinc:
     algorithm: curve
     params:
       anchor: tailwind.zinc
       lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
       chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
-    emit: *steps
+    publish: *steps
   neutral:
     algorithm: curve
     params:
       anchor: tailwind.neutral
       lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
       chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
-    emit: *steps
+    publish: *steps
   stone:
     algorithm: curve
     params:
       anchor: tailwind.stone
       lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
       chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
-    emit: *steps
+    publish: *steps
   mauve:
     algorithm: curve
     params:
       anchor: tailwind.mauve
       lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
       chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
-    emit: *steps
+    publish: *steps
   olive:
     algorithm: curve
     params:
       anchor: tailwind.olive
       lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
       chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
-    emit: *steps
+    publish: *steps
   mist:
     algorithm: curve
     params:
       anchor: tailwind.mist
       lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
       chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
-    emit: *steps
+    publish: *steps
   taupe:
     algorithm: curve
     params:
       anchor: tailwind.taupe
       lightness: { from: 1, to: 0, easing: [[1, 0.37, 0.58, 0.46], [0.45, 0.49, 1, 0.6]] }
       chroma: { from: 0.031, to: 0.92, easing: [[0.17, 0.41, 0.24, -0.67], [1, 0.09, 1, -0.12]] }
-    emit: *steps
+    publish: *steps

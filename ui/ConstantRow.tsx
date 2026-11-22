@@ -37,7 +37,7 @@ export function ConstantsHead() {
 export const CONSTANT_COLUMN_COUNT = CONSTANT_COLUMNS.length + 1;
 
 /** The keys a group of palette colors keeps for itself, which no color in it can be named. */
-export const RESERVED = ["alias", "emit", "description"];
+export const RESERVED = ["alias", "publish", "emit", "description"];
 
 /** A palette entry's row, the same wherever the palette is listed, for a color and for a gradient written among them. */
 export function ConstantRow({
@@ -123,7 +123,7 @@ export function ConstantRow({
           </Hint>
         )}
       </ControlsCell>
-      <td>{constant.emitted ? <code>{paletteVariable(constant)}</code> : <span className="muted">Not emitted</span>}</td>
+      <td>{constant.emitted ? <code>{paletteVariable(constant)}</code> : <span className="muted">Not published</span>}</td>
       <td>
         <ColorChip color={constant.paint} label={constant.written} edit={target} onUnlock={lock?.locked && !fixed ? lock.onToggle : undefined} />
       </td>
@@ -134,7 +134,7 @@ export function ConstantRow({
         {constant.emitted ? (
           <span className="muted">
             {used && ", "}
-            emit
+            published
           </span>
         ) : (
           !used && <span className="muted">—</span>
