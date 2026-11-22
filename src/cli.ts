@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import {
   defaultDefinitionPath,
@@ -78,7 +78,8 @@ async function askStart(): Promise<Start> {
   return picked;
 }
 
-if (command === "init") {
+/** `dtg init`'s questions and files, and what it wrote, as a line to print. */
+async function setUp(): Promise<string> {
   const definition = await askDefinitionPath();
   const from = await askStart();
   let definitionWritten = false;
@@ -87,11 +88,22 @@ if (command === "init") {
   } catch (e) {
     fail((e as Error).message);
   }
-  console.log(
-    definitionWritten
-      ? `wrote dtg.config.yaml and ${from === "starter" ? "a starter" : `the ${from} definition as`} ${definition} — \`dtg edit\` opens it`
-      : `wrote dtg.config.yaml, pointing at the ${definition} already here — \`dtg edit\` opens it`,
-  );
+  return definitionWritten
+    ? `wrote dtg.config.yaml and ${from === "starter" ? "a starter" : `the ${from} definition as`} ${definition}`
+    : `wrote dtg.config.yaml, pointing at the ${definition} already here`;
+}
+
+/** Whether to set up a project where `dtg edit` found none. Without a terminal there is no one to ask. */
+async function askSetUp(): Promise<boolean> {
+  if (!process.stdin.isTTY) return false;
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  const answer = (await rl.question("No dtg project here. Set one up? (Y/n) ")).trim().toLowerCase();
+  rl.close();
+  return answer === "" || answer === "y" || answer === "yes";
+}
+
+if (command === "init") {
+  console.log(`${await setUp()} — \`dtg edit\` opens it`);
 } else if (command === "emit") {
   fail("`dtg emit` is now `dtg build` — the same flags, the same outputs");
 } else if (command === "docs") {
@@ -104,6 +116,11 @@ if (command === "init") {
     fail((e as Error).message);
   }
 } else if (command === "edit" || command === "build") {
+  // `dtg edit` in a folder with no project sets one up the way `dtg init` does, then opens it.
+  if (command === "edit" && flagValue("--definition") == null && !existsSync("dtg.config.yaml")) {
+    if (!(await askSetUp())) fail("no dtg project here — `dtg init` sets one up, or pass --definition");
+    console.log(await setUp());
+  }
   let config;
   try {
     config = loadConfig({
@@ -167,7 +184,8 @@ usage: dtg <command> [flags]
 
 commands
   init      write a starter definition and dtg.config.yaml in this folder
-  edit      open the definition in the editor
+  edit      open the definition in the editor; in a folder with no project,
+            offers to set one up first
   build     write the configured outputs
   docs      write a copy of the editor as static files, to publish
 

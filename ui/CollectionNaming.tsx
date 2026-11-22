@@ -114,7 +114,7 @@ function CollectionForm({ working, editing, panel }: { working: Snapshot; editin
           spellCheck={false}
           autoComplete="off"
           data-1p-ignore
-          placeholder="components"
+          placeholder="roles"
           onChange={(event) => {
             setName(event.target.value.trim());
             setRefused(null);

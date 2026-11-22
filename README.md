@@ -26,8 +26,12 @@ npx dtg edit
 
 `init` asks where the definition should live and writes a starter there,
 with a `dtg.config.yaml` pointing at it. `edit` opens the editor; edits
-are written back to the file. `npx dtg build` writes the CSS beside the
-definition.
+are written back to the file. Run in a folder with no project, `edit` offers
+to set one up first, asking what `init` asks. `npx dtg build` writes the CSS
+beside the definition.
+
+Or try it without installing: `npx @fifthrevision/dtg edit`. Add the package
+to the project to keep using the short `npx dtg`.
 
 ## Starting from the colors you have
 

@@ -54,6 +54,12 @@ describe("a collection", () => {
     assert.equal(text, DISK.slice(0, DISK.indexOf("\ncomponents:")));
   });
 
+  test("left by its last role stays, empty", () => {
+    const text = applyEdits(DISK, [{ action: "remove", target: { kind: "role", section: "components", path: "button.fill" } }]);
+    assert.match(text, /\ncomponents: \{\}\n$/);
+    assert.deepEqual(resolveDefinition(text).sections.map((section) => section.name), ["roles", "components"]);
+  });
+
   test("reads as {} where the file has it", () => {
     assert.equal(readValue(DISK, components), "{}");
     assert.equal(readValue(DISK, alerts), null);

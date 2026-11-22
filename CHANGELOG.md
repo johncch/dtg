@@ -20,17 +20,16 @@
   collection, at the bottom of the sidebar, adds one empty; the settings
   button on a collection's page renames it or removes it with its roles,
   which is refused while roles elsewhere point into it. An empty collection
-  shows in the sidebar, and its page adds its first role. `Snapshot.sections`
-  lists every collection, an empty one too.
+  shows in the sidebar, and its page adds its first role, so a collection's
+  last role can be deleted too.
 - An empty definition file opens in the editor, where it crashed, and a
   definition can be built from nothing there: the first palette color,
   system or role writes the `palette`, `systems` or collection block it goes
   in. Saving writes `dtg: 1` into a definition that lacks it, and a missing
   `dtg:` no longer warns.
-- `ResolvedDefinition.problems` is a list of `{ path, message }`, where it
-  was a list of strings. `problemText(problem)` gives the old string,
-  `"<path>: <message>"`; the CLI and the editor's save refusal word them as
-  before.
+- `dtg edit` in a folder with no `dtg.config.yaml` offers to set up a project,
+  asking what `dtg init` asks, then opens it. Without a terminal to ask in,
+  it says to run `dtg init`, as before.
 
 ## [0.5.0] - 2026-11-20
 

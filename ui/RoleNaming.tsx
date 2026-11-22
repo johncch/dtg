@@ -183,7 +183,7 @@ export function roleUsers(roles: SnapshotRole[]): Map<string, string[]> {
 
 /**
  * Removes a role, once no other role's ref points at it. A group goes with
- * its last role; a section's last role stays, for the section to have a row to add after.
+ * its last role; a collection's last role leaves it empty, with its page to add to.
  */
 export function RoleRemove({ role, roles, users }: { role: SnapshotRole; roles: SnapshotRole[]; /** The roles pointing at it, from `roleUsers`. */ users: string[] }) {
   const { commit } = useTrying();
@@ -194,7 +194,6 @@ export function RoleRemove({ role, roles, users }: { role: SnapshotRole; roles: 
     <EntryRemove
       label={path}
       users={users}
-      stays={inSection.length === 1 ? `The only role in ${role.section}.` : null}
       hint={lastOfGroup ? `Delete, and ${role.group} with it` : "Delete"}
       onRemove={() => commit({ action: "remove", target: targetOf(role) })}
     />
