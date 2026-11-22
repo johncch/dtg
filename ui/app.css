@@ -81,7 +81,7 @@ aside {
   z-index: 1;
   margin: -16px -16px 0;
   /* Puts the title's baseline on the page title's, which sits under main's 24px padding. */
-  padding: 22px 16px 16px;
+  padding: 22px 8px 16px 16px;
   background: var(--page-bg, #ffffff);
 }
 aside h1 {
@@ -92,7 +92,7 @@ aside h1 {
 .brand-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 0;
 }
 .brand-actions .nav-add {
   width: 32px;
@@ -2871,4 +2871,37 @@ tr.group-row .group-note {
   .popover:has(.value-editor) {
     width: min(360px, 100vw - 24px);
   }
+}
+
+.popover:has(.export) {
+  width: min(480px, 100vw - 24px);
+}
+.export-options,
+.export-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.export-actions {
+  justify-content: flex-end;
+}
+.export-note {
+  margin: 0;
+  font-size: var(--text-subhead);
+}
+.export-preview {
+  max-height: 50vh;
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  tab-size: 2;
+}
+.export-preview code {
+  color: inherit;
+  font-size: inherit;
 }

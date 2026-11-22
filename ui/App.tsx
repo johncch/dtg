@@ -2,9 +2,11 @@ import * as Tooltip from "@radix-ui/react-tooltip";
 import { Menu, X } from "lucide-react";
 import { useEffect, useState, type CSSProperties, type ReactNode } from "react";
 import { version } from "../package.json";
+import type { ResolvedDefinition } from "../src/resolve.js";
 import type { Snapshot, SnapshotBackground, SnapshotSystem } from "../src/snapshot.js";
 import { Appearance } from "./Appearance.js";
 import { Changes } from "./Changes.js";
+import { Export } from "./Export.js";
 import { LiveCss } from "./LiveCss.js";
 import { FollowWorkingCopy } from "./follow.js";
 import { NewGroup } from "./RoleNaming.js";
@@ -43,7 +45,7 @@ export function App() {
         {(shown) => (
           <>
             <LiveCss resolved={shown.resolved} modes={cssModes} />
-            <Shell snapshot={shown.snapshot} working={drawn.snapshot} route={route} />
+            <Shell snapshot={shown.snapshot} working={drawn.snapshot} resolved={drawn.resolved} route={route} />
           </>
         )}
       </TryingProvider>
@@ -52,7 +54,18 @@ export function App() {
 }
 
 /** `snapshot` is what to draw, which may include a pick being tried; `working` is the working copy itself. */
-function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snapshot; route: Route }) {
+function Shell({
+  snapshot,
+  working,
+  resolved,
+  route,
+}: {
+  snapshot: Snapshot;
+  working: Snapshot;
+  /** What `working` was resolved from. */
+  resolved: ResolvedDefinition;
+  route: Route;
+}) {
   const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => setMenuOpen(false), [route]);
   useEffect(() => {
@@ -68,7 +81,7 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
       <ProjectGamutProvider value={snapshot.gamut}>
         <PaletteColorsProvider value={working.constants}>
           <aside data-menu={menuOpen ? "open" : "closed"}>
-            <Brand backgrounds={snapshot.backgrounds} menuOpen={menuOpen} onMenu={() => setMenuOpen(!menuOpen)} />
+            <Brand backgrounds={snapshot.backgrounds} working={working} resolved={resolved} menuOpen={menuOpen} onMenu={() => setMenuOpen(!menuOpen)} />
             <div className="sidebar-body">
               <Nav snapshot={snapshot} working={working} />
             </div>
@@ -88,7 +101,19 @@ function Shell({ snapshot, working, route }: { snapshot: Snapshot; working: Snap
 }
 
 /** The title, and below the width a sidebar fits in, the button that opens the navigation as a menu. */
-function Brand({ backgrounds, menuOpen, onMenu }: { backgrounds: SnapshotBackground[]; menuOpen: boolean; onMenu: () => void }) {
+function Brand({
+  backgrounds,
+  working,
+  resolved,
+  menuOpen,
+  onMenu,
+}: {
+  backgrounds: SnapshotBackground[];
+  working: Snapshot;
+  resolved: ResolvedDefinition;
+  menuOpen: boolean;
+  onMenu: () => void;
+}) {
   return (
     <div className="brand">
       <h1>
@@ -97,6 +122,7 @@ function Brand({ backgrounds, menuOpen, onMenu }: { backgrounds: SnapshotBackgro
         </Link>
       </h1>
       <div className="brand-actions">
+        <Export resolved={resolved} working={working} />
         <Appearance backgrounds={backgrounds} />
         <a className="nav-add" href="https://github.com/johncch/dtg" target="_blank" rel="noreferrer" aria-label="dtg on GitHub" title="dtg on GitHub">
           <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">

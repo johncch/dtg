@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- The editor has an Export window, the download button by the title, that
+  copies or downloads the definition as CSS, Tailwind, SCSS or DTCG, unsaved
+  edits included. It works in a copy written by `dtg docs` too.
 - `ResolvedDefinition.problems` is a list of `{ path, message }`, where it
   was a list of strings. `problemText(problem)` gives the old string,
   `"<path>: <message>"`; the CLI and the editor's save refusal word them as
