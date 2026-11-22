@@ -578,6 +578,8 @@ function withEntryAdded(
   /** The value as the lines of a block, for an entry that holds a map of its own. */
   valueBlock?: string[],
 ): string {
+  // A file that has nothing of the kind yet gets the block for it, as the first entry is added.
+  if (mapKeys.length === 1 && !parseDocument(text).has(mapKeys[0])) text = withBlockAppended(text, mapKeys[0]);
   const set = parseDocument(text).getIn(mapKeys, true);
   if (!isMap(set) || !set.range) {
     throw new Error(`nothing written for ${describeTarget(target)} to be added to`);
@@ -1055,11 +1057,16 @@ function collectionNameTaken(doc: Document, name: string, target: EditTarget): v
   if (isMap(doc.contents) && doc.contents.has(name)) throw new Error(`${name} is already written`);
 }
 
-/** A new collection, empty, after everything the file holds, set off by a blank line. */
+/** A new collection, empty, after everything the file holds. */
 function withCollectionAdded(text: string, target: CollectionTarget): string {
   collectionNameTaken(parseDocument(text), target.name, target);
+  return withBlockAppended(text, target.name);
+}
+
+/** A top-level key holding an empty map, after everything the file holds, set off by a blank line. */
+function withBlockAppended(text: string, key: string): string {
   const body = text.replace(/\s*$/, "");
-  return `${body}${body === "" ? "" : "\n\n"}${keySource(target.name)}: {}\n`;
+  return `${body}${body === "" ? "" : "\n\n"}${keySource(key)}: {}\n`;
 }
 
 function withCollectionRenamed(text: string, target: CollectionTarget, name: string): string {
@@ -1075,4 +1082,10 @@ function withCollectionRemoved(text: string, target: CollectionTarget): string {
   const pair = collectionPair(doc, target.name);
   if (!pair) throw new Error(`nothing written for ${describeTarget(target)} to edit`);
   return withEntryRemoved(text, target, { doc, keys: [target.name], set: doc.contents as YAMLMap, pair: pair as Entry["pair"] }, true);
+}
+
+/** The definition with `dtg: 1` at its top when it does not say which grammar it is written in. */
+export function withGrammarVersion(text: string): string {
+  if (parseDocument(text).has("dtg")) return text;
+  return text.trim() === "" ? "dtg: 1\n" : `dtg: 1\n\n${text}`;
 }

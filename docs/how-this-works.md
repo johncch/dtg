@@ -26,8 +26,9 @@ declared.
 
 Canonical. The README carries the user-facing version of the same rules.
 
-- `dtg: 1` is the grammar version. The resolver assumes 1 with a warning when
-  absent, and errors on versions it does not understand.
+- `dtg: 1` is the grammar version. The resolver assumes 1 when it is absent,
+  and errors on versions it does not understand. The editor writes `dtg: 1`
+  into a definition without one when it saves it.
 - `modes: [light, dark]` sets the order role ref tuples are read in. The
   longform is a map, `light:` / `dark-hc: { extends: dark, scheme: dark }`,
   both keys optional. A mode with no `extends` is a **root** and names every

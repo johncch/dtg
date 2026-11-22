@@ -638,16 +638,16 @@ export function resolveDefinition(
   /** Refs into systems to resolve on the side, as `sky(7)`. */
   probes: string[] = [],
 ): ResolvedDefinition {
-  const doc = parse(yamlText) as Record<string, unknown>;
+  // An empty file parses to null; it defines nothing, as `{}` does.
+  const doc = (parse(yamlText) ?? {}) as Record<string, unknown>;
   const errors: string[] = [];
   const warnings: string[] = [];
   const problems: Problem[] = [];
   const algorithms = registryOf(extraAlgorithms);
 
+  // A definition that does not say is read as grammar 1, the only one; the editor writes `dtg: 1` when it saves one.
   const grammar = doc.dtg;
-  if (grammar == null) {
-    warnings.push("no `dtg:` grammar version field — assuming 1");
-  } else if (Number(grammar) !== 1) {
+  if (grammar != null && Number(grammar) !== 1) {
     errors.push(
       `unsupported grammar version ${JSON.stringify(grammar)} — this tool understands \`dtg: 1\``,
     );

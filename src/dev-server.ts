@@ -17,7 +17,7 @@ import {
   type BackgroundOverrides,
 } from "./dev-settings.js";
 import { writeOutputs } from "./outputs.js";
-import { describeTarget, type Edit } from "./edit.js";
+import { describeTarget, withGrammarVersion, type Edit } from "./edit.js";
 import { problemText, resolveDefinition } from "./resolve.js";
 import { appShell } from "./app-shell.js";
 import type { DevState } from "./dev-state.js";
@@ -247,7 +247,8 @@ export function startDevServer(
       try {
         // Read again rather than trust what was last seen: the write is the
         // file as it is this instant, plus the edits.
-        const { text } = workingText({ ...state.copy, diskText: readDisk() });
+        // A file that does not say which grammar it is written in is written saying so.
+        const text = withGrammarVersion(workingText({ ...state.copy, diskText: readDisk() }).text);
         const { problems } = resolveDefinition(text, [], gamut);
         if (problems.length > 0) {
           sendJson(409, { error: problems.map(problemText).join("; ") });

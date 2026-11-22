@@ -22,6 +22,11 @@
   which is refused while roles elsewhere point into it. An empty collection
   shows in the sidebar, and its page adds its first role. `Snapshot.sections`
   lists every collection, an empty one too.
+- An empty definition file opens in the editor, where it crashed, and a
+  definition can be built from nothing there: the first palette color,
+  system or role writes the `palette`, `systems` or collection block it goes
+  in. Saving writes `dtg: 1` into a definition that lacks it, and a missing
+  `dtg:` no longer warns.
 - `ResolvedDefinition.problems` is a list of `{ path, message }`, where it
   was a list of strings. `problemText(problem)` gives the old string,
   `"<path>: <message>"`; the CLI and the editor's save refusal word them as
