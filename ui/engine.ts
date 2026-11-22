@@ -2,6 +2,7 @@ import type { Color, Gamut } from "../src/color-math.js";
 import type { DevState } from "../src/dev-state.js";
 import { applyEdits, type Edit } from "../src/edit.js";
 import { buildLineage, resolveDefinition, type Lineage, type ResolvedDefinition } from "../src/resolve.js";
+import { overridesAfterChanges } from "../src/dev-settings.js";
 import { backgroundProbes, buildSnapshot, type Snapshot } from "../src/snapshot.js";
 import { changesOf, workingText } from "../src/working-copy.js";
 
@@ -18,10 +19,12 @@ export type Drawn = { snapshot: Snapshot; resolved: ResolvedDefinition };
  */
 export function drawState(state: DevState, lastGood: Resolved | null): { snapshot: Snapshot; good: Resolved } {
   const { text } = workingText(state.copy);
+  const changes = changesOf(state.copy);
+  const backgroundOverrides = overridesAfterChanges(state.backgroundOverrides, changes);
   let good: Resolved;
   let error: string | null = null;
   try {
-    const resolved = resolveDefinition(text, [], state.gamut, backgroundProbes(state.backgroundOverrides));
+    const resolved = resolveDefinition(text, [], state.gamut, backgroundProbes(backgroundOverrides));
     good = { resolved, lineage: buildLineage(resolved) };
   } catch (e) {
     if (!lastGood) throw e;
@@ -34,12 +37,12 @@ export function drawState(state: DevState, lastGood: Resolved | null): { snapsho
     error,
     stale: state.stale,
     gamut: state.gamut,
-    changes: changesOf(state.copy),
+    changes,
     undo: state.copy.steps.at(-1) ?? null,
     redo: state.copy.undone.at(-1) ?? null,
     definition: { path: state.definitionPath, text },
     configPath: state.configPath,
-    backgroundOverrides: state.backgroundOverrides,
+    backgroundOverrides,
   });
   return { snapshot, good };
 }

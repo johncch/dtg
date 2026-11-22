@@ -11,6 +11,7 @@ import type { Gamut } from "./color-math.js";
 import type { DtgConfig } from "./config.js";
 import type { ModeRendering } from "./emit.js";
 import {
+  overridesAfterChanges,
   readBackgroundOverrides,
   withBackgroundOverrides,
   type BackgroundOverrides,
@@ -22,6 +23,7 @@ import { appShell } from "./app-shell.js";
 import type { DevState } from "./dev-state.js";
 import { watchDefinition } from "./watch.js";
 import {
+  changesOf,
   discard,
   openFile,
   redo,
@@ -252,6 +254,12 @@ export function startDevServer(
           return;
         }
         writeFileSync(definitionPath, text);
+        // A background is kept by mode name, so a renamed mode takes its background along once the rename is in the file, and a removed one leaves none behind.
+        const carried = overridesAfterChanges(backgroundOverrides, changesOf(state.copy));
+        if (JSON.stringify(carried) !== JSON.stringify(backgroundOverrides)) {
+          writeFileSync(CONFIG_PATH, withBackgroundOverrides(readConfig(), carried));
+          backgroundOverrides = carried;
+        }
         // Saving wipes the board: no unsaved edits, and no history to undo into.
         adopt(openFile(text));
         sendJson(200, {});

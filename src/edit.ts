@@ -1,4 +1,5 @@
 import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
+import { TOP_LEVEL_RESERVED } from "./resolve.js";
 import { INHERIT } from "./selector.js";
 
 /** One value written in a definition: an authored color, or the ref a role holds for a mode. */
@@ -16,13 +17,23 @@ export type EditTarget =
   /** A whole role, by its dotted path within its section. */
   | { kind: "role"; section: string; path: string }
   /** A group of roles or of constants, by its dotted path within `root`: a section, or `palette`. */
-  | { kind: "group"; root: string; path: string };
+  | { kind: "group"; root: string; path: string }
+  /**
+   * A mode under `modes`, by name. Its value is `extends <mode>`, or `""` for
+   * a root; a mode added as a root is added as `copy of <mode>`, and the
+   * refs that make it one are set in the same step.
+   */
+  | { kind: "mode"; name: string }
+  /** The `scheme` a mode writes; `""` when it writes none. */
+  | { kind: "scheme"; mode: string };
 
 export type ConstantTarget = Extract<EditTarget, { kind: "constant" }>;
 export type SystemTarget = Extract<EditTarget, { kind: "system" }>;
 export type RoleTarget = Extract<EditTarget, { kind: "role" }>;
 export type GroupTarget = Extract<EditTarget, { kind: "group" }>;
 type EmitTarget = Extract<EditTarget, { kind: "emit" }>;
+export type ModeTarget = Extract<EditTarget, { kind: "mode" }>;
+type SchemeTarget = Extract<EditTarget, { kind: "scheme" }>;
 /** What is added, renamed and removed whole. */
 export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
 
@@ -40,23 +51,30 @@ export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
  * Placing a constant or a role moves it to another dotted path in its
  * section or in `palette`, writing the groups on the way that are not there
  * and taking a group it leaves empty; every ref to it follows. Renaming a
- * group rewrites every ref into it.
+ * group rewrites every ref into it. A mode is added at the end of `modes`,
+ * and renamed along with every `extends` naming it; setting a mode's scheme
+ * to `""` takes it out. Either writes `modes` as a map first when it is a
+ * list. Adding a mode to a definition without `modes` names the one it had
+ * `default` and writes each role's bare ref as a list. Removing a mode
+ * takes its place out of every ref list; one another mode extends, or the
+ * last mode, stays.
  */
 export type Edit =
   | { action: "set"; target: EditTarget; value: string }
-  | { action: "add"; target: EntryTarget; value: string; after?: string }
-  | { action: "rename"; target: EntryTarget | GroupTarget; name: string }
+  | { action: "add"; target: EntryTarget | ModeTarget; value: string; after?: string }
+  | { action: "rename"; target: EntryTarget | GroupTarget | ModeTarget; name: string }
   | { action: "place"; target: ConstantTarget | RoleTarget; path: string }
   | { action: "move"; target: ConstantTarget | RoleTarget; after: string | null }
-  | { action: "remove"; target: EntryTarget };
+  | { action: "remove"; target: EntryTarget | ModeTarget };
 
 /** Where a constant or a role is after it is placed at `path`. */
 export function placedTarget<Target extends ConstantTarget | RoleTarget>(target: Target, path: string): Target {
   return { ...target, path };
 }
 
-/** Where a constant, a system, a role or a group is after it is renamed. */
-export function renamedTarget<Target extends EntryTarget | GroupTarget>(target: Target, name: string): Target {
+/** Where a constant, a system, a role, a group or a mode is after it is renamed. */
+export function renamedTarget<Target extends EntryTarget | GroupTarget | ModeTarget>(target: Target, name: string): Target {
+  if (target.kind === "mode") return { ...target, name };
   const renamed = (path: string) => [...path.split(".").slice(0, -1), name].join(".");
   return { ...target, path: renamed(target.path) };
 }
@@ -85,6 +103,10 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
       if (isMap(written)) return [...role, "refs", target.mode];
       return isSeq(written) ? [...role, target.mode] : role;
     }
+    case "mode":
+      return ["modes", target.name];
+    case "scheme":
+      return ["modes", target.mode, "scheme"];
   }
 }
 
@@ -105,6 +127,10 @@ export function describeTarget(target: EditTarget): string {
       return target.path;
     case "group":
       return `the group ${target.path}`;
+    case "mode":
+      return `the mode ${target.name}`;
+    case "scheme":
+      return `the scheme of ${target.mode}`;
   }
 }
 
@@ -133,7 +159,7 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
   let text = yamlText;
   for (const edit of edits) {
     if (edit.action === "rename") {
-      text = withEntryRenamed(text, edit.target, edit.name);
+      text = edit.target.kind === "mode" ? withModeRenamed(text, edit.target, edit.name) : withEntryRenamed(text, edit.target, edit.name);
       continue;
     }
     if (edit.action === "place") {
@@ -145,12 +171,16 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
       continue;
     }
     if (edit.action === "remove") {
-      text = edit.target.kind === "system" ? withEntryRemoved(text, edit.target) : withGroupedRemoved(text, edit.target);
+      text = edit.target.kind === "mode"
+        ? withModeRemoved(text, edit.target)
+        : edit.target.kind === "system" ? withEntryRemoved(text, edit.target) : withGroupedRemoved(text, edit.target);
       continue;
     }
     if (edit.action === "add") {
       text =
-        edit.target.kind === "system"
+        edit.target.kind === "mode"
+          ? withModeAdded(text, edit.target, edit.value)
+          : edit.target.kind === "system"
           ? withSystemAdded(text, edit.target, edit.value)
           : edit.target.kind === "role"
             ? withRoleAdded(text, edit.target, edit.value, edit.after)
@@ -159,6 +189,11 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
     }
     if (edit.target.kind === "role" || edit.target.kind === "group") {
       throw new Error(`${describeTarget(edit.target)} is edited one ref at a time`);
+    }
+    if (edit.target.kind === "mode") throw new Error(`${describeTarget(edit.target)} is added and renamed, not set`);
+    if (edit.target.kind === "scheme") {
+      text = withSchemeSet(text, edit.target, edit.value);
+      continue;
     }
     if (edit.target.kind === "system") {
       text = withSystemSet(text, edit.target, edit.value);
@@ -224,6 +259,7 @@ export function readValue(yamlText: string, target: EditTarget): string | null {
     return refs == null ? null : JSON.stringify(refs);
   }
   if (target.kind === "group") return isGroup(writtenAt(yamlText, target)) ? "{}" : null;
+  if (target.kind === "mode" || target.kind === "scheme") return modeValue(yamlText, target);
   if (structureAt(yamlText, target)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
   const node = nodeAt(yamlText, target);
   if (node) return node.value == null ? INHERIT : String(node.value);
@@ -743,8 +779,8 @@ function withGroupedRemoved(text: string, target: RoleTarget | ConstantTarget): 
  */
 function withEntryRemoved(
   text: string,
-  target: EntryTarget | EmitTarget,
-  { doc, keys, set, pair }: Entry = entryAt(text, target),
+  target: EntryTarget | EmitTarget | SchemeTarget,
+  { doc, keys, set, pair }: Entry = entryAt(text, target as EntryTarget | EmitTarget),
   /** Stands apart from its neighbors by a blank line; one of the two around it goes with it. */
   spaced = target.kind === "system",
 ): string {
@@ -782,4 +818,201 @@ function withEntryRemoved(
 function lineEndAfter(text: string, at: number): number {
   const nextLine = text.indexOf("\n", at);
   return nextLine === -1 ? text.length : nextLine;
+}
+
+/** The mode a mode extends as `extends <mode>`, or the scheme it writes; `""` for none, null when there is no such mode. */
+function modeValue(text: string, target: ModeTarget | SchemeTarget): string | null {
+  const modes = parseDocument(text).get("modes", true);
+  const name = target.kind === "mode" ? target.name : target.mode;
+  if (isSeq(modes)) return modes.items.some((item) => isScalar(item) && String(item.value) === name) ? "" : null;
+  if (!isMap(modes)) return null;
+  const pair = modes.items.find((item) => isScalar(item.key) && String(item.key.value) === name);
+  if (!pair) return null;
+  const written = isMap(pair.value) ? pair.value.get(target.kind === "mode" ? "extends" : "scheme") : null;
+  if (written == null) return "";
+  return target.kind === "mode" ? `extends ${written}` : String(written);
+}
+
+/** Every role's ref list, in each section: a list written as the role, or under its `refs`. */
+function refLists(doc: Document): YAMLSeq[] {
+  const lists: YAMLSeq[] = [];
+  const walk = (node: unknown) => {
+    if (!isMap(node)) return;
+    for (const pair of node.items) {
+      const key = isScalar(pair.key) ? String(pair.key.value) : "";
+      if (["alias", "omit", "description"].includes(key)) continue;
+      const value = pair.value;
+      if (isSeq(value)) lists.push(value);
+      else if (isMap(value) && value.has("refs")) {
+        const refs = value.get("refs", true);
+        if (isSeq(refs)) lists.push(refs);
+      } else walk(value);
+    }
+  };
+  if (isMap(doc.contents)) {
+    for (const pair of doc.contents.items) {
+      if (isScalar(pair.key) && !TOP_LEVEL_RESERVED.includes(String(pair.key.value))) walk(pair.value);
+    }
+  }
+  return lists;
+}
+
+/** The span an item of a list takes, with the separator or line that goes with it. */
+function itemSpan(text: string, list: YAMLSeq, index: number): { start: number; end: number } {
+  const item = list.items[index] as Node;
+  if (list.flow) {
+    if (list.items.length === 1) return { start: item.range![0], end: item.range![1] };
+    if (index === 0) return { start: item.range![0], end: (list.items[1] as Node).range![0] };
+    return { start: writtenEnd(list.items[index - 1] as Node), end: item.range![1] };
+  }
+  const lineStart = text.lastIndexOf("\n", item.range![0]) + 1;
+  return { start: lineStart, end: Math.min(lineEndAfter(text, writtenEnd(item)) + 1, text.length) };
+}
+
+function withModeRemoved(text: string, target: ModeTarget): string {
+  const doc = parseDocument(text);
+  const modes = doc.get("modes", true);
+  const names = isSeq(modes) ? modes.items.map((item) => String((item as Scalar).value)) : isMap(modes) ? modes.items.map((item) => String((item.key as Scalar).value)) : [];
+  const at = names.indexOf(target.name);
+  if (at === -1) throw new Error(`nothing written for ${describeTarget(target)} to edit`);
+  if (names.length === 1) throw new Error(`${describeTarget(target)} is the only mode`);
+  const children = isMap(modes) ? modes.items.filter((item) => isMap(item.value) && String(item.value.get("extends")) === target.name) : [];
+  if (children.length > 0) {
+    throw new Error(`${describeTarget(target)} is extended by ${children.map((item) => String((item.key as Scalar).value)).join(", ")}`);
+  }
+  const spans = refLists(doc)
+    .filter((list) => list.items.length > at)
+    .map((list) => itemSpan(text, list, at));
+  if (isSeq(modes)) spans.push(itemSpan(text, modes, at));
+  else {
+    const map = modes as YAMLMap;
+    const pair = map.items[at];
+    const key = pair.key as Node;
+    const end = (item: Pair) => writtenEnd((item.value ?? item.key) as Node);
+    if (map.flow) {
+      spans.push(at === 0 ? { start: key.range![0], end: (map.items[1].key as Node).range![0] } : { start: end(map.items[at - 1]), end: end(pair) });
+    } else {
+      spans.push({ start: text.lastIndexOf("\n", key.range![0]) + 1, end: Math.min(lineEndAfter(text, end(pair)) + 1, text.length) });
+    }
+  }
+  return spans.sort((a, b) => b.start - a.start).reduce((written, { start, end }) => written.slice(0, start) + written.slice(end), text);
+}
+
+/** The implicit mode of a definition without `modes`. */
+const IMPLICIT_MODE = "default";
+
+/**
+ * A definition without `modes` given one, naming its implicit mode, with
+ * every role's bare ref written as a list of one: with `modes` written, a
+ * role holds a ref per mode.
+ */
+function withModesWritten(text: string): string {
+  const doc = parseDocument(text);
+  if (doc.has("modes") || !isMap(doc.contents)) return text;
+  const bare: Located[] = [];
+  const walk = (node: unknown) => {
+    if (!isMap(node)) return;
+    for (const pair of node.items) {
+      const key = isScalar(pair.key) ? String(pair.key.value) : "";
+      if (["alias", "omit", "description"].includes(key)) continue;
+      const value = pair.value;
+      if (isScalar(value) && typeof value.value === "string" && value.range) bare.push(value as Located);
+      else if (isMap(value) && value.has("refs")) {
+        const refs = value.get("refs", true);
+        if (isScalar(refs) && refs.range) bare.push(refs as Located);
+      } else walk(value);
+    }
+  };
+  for (const pair of doc.contents.items) {
+    if (isScalar(pair.key) && !TOP_LEVEL_RESERVED.includes(String(pair.key.value))) walk(pair.value);
+  }
+  let written = bare
+    .sort((a, b) => b.range[0] - a.range[0])
+    .reduce((at, ref) => `${at.slice(0, ref.range[0])}[${at.slice(ref.range[0], ref.range[1])}]${at.slice(ref.range[1])}`, text);
+  const version = parseDocument(written).contents as YAMLMap;
+  const first = version.items.find((item) => isScalar(item.key) && item.key.value === "dtg");
+  const at = first ? lineEndAfter(written, writtenEnd(first.value as Node)) + 1 : 0;
+  written = `${written.slice(0, at)}modes:\n  ${IMPLICIT_MODE}:\n${written.slice(at)}`;
+  return written;
+}
+
+function withModesAsMap(text: string): string {
+  const doc = parseDocument(text);
+  const modes = doc.get("modes", true);
+  if (!isSeq(modes)) return text;
+  const holding = (doc.contents as YAMLMap).items.find((item) => item.value === modes)!;
+  const key = holding.key as Node;
+  const lineStart = text.lastIndexOf("\n", key.range![0]) + 1;
+  const indent = text.slice(lineStart, key.range![0]);
+  const names = modes.items.map((item) => keySource(String((item as Scalar).value)));
+  return `${text.slice(0, key.range![1])}:${names.map((name) => `\n${indent}  ${name}:`).join("")}${text.slice(writtenEnd(modes))}`;
+}
+
+function modePair(doc: Document, name: string, target: EditTarget): Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node | null> {
+  const modes = doc.get("modes", true);
+  const pair = isMap(modes) ? modes.items.find((item) => isScalar(item.key) && String(item.key.value) === name) : undefined;
+  if (!pair || !isScalar(pair.key) || !pair.key.range) throw new Error(`nothing written for ${describeTarget(target)} to edit`);
+  return pair as Pair<Scalar & { range: NonNullable<Scalar["range"]> }, Node | null>;
+}
+
+function withModeAdded(text: string, target: ModeTarget, value: string): string {
+  const from = /^(extends|copy of) (.+)$/.exec(value);
+  if (!from) throw new Error(`${describeTarget(target)} is added as \`extends <mode>\` or \`copy of <mode>\`, not ${JSON.stringify(value)}`);
+  const mapped = withModesAsMap(withModesWritten(text));
+  const source = from[2];
+  modePair(parseDocument(mapped), source, { kind: "mode", name: source });
+  if (from[1] === "copy of") return withEntryAdded(mapped, ["modes"], target.name, "{}", target, "as a mode", undefined, []);
+  return withEntryAdded(mapped, ["modes"], target.name, `{ extends: ${keySource(source)} }`, target, "as a mode", undefined, [`extends: ${keySource(source)}`]);
+}
+
+function withModeRenamed(text: string, target: ModeTarget, name: string): string {
+  const doc = parseDocument(text);
+  const modes = doc.get("modes", true);
+  if (modeValue(text, { kind: "mode", name }) != null) throw new Error(`${describeTarget({ kind: "mode", name })} is already written`);
+  const splices: { start: number; end: number; source: string }[] = [];
+  if (isSeq(modes)) {
+    const item = modes.items.find((candidate) => isScalar(candidate) && String(candidate.value) === target.name) as Scalar | undefined;
+    if (!item?.range) throw new Error(`nothing written for ${describeTarget(target)} to edit`);
+    splices.push({ start: item.range[0], end: item.range[1], source: keySource(name) });
+  } else {
+    const pair = modePair(doc, target.name, target);
+    splices.push({ start: pair.key.range[0], end: pair.key.range[1], source: keySource(name) });
+    for (const other of (modes as YAMLMap).items) {
+      const parent = isMap(other.value) ? other.value.get("extends", true) : null;
+      if (isScalar(parent) && parent.range && String(parent.value) === target.name) {
+        splices.push({ start: parent.range[0], end: parent.range[1], source: sourceFor(name, parent) });
+      }
+    }
+  }
+  return splices
+    .sort((a, b) => b.start - a.start)
+    .reduce((written, { start, end, source }) => written.slice(0, start) + source + written.slice(end), text);
+}
+
+function withSchemeSet(text: string, target: SchemeTarget, scheme: string): string {
+  const mapped = withModesAsMap(text);
+  const doc = parseDocument(mapped);
+  const pair = modePair(doc, target.mode, target);
+  const block = pair.value;
+  if (isMap(block)) {
+    const written = block.items.find((item) => isScalar(item.key) && item.key.value === "scheme");
+    if (written && scheme === "") {
+      return withEntryRemoved(mapped, target, { doc, keys: ["modes", target.mode, "scheme"], set: block, pair: written as Entry["pair"] });
+    }
+    if (written && isScalar(written.value) && written.value.range) {
+      const [start, end] = written.value.range;
+      return mapped.slice(0, start) + scheme + mapped.slice(end);
+    }
+    if (scheme === "") return mapped;
+    return withEntryAdded(mapped, ["modes", target.mode], "scheme", scheme, target, "");
+  }
+  if (scheme === "") return mapped;
+  const keyEnd = pair.key.range[1];
+  const valueEnd = isScalar(block) && block.range ? block.range[1] : keyEnd;
+  const modes = doc.get("modes", true) as YAMLMap;
+  const lineStart = mapped.lastIndexOf("\n", pair.key.range[0]) + 1;
+  const indent = mapped.slice(lineStart, pair.key.range[0]);
+  const source = modes.flow ? `: { scheme: ${scheme} }` : `:\n${indent}  scheme: ${scheme}`;
+  const colon = mapped.indexOf(":", keyEnd);
+  return mapped.slice(0, keyEnd) + source + mapped.slice(Math.max(colon + 1, valueEnd));
 }

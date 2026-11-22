@@ -5,6 +5,17 @@
 - The editor has an Export window, the download button by the title, that
   copies or downloads the definition as CSS, Tailwind, SCSS or DTCG, unsaved
   edits included. It works in a copy written by `dtg docs` too.
+- Settings edits the definition's modes: a double click renames one (every
+  `extends` naming it follows, and its editor background moves with it on
+  Save), and its scheme is a select. Each mode can be extended, adding a mode
+  that says only what differs, or duplicated, adding a mode of its own that
+  starts with every role's ref from the original, or removed, taking its
+  place out of every role's refs and its editor background with it on Save;
+  a mode another extends stays until that one is pointed elsewhere, and so
+  does the last mode. They are unsaved changes
+  like any other. A `modes: [light, dark]` list is written as a map once a
+  scheme or a new mode needs one; a definition without `modes` gets one,
+  naming its one mode `default`, with each role's ref written as a list.
 - `ResolvedDefinition.problems` is a list of `{ path, message }`, where it
   was a list of strings. `problemText(problem)` gives the old string,
   `"<path>: <message>"`; the CLI and the editor's save refusal word them as

@@ -2255,6 +2255,9 @@ ul.plain li {
 table.modes th {
   width: 33%;
 }
+table.modes th.entry-controls {
+  width: 80px;
+}
 /* Mosaic's primary button: the default one with its label in the theme color. */
 .btn-primary {
   color: var(--label-theme);

@@ -128,7 +128,7 @@ function registryOf(extra: Algorithm[]): Map<string, Algorithm> {
 }
 
 // Top-level keys the tool owns; every other top-level key is a section.
-const TOP_LEVEL_RESERVED = [
+export const TOP_LEVEL_RESERVED = [
   "dtg",
   "modes",
   "defaults",

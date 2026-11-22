@@ -1,4 +1,5 @@
 import { isMap, isScalar, parseDocument } from "yaml";
+import type { Change } from "./working-copy.js";
 
 /**
  * Editor backgrounds a project has set by hand, by mode: a color (hex or
@@ -54,4 +55,18 @@ export function withBackgroundOverrides(configText: string, overrides: Backgroun
     if (isMap(doc.contents) && doc.contents.items.length === 0) return "";
   }
   return doc.toString();
+}
+
+/** The overrides with each key under the name its mode is renamed to in `changes`, and none for a mode removed. */
+export function overridesAfterChanges(overrides: BackgroundOverrides, changes: Change[]): BackgroundOverrides {
+  const renamed = new Map<string, string>();
+  for (const change of changes) {
+    if (change.action === "rename" && change.target.kind === "mode" && change.to.kind === "mode") renamed.set(change.target.name, change.to.name);
+  }
+  const removed = changes.flatMap((change) => (change.action === "remove" && change.target.kind === "mode" ? [change.target.name] : []));
+  return Object.fromEntries(
+    Object.entries(overrides)
+      .filter(([mode]) => !removed.includes(mode))
+      .map(([mode, value]) => [renamed.get(mode) ?? mode, value]),
+  );
 }

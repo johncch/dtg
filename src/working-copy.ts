@@ -1,4 +1,5 @@
-import { applyEdits, placedTarget, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget, type GroupTarget, type RoleTarget } from "./edit.js";
+import { isMap, isScalar, isSeq, parseDocument } from "yaml";
+import { applyEdits, placedTarget, readValue, renamedTarget, type Edit, type EditTarget, type ConstantTarget, type EntryTarget, type GroupTarget, type ModeTarget, type RoleTarget } from "./edit.js";
 
 /**
  * The definition as it is on disk, the edits made since that are not yet
@@ -68,9 +69,15 @@ export function discard(copy: WorkingCopy): WorkingCopy {
  */
 export type Change =
   | { action: "set"; target: EditTarget; from: string | null; to: string }
-  | { action: "rename"; target: EntryTarget | GroupTarget; to: EntryTarget | GroupTarget }
+  | { action: "rename"; target: EntryTarget | GroupTarget | ModeTarget; to: EntryTarget | GroupTarget | ModeTarget }
   | { action: "move"; target: ConstantTarget | RoleTarget }
-  | { action: "remove"; target: EntryTarget; from: string };
+  | { action: "remove"; target: EntryTarget | ModeTarget; from: string };
+
+function modeNames(text: string): string[] {
+  const modes = parseDocument(text).get("modes", true);
+  if (isSeq(modes)) return modes.items.map((item) => String(isScalar(item) ? item.value : item));
+  return isMap(modes) ? modes.items.map((item) => String(isScalar(item.key) ? item.key.value : item.key)) : [];
+}
 
 const sameTarget = (a: EditTarget, b: EditTarget) =>
   JSON.stringify(a) === JSON.stringify(b);
@@ -106,6 +113,9 @@ function carried(target: EditTarget, from: EditTarget, to: EditTarget): EditTarg
   const under = (path: string, group: string, now: string) => (path.startsWith(`${group}.`) ? now + path.slice(group.length) : path);
   if (from.kind === "system" && to.kind === "system" && (target.kind === "param" || target.kind === "emit")) {
     return target.system === from.path ? { ...target, system: to.path } : target;
+  }
+  if (from.kind === "mode" && to.kind === "mode" && target.kind === "scheme") {
+    return target.mode === from.name ? { ...target, mode: to.name } : target;
   }
   if (from.kind === "role" && to.kind === "role" && target.kind === "ref") {
     return target.section === from.section && target.role === from.path ? { ...target, role: to.path } : target;
@@ -150,13 +160,15 @@ type Followed = {
  */
 export function changesOf(copy: WorkingCopy): Change[] {
   const followed: Followed[] = [];
-  const renames: { from: EditTarget; to: EditTarget }[] = [];
+  // How each rename, and each mode removed, readdresses what comes after it.
+  const renames: { forward: (target: EditTarget) => EditTarget; back: (target: EditTarget) => EditTarget }[] = [];
+  const edits = editsOf(copy);
   const follow = (target: EditTarget): Followed => {
     const known = followed.find((color) => color.now != null && sameTarget(color.now, target));
     if (known) return known;
     // The file has it under the names its holders had before they were renamed.
-    const origin = renames.reduceRight((at, { from, to }) => carried(at, to, from), target);
-    const stillThere = sameTarget(renames.reduce((at, { from, to }) => carried(at, from, to), origin), target);
+    const origin = renames.reduceRight((at, { back }) => back(at), target);
+    const stillThere = sameTarget(renames.reduce((at, { forward }) => forward(at), origin), target);
     // A name another color was renamed away from is a new color if it comes back.
     const claimed = followed.some((color) => color.inFile != null && sameTarget(color.inFile, origin));
     const inFile = stillThere && !claimed && readValue(copy.diskText, origin) != null ? origin : null;
@@ -164,12 +176,26 @@ export function changesOf(copy: WorkingCopy): Change[] {
     followed.push(color);
     return color;
   };
-  editsOf(copy).forEach((edit, index) => {
+  edits.forEach((edit, index) => {
     const color = follow(edit.target);
     color.lastEdit = index;
     if (edit.action === "add") color.added = true;
     if (edit.action === "set" || edit.action === "add") color.value = edit.value;
     else if (edit.action === "move") color.moved = true;
+    else if (edit.action === "remove" && edit.target.kind === "mode") {
+      color.now = null;
+      const name = edit.target.name;
+      // A mode is a place in every ref list: the refs in it go with it, and those after it move up one.
+      const at = modeNames(workingText({ ...copy, steps: [edits.slice(0, index)], undone: [] }).text).indexOf(name);
+      const shift = (by: number) => (target: EditTarget): EditTarget => (target.kind === "ref" && target.mode > at - (by < 0 ? 0 : 1) ? { ...target, mode: target.mode + by } : target);
+      for (const other of followed) {
+        if (other.now?.kind === "ref" && other.now.mode === at) other.holderRemoved = true;
+        if (other.now?.kind === "scheme" && other.now.mode === name) other.holderRemoved = true;
+        if (other.now) other.now = shift(-1)(other.now);
+        other.unrenamed = shift(-1)(other.unrenamed);
+      }
+      renames.push({ forward: shift(-1), back: shift(1) });
+    }
     else if (edit.action === "remove") {
       color.now = null;
       for (const other of followed) {
@@ -177,32 +203,39 @@ export function changesOf(copy: WorkingCopy): Change[] {
       }
     }
     else {
+      const from = edit.target;
       const to = edit.action === "rename" ? renamedTarget(edit.target, edit.name) : placedTarget(edit.target, edit.path);
       color.now = to;
       for (const other of followed) {
         if (other === color) continue;
-        if (other.now) other.now = carried(other.now, edit.target, to);
-        other.unrenamed = carried(other.unrenamed, edit.target, to);
+        if (other.now) other.now = carried(other.now, from, to);
+        other.unrenamed = carried(other.unrenamed, from, to);
       }
-      renames.push({ from: edit.target, to });
+      renames.push({ forward: (at) => carried(at, from, to), back: (at) => carried(at, to, from) });
     }
   });
 
+  // A mode added as a copy brings a ref on every role; that is the mode's one change.
+  const addedModes = followed.flatMap((color) => (color.added && color.inFile == null && color.now?.kind === "mode" ? [color.now.name] : []));
+  const modes = addedModes.length > 0 ? modeNames(workingText(copy).text) : [];
   const changes: { change: Change; lastEdit: number }[] = [];
   for (const { inFile, added, moved, now, unrenamed, holderRemoved, value, lastEdit } of followed) {
     if (holderRemoved) continue;
+    if (now?.kind === "ref" && addedModes.includes(modes[now.mode])) continue;
     const push = (change: Change) => changes.push({ change, lastEdit });
     if (inFile == null) {
       // A set on a param the file does not write adds it, as `add` does a constant.
-      if ((added || now?.kind === "param" || now?.kind === "emit") && now != null && value != null) push({ action: "set", target: now, from: null, to: value });
+      // A scheme on a mode the file does not have is part of adding it.
+      if (now?.kind === "scheme" && value === "") continue;
+      if ((added || now?.kind === "param" || now?.kind === "emit" || now?.kind === "scheme") && now != null && value != null) push({ action: "set", target: now, from: null, to: value });
       continue;
     }
     const from = readValue(copy.diskText, inFile)!;
     if (now == null) {
-      push({ action: "remove", target: inFile as EntryTarget, from });
+      push({ action: "remove", target: inFile as EntryTarget | ModeTarget, from });
       continue;
     }
-    if (!sameTarget(now, unrenamed)) push({ action: "rename", target: inFile as EntryTarget | GroupTarget, to: now as EntryTarget | GroupTarget });
+    if (!sameTarget(now, unrenamed)) push({ action: "rename", target: inFile as EntryTarget | GroupTarget | ModeTarget, to: now as EntryTarget | GroupTarget | ModeTarget });
     if (moved) push({ action: "move", target: now as ConstantTarget | RoleTarget });
     if (value != null && value !== from) push({ action: "set", target: now, from, to: value });
   }

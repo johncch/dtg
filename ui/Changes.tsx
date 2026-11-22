@@ -23,6 +23,10 @@ function nameOf(target: EditTarget, modes: string[]): string {
       return `${target.system} ${target.path}`;
     case "default":
       return `${target.algorithm} ${target.path} (shared)`;
+    case "mode":
+      return `mode ${target.name}`;
+    case "scheme":
+      return `${target.mode} scheme`;
   }
 }
 
@@ -42,6 +46,8 @@ export function Changes({ working }: { working: Snapshot }) {
   const { changes, undo, redo, modes, problems } = working;
   const describeEdit = (edit: Edit) => {
     const name = nameOf(edit.target, modes);
+    if (edit.action === "add" && edit.target.kind === "mode") return `add ${name} (${edit.value})`;
+    if (edit.action === "set" && edit.target.kind === "scheme") return `${name} → ${edit.value || "not set"}`;
     if (edit.action === "rename") return `rename ${name} to ${edit.name}`;
     if (edit.action === "place") return `move ${name} to ${edit.path}`;
     if (edit.action === "move") return `move ${name}`;
@@ -52,11 +58,15 @@ export function Changes({ working }: { working: Snapshot }) {
     if (edit.action === "add") return `add ${name} ${edit.value}`;
     return `${name} → ${edit.value}`;
   };
-  const describe = (step: Edit[]) => step.map(describeEdit).join(", ");
+  // A mode added as a copy sets a ref on every role in the same step; the mode says it all.
+  const describe = (step: Edit[]) => (step.find((edit) => edit.action === "add" && edit.target.kind === "mode") ? describeEdit(step[0]) : step.map(describeEdit).join(", "));
   const summary = (change: Change) => {
     const name = nameOf(change.target, modes);
     if (change.action === "rename") return `${name}: renamed to ${nameOf(change.to, modes)}`;
     if (change.action === "move") return `${name}: moved`;
+    if (change.target.kind === "mode" && change.action === "remove") return `${name}: removed`;
+    if (change.target.kind === "mode" && change.action === "set") return `${name}: added (${change.to})`;
+    if (change.target.kind === "scheme" && change.action === "set") return `${name}: ${change.from || "not set"} → ${change.to || "not set"}`;
     if (change.target.kind === "system") {
       if (change.action === "remove") return `${name}: system removed`;
       return change.action === "set" && change.from != null ? `${name}: algorithm and params changed` : `${name}: system added`;

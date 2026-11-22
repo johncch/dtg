@@ -140,11 +140,11 @@ export function EntryName({
 }
 
 /** A group's own name, the last part of its path: retyping it renames the group where it is. */
-export function GroupName({ path, taken, onRename }: { path: string; taken: string[]; onRename: (name: string) => void }) {
+export function GroupName({ path, taken, keys = [], onRename }: { path: string; taken: string[]; keys?: string[]; onRename: (name: string) => void }) {
   const name = nameOf(path);
   return (
     <Retyped
-      keys={[]}
+      keys={keys}
       shown={path}
       written={name}
       problemOf={(typed) => (!ENTRY_NAME.test(typed) ? ENTRY_NAME_RULE : taken.includes(typed) ? `${typed} is already written.` : null)}
