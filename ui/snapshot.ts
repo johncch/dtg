@@ -2,14 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import type { DevState } from "../src/dev-state.js";
 import type { Snapshot } from "../src/snapshot.js";
 import { discard, redo, undo, withEdits, type WorkingCopy } from "../src/working-copy.js";
-import type { ModeRendering } from "../src/emit.js";
+import type { HostCss } from "../src/emit.js";
 import { drawState, type Drawn, type Resolved } from "./engine.js";
 import { STATIC } from "./mode.js";
 import { bridgeStore, type Store } from "./store.js";
 
 export type SnapshotState =
   | { status: "loading" }
-  | { status: "ready"; drawn: Drawn; cssModes: ModeRendering }
+  | { status: "ready"; drawn: Drawn; hostCss: HostCss }
   | { status: "failed"; message: string };
 
 type Loaded =
@@ -96,7 +96,7 @@ export function useSnapshot(): { state: SnapshotState; store: Store } {
   const state = useMemo<SnapshotState>(
     () =>
       loaded.status === "ready"
-        ? { status: "ready", drawn: { snapshot: loaded.snapshot, resolved: loaded.good.resolved }, cssModes: loaded.dev.cssModes }
+        ? { status: "ready", drawn: { snapshot: loaded.snapshot, resolved: loaded.good.resolved }, hostCss: loaded.dev.hostCss }
         : loaded,
     [loaded],
   );

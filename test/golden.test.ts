@@ -12,8 +12,8 @@ const read = (name: string) => readFileSync(new URL(name, here), "utf8");
 const resolved = resolveDefinition(read("kitchen-sink.dtg.yaml"));
 
 describe("golden output", () => {
-  test("plain CSS is byte-identical", () => {
-    assert.equal(emitCss(resolved, "plain"), read("kitchen-sink.plain.css"));
+  test("CSS is byte-identical", () => {
+    assert.equal(emitCss(resolved, "css"), read("kitchen-sink.css"));
   });
 
   test("tailwind CSS is byte-identical", () => {
@@ -51,6 +51,6 @@ describe("golden output", () => {
 
   test("resolving twice gives identical bytes", () => {
     const again = resolveDefinition(read("kitchen-sink.dtg.yaml"));
-    assert.equal(emitCss(again, "plain"), emitCss(resolved, "plain"));
+    assert.equal(emitCss(again, "css"), emitCss(resolved, "css"));
   });
 });

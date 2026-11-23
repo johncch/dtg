@@ -31,14 +31,21 @@ import {
 import { formatRef, rolePath } from "./selector.js";
 
 /**
- * `plain` emits primitives into `:root`, usable by any stylesheet.
- * `tailwind` wraps them in `@theme` and adds the `@theme inline` utility
- * wiring — correct inside a Tailwind v4 build, and inert anywhere else,
- * since a browser discards an at-rule it does not know.
+ * `css` names primitives as the definition does and writes them into `:root`.
+ * `tailwind` names them in Tailwind's theme namespaces, `--color-` and
+ * `--gradient-`, inside `@theme`, and adds the `@theme inline` utility wiring:
+ * correct inside a Tailwind v4 build, and inert anywhere else, since a browser
+ * discards an at-rule it does not know.
  */
-export type CssFormat = "plain" | "tailwind";
+export type CssFormat = "css" | "tailwind";
 
-export const CSS_FORMATS: CssFormat[] = ["plain", "tailwind"];
+function primitiveVar(names: CssFormat, name: string): string {
+  return names === "tailwind" ? `--color-${name}` : `--${name}`;
+}
+
+function gradientVar(names: CssFormat, name: string): string {
+  return names === "tailwind" ? `--gradient-${name}` : `--${name}`;
+}
 
 /**
  * How a format renders the mode axis. `nested` puts each mode in its own
@@ -52,6 +59,9 @@ export const CSS_FORMATS: CssFormat[] = ["plain", "tailwind"];
 export type ModeRendering = "nested" | "flat";
 
 export const MODE_RENDERINGS: ModeRendering[] = ["nested", "flat"];
+
+/** The CSS the editor hands a page hosting it, named and laid out as the project's own CSS output. */
+export type HostCss = { names: CssFormat; modes: ModeRendering };
 
 /**
  * The variable a role emits under, for one mode, in each rendering. A single
@@ -188,6 +198,7 @@ function cssValueFor(
   entry: ResolvedRef,
   mode: string,
   modes: ModeRendering,
+  names: CssFormat,
   space: "srgb" | "display-p3" = "srgb",
 ): { css: string; wide: boolean } {
   const target = entry.target;
@@ -208,10 +219,10 @@ function cssValueFor(
   }
   if (entry.kind === "gradient" && target.kind === "constant") {
     const named = resolved.gradients.find((gradient) => gradient.path === target.name);
-    if (named) return { css: `var(--gradient-${publicPath(named.segments, "css", "-")})`, wide: false };
+    if (named) return { css: `var(${gradientVar(names, publicPath(named.segments, "css", "-"))})`, wide: false };
   }
   if (entry.kind === "gradient") {
-    const stops = entry.stops.map((stop) => cssValueFor(resolved, stop.color, mode, modes, space));
+    const stops = entry.stops.map((stop) => cssValueFor(resolved, stop.color, mode, modes, names, space));
     return {
       css: gradientCss(entry, stops.map((stop) => stop.css)),
       wide: stops.some((stop) => stop.wide),
@@ -222,7 +233,7 @@ function cssValueFor(
     const step = system?.steps.find((s) => s.selector === target.selector);
     if (system && step) {
       return {
-        css: `var(--color-${publicSystemName(system, "css")}-${step.publicStep})`,
+        css: `var(${primitiveVar(names, `${publicSystemName(system, "css")}-${step.publicStep}`)})`,
         wide: false,
       };
     }
@@ -231,7 +242,7 @@ function cssValueFor(
     const constant = resolved.statics.find((c) => c.path === target.name);
     if (constant) {
       return {
-        css: `var(--color-${publicPath(constant.segments, "css", "-")})`,
+        css: `var(${primitiveVar(names, publicPath(constant.segments, "css", "-"))})`,
         wide: false,
       };
     }
@@ -254,8 +265,13 @@ export function emittedGradients(resolved: ResolvedDefinition): ResolvedStaticGr
 }
 
 /** A palette gradient written out. Its stops are the palette's own, so no mode changes what it comes to. */
-function paletteGradientCss(resolved: ResolvedDefinition, named: ResolvedStaticGradient, space: "srgb" | "display-p3") {
-  return cssValueFor(resolved, named.gradient, resolved.modes[0], "nested", space);
+function paletteGradientCss(
+  resolved: ResolvedDefinition,
+  named: ResolvedStaticGradient,
+  names: CssFormat,
+  space: "srgb" | "display-p3",
+) {
+  return cssValueFor(resolved, named.gradient, resolved.modes[0], "nested", names, space);
 }
 
 export function emittedStatics(resolved: ResolvedDefinition): ResolvedStatic[] {
@@ -272,10 +288,28 @@ function generatedNote(source: string | undefined): [string, string] {
 
 export function emitCss(
   resolved: ResolvedDefinition,
-  format: CssFormat = "plain",
+  format: CssFormat = "css",
   modes: ModeRendering = "nested",
   /** The definition's path, as the project names it. */
   source?: string,
+): string {
+  return writeCss(resolved, format, format === "tailwind", modes, source);
+}
+
+/**
+ * The CSS a page hosting the editor applies over its own: named as the
+ * project's CSS output names it, but with no `@theme`, which a browser drops.
+ */
+export function emitHostCss(resolved: ResolvedDefinition, names: CssFormat, modes: ModeRendering): string {
+  return writeCss(resolved, names, false, modes, undefined);
+}
+
+function writeCss(
+  resolved: ResolvedDefinition,
+  names: CssFormat,
+  theme: boolean,
+  modes: ModeRendering,
+  source: string | undefined,
 ): string {
   refuseProblems(resolved);
   const [generated, howToChange] = generatedNote(source);
@@ -284,7 +318,7 @@ export function emitCss(
     `/* ${generated}`,
     `   ${howToChange} */`,
     "",
-    format === "tailwind" ? "@theme {" : ":root {",
+    theme ? "@theme {" : ":root {",
   );
   for (const system of resolved.systems) {
     const opaqueSteps = system.steps.filter((s) => isOpaque(s.color));
@@ -292,13 +326,13 @@ export function emitCss(
     const name = publicSystemName(system, "css");
     lines.push(`  /* ${system.system} (${system.algorithm}) */`);
     for (const step of opaqueSteps) {
-      lines.push(`  --color-${name}-${step.publicStep}: ${formatColor(step.color, "srgb")};`);
+      lines.push(`  ${primitiveVar(names, `${name}-${step.publicStep}`)}: ${formatColor(step.color, "srgb")};`);
     }
   }
   if (emittedStatics(resolved).length > 0) {
     lines.push("  /* statics */");
     for (const s of emittedStatics(resolved)) {
-      lines.push(`  --color-${publicPath(s.segments, "css", "-")}: ${formatColor(s.color, "srgb")};`);
+      lines.push(`  ${primitiveVar(names, publicPath(s.segments, "css", "-"))}: ${formatColor(s.color, "srgb")};`);
     }
   }
   lines.push("}", "");
@@ -307,7 +341,7 @@ export function emitCss(
   if (emittedGradients(resolved).length > 0) {
     lines.push(":root {", "  /* gradients */");
     for (const named of emittedGradients(resolved)) {
-      lines.push(`  --gradient-${publicPath(named.segments, "css", "-")}: ${paletteGradientCss(resolved, named, "srgb").css};`);
+      lines.push(`  ${gradientVar(names, publicPath(named.segments, "css", "-"))}: ${paletteGradientCss(resolved, named, names, "srgb").css};`);
     }
     lines.push("}", "");
   }
@@ -319,7 +353,7 @@ export function emitCss(
         .filter((role) => !leftOut(resolved, role, i, modes))
         .map(
           (role) =>
-            `  --${roleVarName(role, mode, modes, resolved.modes.length)}: ${cssValueFor(resolved, role.perMode[i], mode, modes).css};`,
+            `  --${roleVarName(role, mode, modes, resolved.modes.length)}: ${cssValueFor(resolved, role.perMode[i], mode, modes, names).css};`,
         );
       if (decls.length === 0) return;
       // The per-mode header only earns its place when there is more than one.
@@ -333,7 +367,7 @@ export function emitCss(
         .filter((role) => !leftOut(resolved, role, i, modes))
         .map(
           (role) =>
-            `  --${cssVarName(role)}: ${cssValueFor(resolved, role.perMode[i], mode, modes).css};`,
+            `  --${cssVarName(role)}: ${cssValueFor(resolved, role.perMode[i], mode, modes, names).css};`,
         );
       // A mode that extends another is already inside its parent's block, so
       // a scheme it only inherited is not written again.
@@ -349,9 +383,9 @@ export function emitCss(
     });
   }
 
-  lines.push(...wideGamutLayer(resolved, modes));
+  lines.push(...wideGamutLayer(resolved, modes, names));
 
-  if (format === "tailwind") {
+  if (theme) {
     lines.push(
       "/* Semantic tokens wired into Tailwind utilities */",
       "@theme inline {",
@@ -433,6 +467,7 @@ export function emitScss(resolved: ResolvedDefinition, source?: string): string 
 function wideGamutLayer(
   resolved: ResolvedDefinition,
   modes: ModeRendering,
+  names: CssFormat,
 ): string[] {
   const blocks: string[] = [];
 
@@ -442,19 +477,19 @@ function wideGamutLayer(
     for (const step of system.steps) {
       if (!isOpaque(step.color) || !needsMapping(step.color, "srgb")) continue;
       primitives.push(
-        `    --color-${name}-${step.publicStep}: ${formatColor(step.color, "display-p3")};`,
+        `    ${primitiveVar(names, `${name}-${step.publicStep}`)}: ${formatColor(step.color, "display-p3")};`,
       );
     }
   }
   for (const s of emittedStatics(resolved)) {
     if (!needsMapping(s.color, "srgb")) continue;
     primitives.push(
-      `    --color-${publicPath(s.segments, "css", "-")}: ${formatColor(s.color, "display-p3")};`,
+      `    ${primitiveVar(names, publicPath(s.segments, "css", "-"))}: ${formatColor(s.color, "display-p3")};`,
     );
   }
   for (const named of emittedGradients(resolved)) {
-    const value = paletteGradientCss(resolved, named, "display-p3");
-    if (value.wide) primitives.push(`    --gradient-${publicPath(named.segments, "css", "-")}: ${value.css};`);
+    const value = paletteGradientCss(resolved, named, names, "display-p3");
+    if (value.wide) primitives.push(`    ${gradientVar(names, publicPath(named.segments, "css", "-"))}: ${value.css};`);
   }
 
   const roleBlocks: string[] = [];
@@ -463,7 +498,7 @@ function wideGamutLayer(
     const decls: string[] = [];
     for (const role of resolved.roles) {
       if (leftOut(resolved, role, i, modes)) continue;
-      const value = cssValueFor(resolved, role.perMode[i], mode, modes, "display-p3");
+      const value = cssValueFor(resolved, role.perMode[i], mode, modes, names, "display-p3");
       if (!value.wide) continue;
       decls.push(
         `    --${roleVarName(role, mode, modes, resolved.modes.length)}: ${value.css};`,

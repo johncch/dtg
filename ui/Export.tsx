@@ -17,7 +17,7 @@ const FORMATS: { format: Format; label: string; suffix: string }[] = [
 function emit(resolved: ResolvedDefinition, format: Format): string {
   if (format === "scss") return emitScss(resolved);
   if (format === "dtcg") return JSON.stringify(emitDtcg(resolved, "srgb"), null, 2) + "\n";
-  return emitCss(resolved, format === "tailwind" ? "tailwind" : "plain", "nested");
+  return emitCss(resolved, format, "nested");
 }
 
 function definitionStem(path: string): string {

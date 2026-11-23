@@ -9,7 +9,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Gamut } from "./color-math.js";
 import type { DtgConfig } from "./config.js";
-import type { ModeRendering } from "./emit.js";
+import type { HostCss } from "./emit.js";
 import {
   overridesAfterChanges,
   readBackgroundOverrides,
@@ -53,7 +53,7 @@ export function startDevServer(
   definitionPath: string,
   port: number,
   gamut: Gamut,
-  cssModes: ModeRendering,
+  hostCss: HostCss,
   /** Where to write the outputs whenever the definition file changes, or null to leave them alone. */
   outputs: DtgConfig | null,
 ): void {
@@ -109,7 +109,7 @@ export function startDevServer(
     definitionPath: resolve(definitionPath),
     configPath: resolve(CONFIG_PATH),
     backgroundOverrides,
-    cssModes,
+    hostCss,
   });
   const adopt = (copy: WorkingCopy) => {
     state = settle(copy);

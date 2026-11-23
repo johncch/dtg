@@ -85,13 +85,22 @@ Canonical. The README carries the user-facing version of the same rules.
 - **A top-level block is a container, never a name.** Settled 2026-10-19.
   `palette`, `systems` and every collection hold things; none appears in a ref
   or an emitted name, and everything below them does: palette and system groups,
-  role groups, the leaf. The systems block emits behind a fixed `--color-`
-  prefix instead of its own name, which marks primitives apart from the roles
-  built on them. Only Figma has containers, so only it sees a collection, as the
-  collection itself. Naming the top-level block in every name was considered and
-  turned down: it would make `systems.sky` the default spelling of every step,
-  break both shipped projects' names and refs, and still leave Figma's
-  collection as the exception.
+  role groups, the leaf. Only Figma has containers, so only it sees a
+  collection, as the collection itself. Naming the top-level block in every name
+  was considered and turned down: it would make `systems.sky` the default
+  spelling of every step, break both shipped projects' names and refs, and still
+  leave Figma's collection as the exception.
+- **CSS names a color as the definition does; Tailwind's names live in the
+  `tailwind` output.** Settled 2026-11-22. `outputs.css` writes `palette.white`
+  as `--white` and `sky(10)` as `--sky-10`. `outputs.tailwind` writes them as
+  `--color-white` and `--color-sky-10` in `@theme`, and a palette gradient as
+  `--gradient-<path>`, because those namespaces are what make Tailwind's
+  utilities. Until then a fixed `--color-` prefix was on every primitive in
+  every CSS, and `format: tailwind` was a setting on the one CSS output: a
+  convention only Tailwind needed, in a file that has no `@theme`. A primitive
+  and a role now share one namespace, so the resolver refuses a step, a palette
+  color or a palette gradient that publishes a role's name; Tailwind's
+  `@theme inline` wiring (`--color-<role>`) made that a clash there already.
 - Collections: every top-level key other than
   `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` is a collection.
   Arbitrary name, becomes a design-tool collection, holds
@@ -143,7 +152,7 @@ Canonical. The README carries the user-facing version of the same rules.
   wording and was turned down: it describes intent, which nothing can check, and
   it needed `sky(10 tint)` as an exception on its first day.
 - **A step is identified by its selector's values, not its text.** `sky(3)`,
-  `sky(3.0)` and `sky(03)` are one step and one variable, `--color-sky-3`; the
+  `sky(3.0)` and `sky(03)` are one step and one variable, `--sky-3`; the
   same holds in `publish` and in `overrides` keys. Until 2026-11-20 the name was
   built from the text as written, so `sky(3.0)` emitted a second primitive,
   `sky-3_0`, with the same color.
@@ -199,9 +208,9 @@ Canonical. The README carries the user-facing version of the same rules.
     color. It holds only the palette's own: its colors and colors written out,
     plain or through `transparent()`. The palette is read before systems and
     roles, so there is nothing else for it to name, and nothing for one to loop
-    back through. It emits as `--gradient-<path>`, apart from `--color-`, which
-    Tailwind reads as a color; in the `tailwind` format it sits outside `@theme`
-    and gets a `bg-<path>` class. Like a palette color it is always published,
+    back through. It emits as `--<path>`; in the `tailwind` output as
+    `--gradient-<path>`, apart from `--color-`, which Tailwind reads as a color,
+    outside `@theme`, with a `bg-<path>` class. Like a palette color it is always published,
     unless its group says `publish: false` and no role points at it. In the code
     the palette's gradients are a list of their own, so the plot, Randomize,
     Harmonize and the locks, which work on colors, never see them. The editor
@@ -219,7 +228,7 @@ Canonical. The README carries the user-facing version of the same rules.
     what a gradient system with overrides at the ref would have been for. A
     gradient among colors is refused, since stops and positions have no one way
     to merge, and so are `extend=` and `inherit` placeholders. A restyle emits a
-    whole gradient of its own: CSS cannot turn `var(--gradient-brand)`.
+    whole gradient of its own: CSS cannot turn `var(--brand)`.
   - **The editor's gradient controls rewrite the text.** A gradient is its one
     string, in a role or in the palette. The controls take the string apart,
     change one piece and write it back whole, named arguments in the order the
@@ -249,7 +258,7 @@ Canonical. The README carries the user-facing version of the same rules.
   - `background-size` is not part of a gradient and stays in the stylesheet.
     Left out until something needs them: a conic stop's position in degrees, and
     a hue direction such as `longer hue`.
-  - The `tailwind` format gives a gradient role a class of its own,
+  - The `tailwind` output gives a gradient role a class of its own,
     `@utility bg-<role> { background-image: var(--<role>) }`, where a color role
     is wired into `@theme inline` as `--color-<role>`. Tailwind documents no
     theme namespace for an image, and a gradient wired in as a color becomes
@@ -360,7 +369,7 @@ blue:
 ```
 
 - **The selector is a position, 0–1000,** so `blue(500)` emits
-  `--color-blue-500`. The number is relative to the pick, as in Tailwind and
+  `--blue-500`. The number is relative to the pick, as in Tailwind and
   Material 2: `at` declares where the anchor sits, and `blue(at)` is the anchor
   exactly. A step number does not mean the same lightness across hues. An
   algorithm whose selector _is_ lightness is a separate one (`tone`, on the
@@ -438,7 +447,7 @@ tertiary: { algorithm: tone, params: { anchor: brand, chroma: 0.06, hue: 60 } }
 ```
 
 - **The selector is tone, 0–100, and tone is CIELAB L\*.** `primary(40)` emits
-  `--color-primary-40`, and every palette's 40 is equally light. Because L\* is
+  `--primary-40`, and every palette's 40 is equally light. Because L\* is
   a function of luminance alone, so is contrast: any tone 40 is about 6.5:1
   against white, any tone 50 about 4.5:1, whatever the hue. That is the reason
   to choose `tone`, and it holds exactly.
@@ -479,7 +488,7 @@ This is why the built-ins look redundant and are not. `tint` in its `tint` form
 and `overlay` produce byte-identical values — `rgba(0, 26, 40, 0.03)` for the
 same input, verified in the tests. They differ in what a _reader_ sees:
 
-    tint      sky(3)          emits --color-light-3
+    tint      sky(3)          emits --light-3
     overlay   shadow(3)       never flattens, and says so declaratively
 
 There was a third, `blend`: one base and several named colors, with the name
@@ -490,7 +499,7 @@ color is found by walking the tree, every tint has the same selector, and the
 picked colors live in the palette. Its `space` param went with it; nothing used
 anything but srgb, which is what tint's compositing is.
 
-`--color-light-15` only reads as "15% ink" because tint declares a selector of
+`--light-15` only reads as "15% ink" because tint declares a selector of
 one number. Folding these into one configurable algorithm would put the
 selector's shape behind a param — configuration that changes syntax, which is
 harder to read than four separately-named files of twenty to sixty lines.

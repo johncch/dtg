@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { emitCss, type ModeRendering } from "../src/emit.js";
+import { emitHostCss, type HostCss } from "../src/emit.js";
 import type { ResolvedDefinition } from "../src/resolve.js";
 
 const EMBEDDED = window.parent !== window;
@@ -10,13 +10,13 @@ const EMBEDDED = window.parent !== window;
  * a `{ type: "dtg:css", css }` message. A host whose listener starts late
  * sends `{ type: "dtg:css?" }` and gets the current CSS back.
  *
- * Always the plain format: Tailwind's `@theme` blocks mean nothing to a
- * browser, while plain writes the same variables into `:root`, where they
- * override what the host's own stylesheet set.
+ * Named as the project's CSS output names its variables, but always written
+ * into `:root`: Tailwind's `@theme` blocks mean nothing to a browser, while
+ * `:root` overrides what the host's own stylesheet set.
  */
-export function LiveCss({ resolved, modes }: { resolved: ResolvedDefinition; modes: ModeRendering }) {
+export function LiveCss({ resolved, host }: { resolved: ResolvedDefinition; host: HostCss }) {
   // A definition with problems draws but is not written out, so the host keeps the CSS it last got.
-  const css = useMemo(() => (EMBEDDED && resolved.problems.length === 0 ? emitCss(resolved, "plain", modes) : null), [resolved, modes]);
+  const css = useMemo(() => (EMBEDDED && resolved.problems.length === 0 ? emitHostCss(resolved, host.names, host.modes) : null), [resolved, host]);
   const latest = useRef(css);
 
   useEffect(() => {

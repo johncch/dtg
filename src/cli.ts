@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { createInterface } from "node:readline/promises";
 import {
   defaultDefinitionPath,
+  hostCss,
   loadConfig,
   STARTS,
   writeStarter,
@@ -111,7 +112,7 @@ if (command === "init") {
   try {
     const config = loadConfig({ definition: flagValue("--definition") });
     const editable = args.includes("--editable");
-    console.log(`${writeSite(config.definition, config.gamut, out, "dtg.config.yaml", config.cssModes, editable)}\n  → ${out}/index.html`);
+    console.log(`${writeSite(config.definition, config.gamut, out, "dtg.config.yaml", hostCss(config), editable)}\n  → ${out}/index.html`);
   } catch (e) {
     fail((e as Error).message);
   }
@@ -128,6 +129,7 @@ if (command === "init") {
       css: flagValue("--css"),
       cssFormat: flagValue("--css-format"),
       cssModes: flagValue("--css-modes"),
+      tailwind: flagValue("--tailwind"),
       scss: flagValue("--scss"),
       dtcg: flagValue("--dtcg"),
       dtcgColorSpace: flagValue("--dtcg-color-space"),
@@ -141,7 +143,7 @@ if (command === "init") {
       config.definition,
       Number(flagValue("--port") ?? "4401"),
       config.gamut,
-      config.cssModes,
+      hostCss(config),
       args.includes("--build") ? config : null,
     );
   } else {
@@ -216,11 +218,10 @@ edit, build and docs
 
 outputs (build, and edit --build)
   --css <path>                write CSS here
-  --css-format <plain|tailwind>
-                              plain (default), or tailwind: primitives in
-                              @theme plus utility wiring
-  --css-modes <nested|flat>   nested (default): one selector per mode;
-                              flat: the mode folded into each name
+  --tailwind <path>           write CSS for a Tailwind v4 build here:
+                              primitives in @theme plus utility wiring
+  --css-modes <nested|flat>   for both: nested (default), one selector per
+                              mode; flat, the mode folded into each name
   --scss <path>               write flat Sass variables here
   --dtcg <path>               write DTCG JSON here
   --dtcg-color-space <srgb|display-p3>

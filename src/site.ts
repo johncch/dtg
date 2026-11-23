@@ -5,7 +5,7 @@ import { appShell } from "./app-shell.js";
 import type { Gamut } from "./color-math.js";
 import { readBackgroundOverrides } from "./dev-settings.js";
 import type { DevState } from "./dev-state.js";
-import type { ModeRendering } from "./emit.js";
+import type { HostCss } from "./emit.js";
 import { resolveDefinition } from "./resolve.js";
 import { openFile } from "./working-copy.js";
 
@@ -21,7 +21,7 @@ export function writeSite(
   gamut: Gamut,
   outDir: string,
   configPath: string,
-  cssModes: ModeRendering,
+  hostCss: HostCss,
   editable = false,
 ): string {
   const text = readFileSync(definitionPath, "utf8");
@@ -37,7 +37,7 @@ export function writeSite(
     definitionPath: basename(definitionPath),
     configPath: "",
     backgroundOverrides,
-    cssModes,
+    hostCss,
   };
   const bundle = fileURLToPath(new URL("./ui", import.meta.url));
   if (!existsSync(join(bundle, "dtg-ui.js"))) throw new Error(`no editor bundle at ${bundle} — run the build first`);

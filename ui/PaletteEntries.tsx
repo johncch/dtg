@@ -1,4 +1,5 @@
 import { CircleOff } from "lucide-react";
+import type { CssFormat } from "../src/emit.js";
 import type { SnapshotConstant, SnapshotGradient } from "../src/snapshot.js";
 import { Hint } from "./Hint.js";
 import { isGradient, type Paint } from "./paint.js";
@@ -29,7 +30,8 @@ function groupOf(path: string): string {
 }
 
 /** The variable a palette entry emits as. */
-export function paletteVariable(row: PaletteRow): string {
+export function paletteVariable(row: PaletteRow, names: CssFormat): string {
+  if (names === "css") return `--${row.cssName}`;
   return `--${isGradient(row.paint) ? "gradient" : "color"}-${row.cssName}`;
 }
 

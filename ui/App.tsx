@@ -11,6 +11,7 @@ import { LiveCss } from "./LiveCss.js";
 import { FollowWorkingCopy } from "./follow.js";
 import { NewGroup } from "./RoleNaming.js";
 import { NewSystem } from "./SystemEditor.js";
+import { CssNamesProvider } from "./css-names.js";
 import { ProjectGamutProvider } from "./gamut.js";
 import { TryingProvider } from "./preview.js";
 import { ConstantsPage } from "./pages/ConstantsPage.js";
@@ -39,14 +40,16 @@ export function App() {
       </main>
     );
   }
-  const { drawn, cssModes } = state;
+  const { drawn, hostCss } = state;
   return (
     <StoreProvider value={store}>
       <TryingProvider base={drawn}>
         {(shown) => (
           <>
-            <LiveCss resolved={shown.resolved} modes={cssModes} />
-            <Shell snapshot={shown.snapshot} working={drawn.snapshot} resolved={drawn.resolved} route={route} />
+            <LiveCss resolved={shown.resolved} host={hostCss} />
+            <CssNamesProvider value={hostCss.names}>
+              <Shell snapshot={shown.snapshot} working={drawn.snapshot} resolved={drawn.resolved} route={route} />
+            </CssNamesProvider>
           </>
         )}
       </TryingProvider>

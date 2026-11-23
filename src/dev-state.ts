@@ -1,6 +1,6 @@
 import type { Gamut } from "./color-math.js";
 import type { BackgroundOverrides } from "./dev-settings.js";
-import type { ModeRendering } from "./emit.js";
+import type { HostCss } from "./emit.js";
 import type { WorkingCopy } from "./working-copy.js";
 
 /**
@@ -21,6 +21,6 @@ export type DevState = {
   configPath: string;
   /** Editor backgrounds set by hand in `dtg.config.yaml`, by mode. */
   backgroundOverrides: BackgroundOverrides;
-  /** How the project's CSS renders modes, so CSS the page emits for a host matches the site's own selectors. */
-  cssModes: ModeRendering;
+  /** How the project's CSS names colors and renders modes, so CSS the page emits for a host matches the site's own. */
+  hostCss: HostCss;
 };

@@ -443,7 +443,7 @@ Here's one with everything in it:
 ```yaml
 definitions: src/colors.dtg.yaml # or a folder of *.dtg.yaml
 outputs:
-  css: src/colors.generated.css
+  css: src/colors.generated.css # or tailwind:, for a Tailwind v4 build
   scss: src/_colors.scss
   dtcg: src/colors.json
 gamut: srgb
@@ -462,9 +462,14 @@ If you don't name any, you get CSS next to the definition, named after it:
 `colors.dtg.yaml` produces `colors.generated.css`. Once you name one, you get
 exactly the ones you named.
 
-- `css` is a path, or `{ path, format, modes }`. `format` is `plain` (the
-  default) or `tailwind`. `modes` is `nested` (the default), where each mode is
-  a class, or `flat`, where the mode is part of every variable's name.
+- `css` is a path, or `{ path, modes }`. Every color is named as it is in the
+  definition: `palette.white` is `--white`, and `sky(10)` is `--sky-10`.
+  `modes` is `nested` (the default), where each mode is a class, or `flat`,
+  where the mode is part of every variable's name.
+- `tailwind` is the same, for a Tailwind v4 build. Palette colors and system
+  steps go in `@theme` as `--color-white` and `--color-sky-10`, so they get
+  utilities like `bg-sky-10`, and every role is wired in too. Use it instead of
+  `css`, not beside it.
 - `scss` is a path. Sass variables are always flat.
 - `dtcg` is a path, or `{ path, colorSpace }`. `colorSpace` is `srgb` (the
   default) or `display-p3`. Figma holds one color space per file, so match the
@@ -484,7 +489,7 @@ saved here. Any color a role can point at works.
 
 ### Tailwind and gradients
 
-With `format: tailwind`, each color role gets the usual utilities
+With the `tailwind` output, each color role gets the usual utilities
 (`bg-surface-card`, `text-surface-card`). A gradient role gets a single class,
 `bg-surface-hero`, which sets `background-image`. Two things to watch for:
 

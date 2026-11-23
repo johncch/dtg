@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { defaultDefinitionPath, loadConfig, writeStarter } from "../dist/config.js";
+import { defaultDefinitionPath, hostCss, loadConfig, writeStarter } from "../dist/config.js";
 
 const DEFINITION = join("design-tokens", "c.dtg.yaml");
 
@@ -165,5 +165,32 @@ describe("where the definition is", () => {
   test("dtg.config.yaml names a file, or a directory holding one", () => {
     inProject(`definitions: ${DEFINITION}\n`, () => assert.equal(loadConfig({}).definition, DEFINITION));
     inProject("definitions: design-tokens\n", () => assert.equal(loadConfig({}).definition, DEFINITION));
+  });
+});
+
+describe("the tailwind output", () => {
+  test("is its own output, and naming it alone replaces css", () => {
+    inProject("outputs:\n  tailwind: { path: out/t.css, modes: flat }\n", () => {
+      const c = loadConfig({});
+      assert.equal(c.cssOut, undefined);
+      assert.equal(c.tailwindOut, "out/t.css");
+      assert.equal(c.tailwindModes, "flat");
+      assert.deepEqual(hostCss(c), { names: "tailwind", modes: "flat" });
+    });
+  });
+
+  test("css.format is refused with a pointer at tailwind", () => {
+    inProject("outputs:\n  css: { path: out/c.css, format: tailwind }\n", () => {
+      assert.throws(() => loadConfig({}), /outputs\.css\.format was removed — .*`tailwind: <path>`/);
+    });
+    inProject(null, () => {
+      assert.throws(() => loadConfig({ definition: DEFINITION, cssFormat: "tailwind" }), /--css-format was removed/);
+    });
+  });
+
+  test("css and tailwind cannot write one file", () => {
+    inProject("outputs:\n  css: {}\n  tailwind: {}\n", () => {
+      assert.throws(() => loadConfig({}), /css and tailwind would both write/);
+    });
   });
 });

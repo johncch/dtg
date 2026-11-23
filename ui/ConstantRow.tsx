@@ -1,6 +1,7 @@
 import { Fragment, type ReactNode } from "react";
 import type { ConstantTarget } from "../src/edit.js";
 import type { SnapshotConstant } from "../src/snapshot.js";
+import { useCssNames } from "./css-names.js";
 import { NO_LOCK, NotAColor, paletteVariable, type PaletteRow } from "./PaletteEntries.js";
 import { isGradient } from "./paint.js";
 import { ColorChip } from "./ColorChip.js";
@@ -63,6 +64,7 @@ export function ConstantRow({
   targeted?: boolean;
 }) {
   const { commit } = useTrying();
+  const cssNames = useCssNames();
   const target: ConstantTarget = { kind: "constant", path: constant.path };
   const group = groupOf(constant.path);
   const name = nameOf(constant.path);
@@ -123,7 +125,7 @@ export function ConstantRow({
           </Hint>
         )}
       </ControlsCell>
-      <td>{constant.emitted ? <code>{paletteVariable(constant)}</code> : <span className="muted">Not published</span>}</td>
+      <td>{constant.emitted ? <code>{paletteVariable(constant, cssNames)}</code> : <span className="muted">Not published</span>}</td>
       <td>
         <ColorChip color={constant.paint} label={constant.written} edit={target} onUnlock={lock?.locked && !fixed ? lock.onToggle : undefined} />
       </td>

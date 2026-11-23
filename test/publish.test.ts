@@ -21,11 +21,11 @@ roles:
 `;
 
 describe("publish", () => {
-  const css = emitCss(resolveDefinition(SRC), "plain");
+  const css = emitCss(resolveDefinition(SRC), "css");
 
   test("false on a palette group keeps its colors as inputs", () => {
-    assert.ok(!css.includes("--color-hues-sky"));
-    assert.ok(css.includes("--color-white: #ffffff;"));
+    assert.ok(!css.includes("--hues-sky"));
+    assert.ok(css.includes("--white: #ffffff;"));
   });
 
   test("on a system lists steps published besides what refs demand", () => {
@@ -36,7 +36,7 @@ describe("publish", () => {
   });
 
   test("emit, its earlier spelling, means the same", () => {
-    assert.equal(emitCss(resolveDefinition(SRC.replaceAll("publish:", "emit:")), "plain"), css);
+    assert.equal(emitCss(resolveDefinition(SRC.replaceAll("publish:", "emit:")), "css"), css);
   });
 
   test("written beside emit is an error", () => {

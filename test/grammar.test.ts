@@ -135,7 +135,7 @@ roles:
 `);
     assert.deepEqual(r.systems[0].steps, []);
     assert.equal(r.statics[0].emitted, false);
-    const css = emitCss(r, "plain");
+    const css = emitCss(r, "css");
     assert.ok(css.includes("--d-veil: rgba(243, 246, 249, 0.4);"));
     assert.ok(!css.includes("--color-sky-3"));
     assert.ok(!css.includes("--color-quiet-mist"));
@@ -197,13 +197,13 @@ roles:
     bars: [gradient(paper 0% rose 10% repeat=true space=oklch angle=45deg)]
     veil: [transparent(d.spot 50)]
 `);
-    const css = emitCss(r, "plain");
+    const css = emitCss(r, "css");
     for (const line of [
-      "--d-spot: radial-gradient(circle closest-side at 30% 20%, var(--color-paper), var(--color-rose) 80%);",
-      "--d-glow: radial-gradient(ellipse farthest-corner at 50% 50%, var(--color-paper), var(--color-rose));",
-      "--d-dial: conic-gradient(from 90deg at 25% 50%, var(--color-paper), var(--color-rose), var(--color-paper));",
-      "--d-spin: conic-gradient(from 0deg at 50% 50%, var(--color-paper), var(--color-rose));",
-      "--d-bars: repeating-linear-gradient(45deg in oklch, var(--color-paper) 0%, var(--color-rose) 10%);",
+      "--d-spot: radial-gradient(circle closest-side at 30% 20%, var(--paper), var(--rose) 80%);",
+      "--d-glow: radial-gradient(ellipse farthest-corner at 50% 50%, var(--paper), var(--rose));",
+      "--d-dial: conic-gradient(from 90deg at 25% 50%, var(--paper), var(--rose), var(--paper));",
+      "--d-spin: conic-gradient(from 0deg at 50% 50%, var(--paper), var(--rose));",
+      "--d-bars: repeating-linear-gradient(45deg in oklch, var(--paper) 0%, var(--rose) 10%);",
       "--d-veil: radial-gradient(circle closest-side at 30% 20%, rgba(255, 255, 255, 0.5), rgba(255, 0, 0, 0.5) 80%);",
     ]) {
       assert.ok(css.includes(line), line);
@@ -255,27 +255,27 @@ ${roles}
       assert.equal(changed.repeat, true);
       assert.deepEqual(kept.stops.map((stop) => stop.position), [null, 60, null]);
       assert.deepEqual(kept.target, { kind: "gradient", of: { kind: "constant", name: "brand" } });
-      const css = emitCss(r, "plain");
+      const css = emitCss(r, "css");
       for (const line of [
-        "--gradient-brand: repeating-radial-gradient(circle farthest-corner at 30% 50%, var(--color-paper), var(--color-rose) 60%, rgba(255, 0, 0, 0.2));",
-        "--d-hero: var(--gradient-brand);",
-        "--d-banner: radial-gradient(circle farthest-corner at 10% 50%, var(--color-paper), var(--color-rose) 60%, rgba(255, 0, 0, 0.2));",
-        "--d-banner: repeating-linear-gradient(45deg, var(--color-paper), var(--color-rose) 60%, rgba(255, 0, 0, 0.2));",
+        "--brand: repeating-radial-gradient(circle farthest-corner at 30% 50%, var(--paper), var(--rose) 60%, rgba(255, 0, 0, 0.2));",
+        "--d-hero: var(--brand);",
+        "--d-banner: radial-gradient(circle farthest-corner at 10% 50%, var(--paper), var(--rose) 60%, rgba(255, 0, 0, 0.2));",
+        "--d-banner: repeating-linear-gradient(45deg, var(--paper), var(--rose) 60%, rgba(255, 0, 0, 0.2));",
         "--d-veil: repeating-radial-gradient(circle farthest-corner at 30% 50%, rgba(255, 255, 255, 0.5), rgba(255, 0, 0, 0.5) 60%, rgba(255, 0, 0, 0.1));",
         "--d-veil: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255, 255, 255, 0.5), rgba(255, 0, 0, 0.5) 60%, rgba(255, 0, 0, 0.1));",
       ]) {
         assert.ok(css.includes(line), line);
       }
       assert.ok(!css.includes("quiet"));
-      assert.ok(css.indexOf("--gradient-brand") > css.indexOf("--color-rose"));
+      assert.ok(css.indexOf("--brand") > css.indexOf("--rose"));
       void veil;
     });
 
     test("in an emit: false group, emits with its colors once a role points at it", () => {
-      const css = emitCss(resolveDefinition(source("", "    fog: [quiet.haze, quiet.haze]")), "plain");
-      assert.ok(css.includes("--color-quiet-mist: #eeeeee;"));
-      assert.ok(css.includes("--gradient-quiet-haze: linear-gradient(180deg, var(--color-quiet-mist), var(--color-paper));"));
-      assert.ok(css.includes("--d-fog: var(--gradient-quiet-haze);"));
+      const css = emitCss(resolveDefinition(source("", "    fog: [quiet.haze, quiet.haze]")), "css");
+      assert.ok(css.includes("--quiet-mist: #eeeeee;"));
+      assert.ok(css.includes("--quiet-haze: linear-gradient(180deg, var(--quiet-mist), var(--paper));"));
+      assert.ok(css.includes("--d-fog: var(--quiet-haze);"));
     });
 
     test("is written for Tailwind and DTCG", () => {
@@ -392,7 +392,7 @@ roles:
     ]);
     assert.deepEqual(veil.target, { kind: "transparent", of: { kind: "role", group: "d", role: "hero" }, alpha: 50 });
     assert.deepEqual(r.systems[0].steps, []);
-    const css = emitCss(r, "plain");
+    const css = emitCss(r, "css");
     assert.ok(css.includes("--d-veil: linear-gradient(45deg, rgba(255, 255, 255, 0.5), rgba(255, 0, 0, 0.5) 60%);"));
     assert.ok(css.includes("--d-haze: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(243, 246, 249, 0.2));"));
   });
@@ -407,7 +407,7 @@ s:
     assert.deepEqual(r.roles[0].perMode.map((entry) => entry.kind), ["gradient", "color"]);
     assert.deepEqual(r.roles[1].perMode.map((entry) => entry.kind), ["gradient", "color"]);
     assert.deepEqual(r.problems, [{ path: "d.hero", message: "A role must be all solid colors or all gradients." }]);
-    assert.throws(() => emitCss(r, "plain"), /definition errors:\n- d\.hero: A role must be all solid colors or all gradients\./);
+    assert.throws(() => emitCss(r, "css"), /definition errors:\n- d\.hero: A role must be all solid colors or all gradients\./);
     assert.throws(() => emitDtcg(r), /A role must be all solid colors or all gradients/);
     assert.deepEqual(withRoles(`
 s:
@@ -441,9 +441,9 @@ roles:
     assert.deepEqual(r.warnings, []);
     assert.equal(r.roles[1].perMode[0].ref, "sky(3.0)");
     assert.deepEqual(r.roles[1].perMode[0].target, { kind: "step", system: "sky", selector: "3" });
-    const css = emitCss(r, "plain");
-    assert.ok(css.includes("--color-sky-3: #123456;"));
-    assert.ok(css.includes("--d-b: var(--color-sky-3);"));
+    const css = emitCss(r, "css");
+    assert.ok(css.includes("--sky-3: #123456;"));
+    assert.ok(css.includes("--d-b: var(--sky-3);"));
     assert.ok(!css.includes("3_0"));
   });
 
@@ -533,7 +533,7 @@ s:
   d:
     ink: ["#123456", "#654321"]
 `);
-    assert.match(emitCss(r, "plain"), /--d-ink: #123456;/);
+    assert.match(emitCss(r, "css"), /--d-ink: #123456;/);
     const dtcg = emitDtcg(r) as { s: { d: { ink: { $value: { hex: string } } } } };
     assert.equal(dtcg.s.d.ink.$value.hex, "#123456");
   });
@@ -729,8 +729,8 @@ scheme:
     const echo = resolved.roles.find((role) => role.role === "echo")!;
     assert.equal(echo.group, "");
     assert.deepEqual(echo.perMode[0].target, { kind: "role", group: "", role: "primary" });
-    const css = emitCss(resolved, "plain");
-    assert.match(css, /--primary: var\(--color-ink\);/);
+    const css = emitCss(resolved, "css");
+    assert.match(css, /--primary: var\(--ink\);/);
     assert.match(css, /--echo: var\(--primary\);/);
     assert.match(JSON.stringify(emitDtcg(resolved)), /"\{scheme\.primary\}"/);
   });

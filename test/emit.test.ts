@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { resolveDefinition } from "../dist/resolve.js";
-import { dtcgClipped, emitCss, emitDtcg, emitScss } from "../dist/emit.js";
+import { dtcgClipped, emitCss, emitDtcg, emitHostCss, emitScss } from "../dist/emit.js";
 
 const SRC = `
 dtg: 1
@@ -29,7 +29,7 @@ const NS = "com.fifthrevision.dtg";
 
 describe("css", () => {
   test("plain puts primitives in :root; tailwind wraps them in @theme", () => {
-    const plain = emitCss(resolved, "plain");
+    const plain = emitCss(resolved, "css");
     const tw = emitCss(resolved, "tailwind");
     assert.ok(plain.includes(":root {\n  /* sky (tint) */"));
     assert.ok(!plain.includes("@theme"));
@@ -37,17 +37,28 @@ describe("css", () => {
     assert.ok(tw.includes("@theme inline {"));
   });
 
+  test("css names primitives as written; tailwind in its theme namespaces", () => {
+    assert.ok(emitCss(resolved, "css").includes("--light-3: #f3f6f9;"));
+    assert.ok(emitCss(resolved, "tailwind").includes("--color-light-3: #f3f6f9;"));
+  });
+
+  test("host CSS keeps the output's names but writes them into :root", () => {
+    const host = emitHostCss(resolved, "tailwind", "nested");
+    assert.ok(host.includes(":root {\n  /* sky (tint) */\n  --color-light-3: #f3f6f9;"));
+    assert.ok(!host.includes("@theme"));
+  });
+
   test("emitted names use aliases; values agree across formats", () => {
-    const css = emitCss(resolved, "plain");
-    assert.ok(css.includes("--color-light-3: #f3f6f9;"));
-    assert.ok(css.includes("--color-warm-rose: #ff0000;"));
-    assert.ok(css.includes("--surface-flat: var(--color-paper);"));
+    const css = emitCss(resolved, "css");
+    assert.ok(css.includes("--light-3: #f3f6f9;"));
+    assert.ok(css.includes("--warm-rose: #ff0000;"));
+    assert.ok(css.includes("--surface-flat: var(--paper);"));
   });
 
   test("emit is a pure function of the definition", () => {
     assert.equal(
-      emitCss(resolved, "plain"),
-      emitCss(resolveDefinition(SRC), "plain"),
+      emitCss(resolved, "css"),
+      emitCss(resolveDefinition(SRC), "css"),
     );
   });
 });
@@ -132,29 +143,29 @@ roles:
 `);
 
   test("the sRGB pass comes first, so a browser without color() keeps it", () => {
-    const css = emitCss(wide, "plain");
+    const css = emitCss(wide, "css");
     assert.ok(css.indexOf("--color-wide-60: #ff7070;") < css.indexOf("@supports"));
   });
 
   test("@supports redefines the same property at full strength", () => {
-    const css = emitCss(wide, "plain");
+    const css = emitCss(wide, "css");
     assert.ok(css.includes("@supports (color: color(display-p3 1 1 1)) {"));
-    assert.ok(css.includes("--color-wide-60: color(display-p3 0.9736 0.336 0.3401);"));
+    assert.ok(css.includes("--wide-60: color(display-p3 0.9736 0.336 0.3401);"));
   });
 
   test("an in-gamut color is not repeated — it renders the same either way", () => {
-    const layer = emitCss(wide, "plain").split("@supports")[1];
+    const layer = emitCss(wide, "css").split("@supports")[1];
     assert.ok(!layer.includes("--color-paper"));
   });
 
   test("an inlined role value is repeated; a var() reference is not", () => {
-    const layer = emitCss(wide, "plain").split("@supports")[1];
+    const layer = emitCss(wide, "css").split("@supports")[1];
     assert.ok(layer.includes("--surface-veil: color(display-p3 1 0 0 / 0.3);"));
     assert.ok(!layer.includes("--surface-a"));
   });
 
   test("an all-sRGB definition emits no layer at all", () => {
-    assert.ok(!emitCss(resolved, "plain").includes("@supports"));
+    assert.ok(!emitCss(resolved, "css").includes("@supports"));
     assert.ok(!emitCss(resolved, "tailwind").includes("@supports"));
   });
 
@@ -256,14 +267,14 @@ roles:
 
 describe("the mode axis", () => {
   test("nested puts each mode in its own selector", () => {
-    const css = emitCss(resolved, "plain", "nested");
-    assert.ok(css.includes("--surface-canvas: var(--color-light-3);"));
+    const css = emitCss(resolved, "css", "nested");
+    assert.ok(css.includes("--surface-canvas: var(--light-3);"));
     assert.ok(css.includes(".dark {"));
     assert.ok(!css.includes("--light-surface-canvas"));
   });
 
   test("flat folds the mode into the name, in one selector", () => {
-    const css = emitCss(resolved, "plain", "flat");
+    const css = emitCss(resolved, "css", "flat");
     assert.ok(css.includes("--light-surface-canvas:"));
     assert.ok(css.includes("--dark-surface-canvas:"));
     assert.ok(!css.includes(".dark {"));
@@ -272,8 +283,8 @@ describe("the mode axis", () => {
   test("both renderings carry the same values", () => {
     const grab = (css: string, re: RegExp) =>
       [...css.matchAll(re)].map((m) => m[1]);
-    const nested = grab(emitCss(resolved, "plain", "nested"), /--surface-canvas: (.+);/g);
-    const flat = grab(emitCss(resolved, "plain", "flat"), /--(?:light|dark)-surface-canvas: (.+);/g);
+    const nested = grab(emitCss(resolved, "css", "nested"), /--surface-canvas: (.+);/g);
+    const flat = grab(emitCss(resolved, "css", "flat"), /--(?:light|dark)-surface-canvas: (.+);/g);
     assert.deepEqual(nested, flat);
   });
 
@@ -301,7 +312,7 @@ roles:
     base: [ink, paper]
     echo: [label.base, label.base]
 `);
-    const css = emitCss(aliases, "plain", "flat");
+    const css = emitCss(aliases, "css", "flat");
     assert.ok(css.includes("--light-label-echo: var(--light-label-base);"));
     assert.ok(css.includes("--dark-label-echo: var(--dark-label-base);"));
     assert.ok(!css.includes("var(--label-base)"));
@@ -318,7 +329,7 @@ roles:
     echo: [label.base, label.base]
 `);
     assert.match(
-      emitCss(aliases, "plain", "nested"),
+      emitCss(aliases, "css", "nested"),
       /--label-echo: var\(--label-base\);/,
     );
   });
@@ -342,7 +353,7 @@ roles:
 `);
 
   test("nested css leaves the mode out — the cascade is the inheritance", () => {
-    const css = emitCss(omitted, "plain", "nested");
+    const css = emitCss(omitted, "css", "nested");
     const start = css.indexOf("\n.cooldusk {");
     const dusk = css.slice(start, css.indexOf("}", start));
     assert.ok(dusk.includes("--surface-canvas"));
@@ -350,7 +361,7 @@ roles:
   });
 
   test("flat css emits no variable for an omitted mode", () => {
-    const css = emitCss(omitted, "plain", "flat");
+    const css = emitCss(omitted, "css", "flat");
     assert.ok(css.includes("--cooldusk-surface-canvas:"));
     assert.ok(!css.includes("--cooldusk-label-primary:"));
   });
@@ -373,7 +384,7 @@ roles:
     base: [ink, ~]
     echo: [label.base, label.base]
 `);
-    const css = emitCss(aliases, "plain", "flat");
+    const css = emitCss(aliases, "css", "flat");
     assert.ok(!css.includes("--dark-label-base:"));
     assert.ok(css.includes("--dark-label-echo: var(--light-label-base);"));
   });
@@ -408,7 +419,7 @@ roles:
   });
 
   test("flat and nested coincide", () => {
-    assert.equal(emitCss(flat, "plain", "flat"), emitCss(flat, "plain", "nested"));
+    assert.equal(emitCss(flat, "css", "flat"), emitCss(flat, "css", "nested"));
   });
 });
 
@@ -455,14 +466,14 @@ roles:
 
   test("the value is written again where the role under it moved", () => {
     const moved = resolveDefinition(source("[paper, ink, loud]"));
-    assert.ok(blockFor(emitCss(moved, "plain", "nested"), ".dark, .dark-hc").includes("--surface-scrim: rgba(49, 49, 51, 0.8);"));
-    assert.ok(blockFor(emitCss(moved, "plain", "nested"), ".dark-hc").includes("--surface-scrim: rgba(0, 0, 0, 0.8);"));
+    assert.ok(blockFor(emitCss(moved, "css", "nested"), ".dark, .dark-hc").includes("--surface-scrim: rgba(49, 49, 51, 0.8);"));
+    assert.ok(blockFor(emitCss(moved, "css", "nested"), ".dark-hc").includes("--surface-scrim: rgba(0, 0, 0, 0.8);"));
   });
 
   test("and left to the parent's where it did not", () => {
     const still = resolveDefinition(source("[paper, ink]"));
-    assert.ok(!emitCss(still, "plain", "nested").includes("--surface-scrim: rgba(0, 0, 0, 0.8);"));
-    assert.equal(emitCss(still, "plain", "nested").split("--surface-scrim:").length, 3);
+    assert.ok(!emitCss(still, "css", "nested").includes("--surface-scrim: rgba(0, 0, 0, 0.8);"));
+    assert.equal(emitCss(still, "css", "nested").split("--surface-scrim:").length, 3);
   });
 
   test("DTCG writes a value for every mode", () => {
@@ -498,14 +509,14 @@ roles:
   const blockFor = (css: string, selector: string) => css.split("\n\n").find((block) => block.startsWith(`${selector} {`)) ?? "";
 
   test("css keeps each stop's reference and writes positions as given", () => {
-    const css = emitCss(resolved, "plain", "nested");
-    assert.ok(css.includes("--surface-hero: linear-gradient(90deg, var(--surface-card), var(--color-sky-3) 40%, rgba(255, 52, 40, 0.5) 100%);"));
+    const css = emitCss(resolved, "css", "nested");
+    assert.ok(css.includes("--surface-hero: linear-gradient(90deg, var(--surface-card), var(--sky-3) 40%, rgba(255, 52, 40, 0.5) 100%);"));
     assert.ok(css.includes("--surface-echo: var(--surface-hero);"));
-    assert.ok(css.includes("--color-sky-3: #f3f6f9;"));
+    assert.ok(css.includes("--sky-3: #f3f6f9;"));
   });
 
   test("a stop taken from a role through transparent() is written again where the role moved", () => {
-    const css = emitCss(resolved, "plain", "nested");
+    const css = emitCss(resolved, "css", "nested");
     assert.ok(blockFor(css, ".dark, .dark-hc").includes("--surface-hero: linear-gradient(180deg, var(--surface-card), rgba(49, 49, 51, 0.5));"));
     assert.ok(blockFor(css, ".dark-hc").includes("--surface-hero: linear-gradient(180deg, var(--surface-card), rgba(0, 0, 0, 0.5));"));
     assert.ok(!blockFor(css, ".dark-hc").includes("--surface-echo"));
@@ -513,7 +524,7 @@ roles:
 
   test("a gradient role taken through transparent() is written again where that role moved", () => {
     const faded = resolveDefinition(source.replace("    echo:", "    veil: [transparent(surface.hero 50), transparent(surface.hero 50)]\n    echo:"));
-    const css = emitCss(faded, "plain", "nested");
+    const css = emitCss(faded, "css", "nested");
     assert.ok(blockFor(css, ".dark, .dark-hc").includes("--surface-veil: linear-gradient(180deg, rgba(49, 49, 51, 0.5), rgba(49, 49, 51, 0.25));"));
     assert.ok(blockFor(css, ".dark-hc").includes("--surface-veil: linear-gradient(180deg, rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.25));"));
     const veil = (emitDtcg(faded) as any).roles.surface.veil;
@@ -523,14 +534,14 @@ roles:
 
   test("so is a gradient role restyled by gradient()", () => {
     const restyled = resolveDefinition(source.replace("    echo:", "    turned: [gradient(surface.hero angle=10deg), gradient(surface.hero angle=10deg)]\n    echo:"));
-    const css = emitCss(restyled, "plain", "nested");
+    const css = emitCss(restyled, "css", "nested");
     assert.ok(blockFor(css, ".dark, .dark-hc").includes("--surface-turned: linear-gradient(10deg, var(--surface-card), rgba(49, 49, 51, 0.5));"));
     assert.ok(blockFor(css, ".dark-hc").includes("--surface-turned: linear-gradient(10deg, var(--surface-card), rgba(0, 0, 0, 0.5));"));
   });
 
   test("the wide-gamut layer repeats a gradient holding a color outside sRGB", () => {
-    const layer = emitCss(resolved, "plain", "nested").split("@supports")[1];
-    assert.ok(layer.includes("--surface-hero: linear-gradient(90deg, var(--surface-card), var(--color-sky-3) 40%, color(display-p3 1 0 0 / 0.5) 100%);"));
+    const layer = emitCss(resolved, "css", "nested").split("@supports")[1];
+    assert.ok(layer.includes("--surface-hero: linear-gradient(90deg, var(--surface-card), var(--sky-3) 40%, color(display-p3 1 0 0 / 0.5) 100%);"));
     assert.equal(layer.split("--surface-hero").length, 2);
   });
 
@@ -582,33 +593,33 @@ roles:
 
   test("nested css selects a mode's block for every mode that extends it", () => {
     assert.equal(
-      emitCss(hc, "plain", "nested").split("\n\n").slice(2).join("\n\n"),
+      emitCss(hc, "css", "nested").split("\n\n").slice(2).join("\n\n"),
       `:root {
   color-scheme: light;
-  --surface-card: var(--color-paper);
+  --surface-card: var(--paper);
   --surface-floating: var(--surface-card);
-  --label-primary: var(--color-ink);
+  --label-primary: var(--ink);
   --label-echo: var(--label-primary);
 }
 
 .dark, .dark-hc {
   color-scheme: dark;
-  --surface-card: var(--color-ink);
+  --surface-card: var(--ink);
   --surface-floating: var(--surface-card);
-  --label-primary: var(--color-paper);
+  --label-primary: var(--paper);
   --label-echo: var(--label-primary);
 }
 
 .dark-hc {
-  --surface-card: var(--color-loud);
+  --surface-card: var(--loud);
 }
 `,
     );
   });
 
   test("flat css writes an inherited role whose target moved, and only that", () => {
-    const css = emitCss(hc, "plain", "flat");
-    assert.ok(css.includes("--dark-hc-surface-card: var(--color-loud);"));
+    const css = emitCss(hc, "css", "flat");
+    assert.ok(css.includes("--dark-hc-surface-card: var(--loud);"));
     assert.ok(css.includes("--dark-hc-surface-floating: var(--dark-hc-surface-card);"));
     assert.ok(!css.includes("--dark-hc-label-primary:"));
     assert.ok(!css.includes("--dark-hc-label-echo:"));
@@ -639,7 +650,7 @@ roles:
   label:
     primary: [ink, paper, ink]
 `);
-    const css = emitCss(chained, "plain", "nested");
+    const css = emitCss(chained, "css", "nested");
     assert.ok(css.includes("\n:root, .dim, .dimmer {"));
     assert.ok(css.includes("\n.dim, .dimmer {"));
     assert.ok(css.includes("\n.dimmer {"));
@@ -661,15 +672,15 @@ systems:
 roles:
   surface: { canvas: sky(3), accent: hues.rose }
 `;
-  const css = emitCss(resolveDefinition(SRC), "plain");
+  const css = emitCss(resolveDefinition(SRC), "css");
 
   test("is an input: its colors feed systems without emitting", () => {
-    assert.ok(!css.includes("--color-hues-sky"));
-    assert.ok(css.includes("--color-white: #ffffff;"));
+    assert.ok(!css.includes("--hues-sky"));
+    assert.ok(css.includes("--white: #ffffff;"));
   });
 
   test("still emits a color a role points at", () => {
-    assert.ok(css.includes("--color-hues-rose: #e0115f;"));
+    assert.ok(css.includes("--hues-rose: #e0115f;"));
   });
 
   test("takes only true or false", () => {

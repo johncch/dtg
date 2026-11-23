@@ -2,10 +2,9 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { basename, dirname, join } from "node:path";
 import { parse } from "yaml";
 import {
-  CSS_FORMATS,
   DTCG_COLOR_SPACES,
   MODE_RENDERINGS,
-  type CssFormat,
+  type HostCss,
   type ModeRendering,
 } from "./emit.js";
 import type { Gamut } from "./color-math.js";
@@ -20,9 +19,11 @@ export type DtgConfig = {
    * and you get CSS; name scss and you get scss alone.
    */
   cssOut?: string;
-  cssFormat: CssFormat;
   /** How CSS renders the mode axis: nested selectors, or folded into names. */
   cssModes: ModeRendering;
+  /** CSS for a Tailwind v4 build: primitives in its theme namespaces, roles wired into utilities. */
+  tailwindOut?: string;
+  tailwindModes: ModeRendering;
   /** Only emitted when configured. Sass variables are always flat. */
   scssOut?: string;
   /** Only emitted when configured. */
@@ -38,6 +39,12 @@ export type DtgConfig = {
    */
   gamut: Gamut;
 };
+
+export function hostCss(config: DtgConfig): HostCss {
+  return config.tailwindOut != null
+    ? { names: "tailwind", modes: config.tailwindModes }
+    : { names: "css", modes: config.cssModes };
+}
 
 /** The CSS a definition emits when nothing names one: beside it, with its name. */
 export function generatedCssBeside(definition: string): string {
@@ -123,6 +130,7 @@ export function loadConfig(flags: {
   css?: string;
   cssFormat?: string;
   cssModes?: string;
+  tailwind?: string;
   scss?: string;
   dtcg?: string;
   dtcgColorSpace?: string;
@@ -140,13 +148,17 @@ export function loadConfig(flags: {
       "dtg.config.yaml outputs.figma: the bespoke Figma payload was removed — use `dtcg` instead, which carries the same collections, modes, values and aliases plus stable identities",
     );
   }
-  const css = parseCssOutput(outputs.css);
+  if (flags.cssFormat != null) {
+    throw new Error("--css-format was removed — `--tailwind <path>` writes the Tailwind file, and `--css` plain CSS");
+  }
+  const css = parseCssOutput(outputs.css, "css");
+  const tailwind = parseCssOutput(outputs.tailwind, "tailwind");
   const dtcg = parseDtcgOutput(outputs.dtcg);
 
   for (const key of Object.keys(outputs)) {
-    if (!["css", "scss", "dtcg"].includes(key)) {
+    if (!["css", "tailwind", "scss", "dtcg"].includes(key)) {
       throw new Error(
-        `dtg.config.yaml outputs: unknown output "${key}" (known: css, scss, dtcg)`,
+        `dtg.config.yaml outputs: unknown output "${key}" (known: css, tailwind, scss, dtcg)`,
       );
     }
   }
@@ -154,6 +166,7 @@ export function loadConfig(flags: {
   const requested = new Set(
     [
       outputs.css != null || flags.css != null ? "css" : null,
+      outputs.tailwind != null || flags.tailwind != null ? "tailwind" : null,
       outputs.scss != null || flags.scss != null ? "scss" : null,
       outputs.dtcg != null || flags.dtcg != null ? "dtcg" : null,
     ].filter((x): x is string => x != null),
@@ -163,17 +176,23 @@ export function loadConfig(flags: {
   const definition =
     flags.definition ?? definitionIn(fileConfig.definitions as string | undefined);
 
+  const modesFlag = assertModeRendering(flags.cssModes, "--css-modes");
+  const cssOut = requested.has("css")
+    ? (flags.css ?? css.path ?? generatedCssBeside(definition))
+    : undefined;
+  const tailwindOut = requested.has("tailwind")
+    ? (flags.tailwind ?? tailwind.path ?? generatedCssBeside(definition))
+    : undefined;
+  if (cssOut != null && cssOut === tailwindOut) {
+    throw new Error(`css and tailwind would both write ${cssOut} — give one of them a path of its own`);
+  }
+
   return {
     definition,
-    cssOut: requested.has("css")
-      ? (flags.css ?? css.path ?? generatedCssBeside(definition))
-      : undefined,
-    cssFormat:
-      assertCssFormat(flags.cssFormat, "--css-format") ?? css.format ?? "plain",
-    cssModes:
-      assertModeRendering(flags.cssModes, "--css-modes") ??
-      css.modes ??
-      "nested",
+    cssOut,
+    cssModes: modesFlag ?? css.modes ?? "nested",
+    tailwindOut,
+    tailwindModes: modesFlag ?? tailwind.modes ?? "nested",
     scssOut: flags.scss ?? (outputs.scss as string | undefined),
     dtcgOut: flags.dtcg ?? dtcg.path,
     dtcgColorSpace:
@@ -186,31 +205,30 @@ export function loadConfig(flags: {
   };
 }
 
-/** `css: <path>` or `css: { path, format }`. */
-function parseCssOutput(value: unknown): {
+/** `css: <path>` or `css: { path, modes }`, and the same for `tailwind`. */
+function parseCssOutput(value: unknown, output: "css" | "tailwind"): {
   path?: string;
-  format?: CssFormat;
   modes?: ModeRendering;
 } {
   if (value == null) return {};
   if (typeof value === "string") return { path: value };
   if (typeof value !== "object" || Array.isArray(value)) {
-    throw new Error(
-      "dtg.config.yaml outputs.css: expected a path or { path, format }",
-    );
+    throw new Error(`dtg.config.yaml outputs.${output}: expected a path or { path, modes }`);
   }
   const block = value as Record<string, unknown>;
+  if (output === "css" && block.format != null) {
+    throw new Error(
+      "dtg.config.yaml outputs.css.format was removed — the Tailwind file is an output of its own: `tailwind: <path>` under outputs",
+    );
+  }
   for (const key of Object.keys(block)) {
-    if (key !== "path" && key !== "format" && key !== "modes") {
-      throw new Error(
-        `dtg.config.yaml outputs.css: unknown key "${key}" (known: path, format, modes)`,
-      );
+    if (key !== "path" && key !== "modes") {
+      throw new Error(`dtg.config.yaml outputs.${output}: unknown key "${key}" (known: path, modes)`);
     }
   }
   return {
     path: block.path as string | undefined,
-    format: assertCssFormat(block.format, "dtg.config.yaml outputs.css.format"),
-    modes: assertModeRendering(block.modes, "dtg.config.yaml outputs.css.modes"),
+    modes: assertModeRendering(block.modes, `dtg.config.yaml outputs.${output}.modes`),
   };
 }
 
@@ -266,19 +284,6 @@ function assertColorSpace(value: unknown, context: string): Gamut | undefined {
   }
   throw new Error(
     `${context}: expected one of ${DTCG_COLOR_SPACES.join(", ")}, got ${JSON.stringify(value)}`,
-  );
-}
-
-function assertCssFormat(
-  value: unknown,
-  context: string,
-): CssFormat | undefined {
-  if (value == null) return undefined;
-  if (typeof value === "string" && CSS_FORMATS.includes(value as CssFormat)) {
-    return value as CssFormat;
-  }
-  throw new Error(
-    `${context}: expected one of ${CSS_FORMATS.join(", ")}, got ${JSON.stringify(value)}`,
   );
 }
 
