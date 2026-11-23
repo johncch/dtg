@@ -7,7 +7,7 @@ import type { ResolvedDefinition } from "./resolve.js";
 
 /** Write every configured output for a resolved definition, and say what was written. */
 export function writeOutputs(config: DtgConfig, resolved: ResolvedDefinition): void {
-  const { cssOut, cssFormat, cssModes, scssOut, dtcgOut, dtcgColorSpace } = config;
+  const { definition, cssOut, cssFormat, cssModes, scssOut, dtcgOut, dtcgColorSpace } = config;
   const written: string[] = [];
   const write = (path: string, contents: string, note: string) => {
     mkdirSync(dirname(path), { recursive: true });
@@ -18,15 +18,15 @@ export function writeOutputs(config: DtgConfig, resolved: ResolvedDefinition): v
   if (cssOut) {
     write(
       cssOut,
-      emitCss(resolved, cssFormat, cssModes),
+      emitCss(resolved, cssFormat, cssModes, definition),
       `${cssFormat}, ${cssModes} modes`,
     );
   }
-  if (scssOut) write(scssOut, emitScss(resolved), "scss, flat");
+  if (scssOut) write(scssOut, emitScss(resolved, definition), "scss, flat");
   if (dtcgOut) {
     write(
       dtcgOut,
-      JSON.stringify(emitDtcg(resolved, dtcgColorSpace), null, 2) + "\n",
+      JSON.stringify(emitDtcg(resolved, dtcgColorSpace, definition), null, 2) + "\n",
       `dtcg, ${dtcgColorSpace}`,
     );
   }
