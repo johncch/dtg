@@ -669,7 +669,7 @@ export function emitDtcg(
     const group = (systems.static ??= {}) as Record<string, unknown>;
     for (const s of emittedStatics(resolved)) {
       const description = groupDescriptionOf(resolved.groupDescriptions.palette, s.path);
-      placeAt(group, s.path, {
+      placeAt(group, s.segments.map((seg) => seg.name).join("."), {
         $type: "color",
         $value: dtcgColor(s.color, colorSpace),
         ...(description ? { $description: description } : {}),
@@ -684,7 +684,7 @@ export function emitDtcg(
     for (const named of emittedGradients(resolved)) {
       const { gradient } = named;
       const description = groupDescriptionOf(resolved.groupDescriptions.palette, named.path);
-      placeAt(group, named.path, {
+      placeAt(group, named.segments.map((seg) => seg.name).join("."), {
         $type: "gradient",
         $value: dtcgRef(resolved, gradient, colorSpace),
         ...(description ? { $description: description } : {}),

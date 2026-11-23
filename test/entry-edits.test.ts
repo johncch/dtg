@@ -30,7 +30,7 @@ roles:
     primary: [ink.body, paper]
     faded: [transparent(ink.body 40), transparent(paper 70)]
     quiet:
-      omit: true
+      alias: hushed
       refs: [ink.muted, ink.muted]
 `;
 
@@ -149,7 +149,7 @@ describe("moving a role within its group", () => {
 
   test("moves after the sibling named, a block role whole", () => {
     const text = edited([{ action: "move", target: role("label.quiet"), after: "primary" }]);
-    assert.ok(text.includes(`    primary: [ink.body, paper]\n    quiet:\n      omit: true\n      refs: [ink.muted, ink.muted]\n    faded:`));
+    assert.ok(text.includes(`    primary: [ink.body, paper]\n    quiet:\n      alias: hushed\n      refs: [ink.muted, ink.muted]\n    faded:`));
   });
 });
 
@@ -167,7 +167,7 @@ describe("placing an entry at another path", () => {
 
   test("a role written as a block keeps what it says, on one line", () => {
     const text = edited([{ action: "place", target: role("label.quiet"), path: "surface.quiet" }]);
-    assert.ok(text.includes(`    quiet: { omit: true, refs: [ink.muted, ink.muted] }\n  label:\n`));
+    assert.ok(text.includes(`    quiet: { alias: hushed, refs: [ink.muted, ink.muted] }\n  label:\n`));
   });
 
   test("cannot be placed where another role is", () => {
@@ -353,6 +353,47 @@ describe("the changes after what holds an entry is removed", () => {
     assert.deepEqual(
       listed.map((change) => [change.action, change.target]),
       [["remove", target]],
+    );
+  });
+});
+
+describe("a group's own color", () => {
+  const ROOTED = `dtg: 1
+modes: [light, dark]
+palette:
+  gray:
+    $root: "#888888"
+    50: "#fafafa"
+roles:
+  label:
+    $root: [gray, gray.50]
+    secondary: [gray.50, gray]
+  echo: [label, gray]
+`;
+
+  test("is edited at the group's path", () => {
+    const edited = applyEdits(ROOTED, [
+      { action: "set", target: { kind: "ref", section: "roles", role: "label", mode: 1 }, value: "gray" },
+      { action: "set", target: { kind: "constant", path: "gray" }, value: "#777777" },
+    ]);
+    assert.ok(edited.includes("    $root: [gray, gray]\n"));
+    assert.ok(edited.includes('    $root: "#777777"\n'));
+  });
+
+  test("moves with its group, refs and all", () => {
+    const edited = applyEdits(ROOTED, [
+      { action: "rename", target: { kind: "group", root: "palette", path: "gray" }, name: "neutral" },
+      { action: "rename", target: { kind: "group", root: "roles", path: "label" }, name: "text" },
+    ]);
+    assert.ok(edited.includes("    $root: [neutral, neutral.50]\n"));
+    assert.ok(edited.includes("  echo: [text, neutral]\n"));
+    assert.equal(resolveDefinition(edited).problems.length, 0);
+  });
+
+  test("is not renamed apart from its group", () => {
+    assert.throws(
+      () => applyEdits(ROOTED, [{ action: "rename", target: { kind: "role", section: "roles", path: "label" }, name: "primary" }]),
+      /its group's own color, renamed with the group/,
     );
   });
 });

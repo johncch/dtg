@@ -122,6 +122,10 @@ export function orderOf(shape: SelectorShape, selector: ParsedSelector): number[
 }
 
 /** How refs name a role: its groups and its name, dotted — just the name for one written straight in its section. */
+/** The key a group's own color is written under. It takes the group's path: refs and edits name `label`, not `label.$root`. */
+export const ROOT = "$root";
+
 export function rolePath(role: { group: string; role: string }): string {
+  if (role.role === ROOT) return role.group;
   return role.group ? `${role.group}.${role.role}` : role.role;
 }

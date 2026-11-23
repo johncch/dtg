@@ -105,12 +105,20 @@ Canonical. The README carries the user-facing version of the same rules.
   `dtg`/`modes`/`defaults`/`palette`/`systems`/`changelog` is a collection.
   Arbitrary name, becomes a design-tool collection, holds
   `group → role → [ref per mode]`, where groups nest and are optional. A role
-  may also be `{ refs, alias?, omit?, description? }`. `alias` (on a group, a
+  may also be `{ refs, alias?, description? }`. `alias` (on a group, a
   system, the systems block, a collection, a group, or a role; string or
-  per-target map) replaces a public name; `omit: true` drops a segment, on a
-  role, a role group or a palette group. A system group has no `omit`: its
-  steps are published only when something asks for them. Refs always use
-  internal names. That is the _entire_ role grammar. No flags, no
+  per-target map) replaces a public name. `virtual: true` on a role group or
+  a palette group leaves it out of every name below it. A system group has no
+  `virtual`: its steps are published only when something asks for them. Refs
+  always use internal names.
+- **A group's own color is its `$root`.** Settled 2026-11-23, following the
+  DTCG format's `$root`. `label: { $root: [...], secondary: [...] }` publishes
+  `--label` beside `--label-secondary`, in a role group or a palette group.
+  It is pointed at, edited and renamed by the group's path (`label`), never
+  `label.$root`, so a ref and a path stay one string; DTCG writes it under
+  `$root`, where a reference to the group finds it. It replaced `omit: true`
+  on a role, which did the same by dropping the role's own name, and
+  `virtual` replaced `omit` on groups. No other name may start with `$`. That is the _entire_ role grammar. No flags, no
   options, no other object form.
 - A **ref** is one of:
   - `paper`, `ink.body` — a constant by path
@@ -291,7 +299,7 @@ Canonical. The README carries the user-facing version of the same rules.
   `0`.
 
 Removed spellings are still detected and error with a pointer, rather than being
-silently ignored: a top-level `emit:` block (replaced by inline `alias`/`omit`),
+silently ignored: a top-level `emit:` block (replaced by inline `alias`),
 `emits:` on a system (renamed to `alias`; the error also points at `publish`), a
 color written in `systems` (moved to `palette`), scale's `stops` (replaced by
 its 0–1000 selector, `midpoint` and `publish`), `blend` and `compose` (replaced
@@ -780,7 +788,7 @@ Anything outside those three is a real defect. Promoting this check into a
       Restart to pick up changes to the tool's own code.
 - [x] CSS emitter (`dtg build`, `dtg emit` until 0.3.0): `@theme` primitives
       block, `:root` and `.dark` semantic blocks, `@theme inline` wiring for
-      every role. Public naming is inline via `alias` and `omit`.
+      every role. Public naming is inline via `alias`.
       `format: plain` (the default) emits primitives into `:root` instead, for
       any project not on Tailwind. Emit also writes DTCG when asked: the same
       collections, modes, values and aliases, plus a stable identity in

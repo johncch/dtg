@@ -183,7 +183,7 @@ core:
     scrim: [shadow(40), shadow(60)]
     veil: [transparent(white 70), transparent(white 40)] # transparent is a built-in function
   label:
-    primary: { omit: true, refs: [night(0), sky(0)] } # published as --label
+    $root: [night(0), sky(0)] # the group's own color, published as --label
     secondary: [night(30), sky(40)]
 ```
 
@@ -195,7 +195,8 @@ A few notes on the snippet above:
   one of the [built-in functions](#built-in-functions).
 - `publish` adds steps that no role uses.
 - `defaults` shares params across systems with the same algorithm.
-- `alias` and `omit` change public names.
+- `$root` is a group's own color, `alias` renames part of a public name, and
+  `virtual: true` leaves a group out of names.
 
 The full grammar, and the reasoning behind it, is in
 [`docs/how-this-works.md`](docs/how-this-works.md).

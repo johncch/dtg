@@ -15,6 +15,7 @@ import {
   parseSelector,
   publicStepOf,
   rolePath,
+  ROOT,
 } from "./selector.js";
 import {
   needsMapping,
@@ -392,8 +393,8 @@ export type ChangelogEntry = { date?: string; note: string };
 export type PathSegment = {
   name: string;
   alias?: AliasValue;
-  /** Dropped from the emitted name; the path still uses it for identity. */
-  omit?: boolean;
+  /** Dropped from the emitted name: a `virtual` group, or a group's `$root`. The path still uses it for identity. */
+  virtual?: boolean;
 };
 
 /** A gradient named in the palette. It is kept apart from the colors: everything that works on a palette's colors has no use for it. */
@@ -424,7 +425,7 @@ export function publicPath(
   sep: string,
 ): string {
   return segments
-    .filter((s) => !s.omit)
+    .filter((s) => !s.virtual)
     .map((s) => aliasedName(s.alias, target, s.name))
     .join(sep);
 }
@@ -551,9 +552,8 @@ export type ResolvedRole = {
   segments: PathSegment[];
   /** Everything but the last segment, dotted; empty for a role written straight in its section. Derived; `segments` is the truth. */
   group: string;
-  /** The last segment. Derived. */
+  /** The last segment, `$root` for a group's own color. Derived. */
   role: string;
-  omit: boolean;
   /** Written by hand in the definition, for whoever reads it next. */
   description?: string;
   /** One entry per mode, in `modes` order. */
@@ -631,7 +631,7 @@ export function publicRoleName(
   separator: string,
 ): string {
   return role.segments
-    .filter((seg) => !seg.omit)
+    .filter((seg) => !seg.virtual)
     .map((seg) => aliasedName(seg.alias, target, seg.name))
     .join(separator);
 }
@@ -828,9 +828,14 @@ export function resolveDefinition(
   const silent = new Set<string>();
   function walkPalette(node: Record<string, unknown>, prefix: PathSegment[], emits: boolean) {
     for (const [key, raw] of Object.entries(node)) {
-      if ((key === "alias" || key === "omit" || key === "publish" || key === "emit" || key === "description") && prefix.length > 0) continue;
-      const segments = [...prefix, { name: key }];
-      const path = segments.map((seg) => seg.name).join(".");
+      if ((key === "alias" || key === "virtual" || key === "publish" || key === "emit" || key === "description") && prefix.length > 0) continue;
+      const root = key === ROOT;
+      if (key.startsWith("$") && !(root && prefix.length > 0)) {
+        errors.push(`palette "${[...prefix.map((seg) => seg.name), key].join(".")}": ${root ? "`$root` is a group's own color, so it goes in a group" : "a name cannot start with $"}`);
+        continue;
+      }
+      const segments: PathSegment[] = [...prefix, root ? { name: key, virtual: true } : { name: key }];
+      const path = (root ? prefix : segments).map((seg) => seg.name).join(".");
       if (typeof raw === "string") paletteOrder.push(path);
       if (typeof raw === "string" && raw.startsWith("gradient(")) {
         writtenGradients.push({ path, segments, written: raw });
@@ -864,15 +869,15 @@ export function resolveDefinition(
         errors.push(`palette "${path}": \`publish\` on a group is true or false`);
         continue;
       }
-      if (block.omit !== undefined && typeof block.omit !== "boolean") {
-        errors.push(`palette "${path}": \`omit\` on a group is true or false`);
+      if (block.virtual !== undefined && typeof block.virtual !== "boolean") {
+        errors.push(`palette "${path}": \`virtual\` on a group is true or false`);
         continue;
       }
       const paletteDescription = descriptionOf(block.description, `palette "${path}"`);
       if (paletteDescription) groupDescriptions.palette[path] = paletteDescription;
       walkPalette(
         block,
-        [...prefix, { name: key, alias: parseAlias(block.alias, `palette "${path}"`), omit: block.omit === true }],
+        [...prefix, { name: key, alias: parseAlias(block.alias, `palette "${path}"`), virtual: block.virtual === true }],
         (publish.value as boolean | undefined) ?? emits,
       );
     }
@@ -1099,11 +1104,6 @@ export function resolveDefinition(
       continue;
     }
     const sectionBlock = sectionRaw as Record<string, unknown>;
-    if (sectionBlock.omit !== undefined) {
-      errors.push(
-        `section "${sectionName}": \`omit\` is not supported on sections`,
-      );
-    }
     sections.push({
       name: sectionName,
       alias: parseAlias(sectionBlock.alias, `section "${sectionName}"`),
@@ -1118,9 +1118,14 @@ export function resolveDefinition(
       trail: PathSegment[],
     ): void => {
       for (const [name, raw] of Object.entries(node)) {
-        if (name === "alias" || name === "omit" || name === "description") continue;
-        const segments = [...trail, { name }];
-        const path = segments.map((seg) => seg.name).join(".");
+        if (name === "alias" || name === "virtual" || name === "description") continue;
+        const root = name === ROOT;
+        if (name.startsWith("$") && !(root && trail.length > 0)) {
+          errors.push(`${sectionName}.${[...trail.map((seg) => seg.name), name].join(".")}: ${root ? "`$root` is a group's own color, so it goes in a group" : "a name cannot start with $"}`);
+          continue;
+        }
+        const segments: PathSegment[] = [...trail, root ? { name, virtual: true } : { name }];
+        const path = (root ? trail : segments).map((seg) => seg.name).join(".");
         const context = `${sectionName}.${path}`;
 
         let refs: (string | null)[] | undefined;
@@ -1139,17 +1144,22 @@ export function resolveDefinition(
           refs = raw.map((r) => (r == null ? null : String(r)));
         } else if (raw != null && typeof raw === "object") {
           const block = raw as Record<string, unknown>;
-          segments[segments.length - 1] = {
-            name,
-            alias: parseAlias(block.alias, context),
-            omit: block.omit === true,
-          };
           if (!("refs" in block)) {
+            if (root) {
+              errors.push(`${context}: \`$root\` is the group's own color, a ref list, not a group`);
+              continue;
+            }
+            if (block.virtual !== undefined && typeof block.virtual !== "boolean") {
+              errors.push(`${context}: \`virtual\` on a group is true or false`);
+              continue;
+            }
+            segments[segments.length - 1] = { name, alias: parseAlias(block.alias, context), virtual: block.virtual === true };
             const groupDescription = descriptionOf(block.description, context);
             if (groupDescription) groupDescriptions.roles[path] = groupDescription;
             walkRoles(block, segments);
             continue;
           }
+          if (!root) segments[segments.length - 1] = { name, alias: parseAlias(block.alias, context) };
           roleDescription = descriptionOf(block.description, context);
           if (!Array.isArray(block.refs)) {
             errors.push(`${context}: expected a \`refs\` list`);
@@ -1164,16 +1174,14 @@ export function resolveDefinition(
         } else {
           errors.push(
             modeless
-              ? `${context}: a role is a color, a ref list, { refs, alias?, omit?, description? }, or a group of roles`
-              : `${context}: a role is a ref list, { refs, alias?, omit?, description? }, or a group of roles`,
+              ? `${context}: a role is a color, a ref list, { refs, alias?, description? }, or a group of roles`
+              : `${context}: a role is a ref list, { refs, alias?, description? }, or a group of roles`,
           );
           continue;
         }
 
-        if (segments.every((seg) => seg.omit)) {
-          errors.push(
-            `${context}: every segment is omitted — nothing left to name`,
-          );
+        if (segments.every((seg) => seg.virtual)) {
+          errors.push(`${context}: every segment is virtual — nothing left to name`);
         }
         if (roleIndex.has(path)) {
           errors.push(
@@ -1277,7 +1285,6 @@ export function resolveDefinition(
       // "everything above it" — the dev server and the lineage index.
       group: raw.segments.slice(0, -1).map((seg) => seg.name).join("."),
       role: raw.segments[raw.segments.length - 1].name,
-      omit: raw.segments[raw.segments.length - 1].omit === true,
       description: raw.description,
       perMode,
       inherited,
@@ -1367,16 +1374,15 @@ export function resolveDefinition(
       );
       return undefined;
     }
+    if (ref === ROOT || ref.endsWith(`.${ROOT}`)) {
+      errors.push(`${context}: a group's own color is pointed at by the group's path — write ${ref.slice(0, -ROOT.length - 1) || "the group"}`);
+      return undefined;
+    }
     if (roleIndex.has(ref)) {
       const targetRole = resolveRole(ref, stack);
       const entry = targetRole?.perMode[modeIndex];
-      if (!entry) return undefined;
-      const dot = ref.lastIndexOf(".");
-      const target: RefTarget = {
-        kind: "role",
-        group: dot < 0 ? "" : ref.slice(0, dot),
-        role: ref.slice(dot + 1),
-      };
+      if (!targetRole || !entry) return undefined;
+      const target: RefTarget = { kind: "role", group: targetRole.group, role: targetRole.role };
       return entry.kind === "gradient"
         ? { ...entry, ref, target }
         : { kind: "color", ref, target, color: entry.color };

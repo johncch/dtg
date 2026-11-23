@@ -80,9 +80,7 @@ roles:
     lush: [lush, vivid]
 
   label:
-    primary:
-      omit: true
-      refs: [ink.body, paper]
+    $root: [ink.body, paper]
     muted: [ink.muted, ink.muted]
     aliased:
       alias: { css: renamed-label }

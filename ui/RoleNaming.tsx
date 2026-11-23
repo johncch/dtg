@@ -17,7 +17,7 @@ const targetOf = (role: Pick<SnapshotRole, "section" | "group" | "role">): RoleT
 });
 
 /** The keys a group of roles keeps for itself, which no role or group in it can be named. */
-const RESERVED = ["alias", "omit", "description"];
+const RESERVED = ["alias", "virtual", "description"];
 
 const freshName = (taken: string[]) => (taken.includes("new-role") ? copyName("new-role", taken) : "new-role");
 

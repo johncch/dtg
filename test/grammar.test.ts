@@ -652,13 +652,50 @@ s:
     );
   });
 
-  test("a palette group can be omitted from names, as a role group can", () => {
+  test("$root is a group's own color, pointed at by the group's path", () => {
+    const r = resolveDefinition(`
+dtg: 1
+modes: [light, dark]
+palette:
+  gray:
+    $root: "#888888"
+    50: "#fafafa"
+s:
+  label:
+    $root: [gray, gray.50]
+    secondary: [gray.50, gray]
+  echo: [label, label]
+`);
+    const css = emitCss(r, "css");
+    assert.ok(css.includes("--gray: #888888;"));
+    assert.ok(css.includes("--gray-50: #fafafa;"));
+    assert.ok(css.includes("--label: var(--gray);"));
+    assert.ok(css.includes("--label-secondary: var(--gray-50);"));
+    assert.ok(css.includes("--echo: var(--label);"));
+    assert.ok(emitCss(r, "tailwind").includes("--color-gray: #888888;"));
+    const dtcg = emitDtcg(r) as any;
+    assert.equal(dtcg.s.label.$root.$value, "{systems.static.gray}");
+    assert.equal(dtcg.s.echo.$value, "{s.label}");
+    assert.equal(dtcg.systems.static.gray.$root.$value.hex, "#888888");
+  });
+
+  test("$root goes in a group, is written as the group, and no other name starts with $", () => {
+    const at = (body: string) => () => resolveDefinition(`dtg: 1\nmodes: [light]\n${body}`);
+    assert.throws(at("s:\n  $root: [\"#000000\"]\n"), /\$root` is a group's own color, so it goes in a group/);
+    assert.throws(at("s:\n  d:\n    $x: [\"#000000\"]\n"), /a name cannot start with \$/);
+    assert.throws(
+      at("s:\n  d:\n    $root: [\"#000000\"]\n  e: [d.$root]\n"),
+      /pointed at by the group's path — write d/,
+    );
+  });
+
+  test("a palette group can be virtual, as a role group can", () => {
     const r = resolveDefinition(`
 dtg: 1
 modes: [light]
 palette:
   hues:
-    omit: true
+    virtual: true
     red: "#ff0000"
 s:
   d:
@@ -669,7 +706,7 @@ s:
     assert.ok(emitCss(r, "tailwind").includes("--color-red: #ff0000;"));
   });
 
-  test("an omitted palette group cannot hide two colors under one name", () => {
+  test("a virtual palette group cannot hide two colors under one name", () => {
     assert.throws(
       () =>
         resolveDefinition(`
@@ -678,7 +715,7 @@ modes: [light]
 palette:
   red: "#ff0000"
   hues:
-    omit: true
+    virtual: true
     red: "#ee0000"
 `),
       /css name collision: "red" is emitted by both red and hues\.red/,

@@ -173,12 +173,12 @@
       }
     },
     "label": {
-      "primary": {
+      "$root": {
         "$type": "color",
         "$value": "{systems.static.ink.body}",
         "$extensions": {
           "com.fifthrevision.dtg": {
-            "id": "label.primary",
+            "id": "label.$root",
             "name": "label",
             "modes": {
               "light": "{systems.static.ink.body}",

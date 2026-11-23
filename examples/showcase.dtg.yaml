@@ -65,7 +65,7 @@ core:
     raised: [surface.card, night(9)]
   separator: [paper(12), night(14)]
   label:
-    primary: { omit: true, refs: [paper(100), night(100)] }
+    $root: [paper(100), night(100)]
     secondary: [paper(62), night(62)]
   accent:
     fill: [brand(500), brand(400)]

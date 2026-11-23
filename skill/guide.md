@@ -52,15 +52,16 @@ guessing them:
   collection is any top-level key other than dtg's own, and its name never
   appears.
 - Keys can hold hyphens: a role `bg-subtle` is `--bg-subtle`. For `--bg` next
-  to `--bg-subtle` as a group, give the group a child that drops its own
-  name: `bg: { base: { omit: true, refs: [...] }, subtle: [...] }`. Flat keys
-  (`bg`, `bg-subtle`) work too.
+  to `--bg-subtle` as a group, give the group its own color under `$root`:
+  `bg: { $root: [...], subtle: [...] }`. A ref to it is the group's path,
+  `bg`. Flat keys (`bg`, `bg-subtle`) work too. `$root` works in palette
+  groups the same way (`gray: { $root: "#888888", 50: ... }` is `--gray`).
 - The `tailwind` output (for a Tailwind v4 build, instead of `css`) puts
   palette colors and steps behind `--color-` (`--color-gray-500`), which is
   what makes `bg-gray-500`, and wires each role in as a utility too.
-- `alias` renames one segment of a name, `omit: true` drops one (on a role,
-  a role group or a palette group). Refs always use the definition's own
-  names.
+- `alias` renames one segment of a name. `virtual: true` on a role group or
+  a palette group leaves the group out of every name below it, for groups
+  that exist only to organize. Refs always use the definition's own names.
 - A palette color, a step and a role can't publish the same name; the build
   says which two collide.
 - A palette color is published unless its group says `publish: false`. Put
@@ -291,8 +292,8 @@ over dark ones (`[transparent(black 10), transparent(white 12)]`).
   system in one step. By hand, rename the key and every ref yourself; the
   build fails on any you miss.
 - A rename changes the published name. To change the internal name and keep
-  the public one, add `alias: <old name>` to it; to drop a segment from every
-  name below it, `omit: true`.
+  the public one, add `alias: <old name>` to it; to drop a group from every
+  name below it, `virtual: true`.
 - Steps appear and disappear with demand: a step nothing points at stops
   being published. If the app reads a step directly, list it in the system's
   `publish`.

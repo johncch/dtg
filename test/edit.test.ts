@@ -205,7 +205,6 @@ roles:
     card: [sky(1), sky(1)]
   label:
     primary:
-      omit: true
       refs: [paper, sky(60)]
 `;
   const ref = (role: string, mode: number) => ({ kind: "ref", section: "roles", role, mode }) as const;

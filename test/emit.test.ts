@@ -66,7 +66,7 @@ describe("css", () => {
 describe("dtcg", () => {
   test("identity rides in the extension, not the recipe", () => {
     const d = emitDtcg(resolved) as any;
-    // a role's identity is its internal path, untouched by alias/omit
+    // a role's identity is its internal path, untouched by alias and virtual
     assert.equal(d.roles.surface.canvas.$extensions[NS].id, "surface.canvas");
     // a demand-driven step's is who demands it, so renumbering is safe
     assert.equal(d.systems.sky["3"].$extensions[NS].id, "surface.canvas[light]");

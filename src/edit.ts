@@ -1,6 +1,6 @@
 import { isAlias, isMap, isScalar, isSeq, parseDocument, Scalar, type Document, type Node, type Pair, type YAMLMap, type YAMLSeq } from "yaml";
 import { TOP_LEVEL_RESERVED } from "./resolve.js";
-import { INHERIT } from "./selector.js";
+import { INHERIT, ROOT } from "./selector.js";
 
 /** One value written in a definition: an authored color, or the ref a role holds for a mode. */
 export type EditTarget =
@@ -92,10 +92,28 @@ export function renamedTarget<Target extends EntryTarget | GroupTarget | ModeTar
   return { ...target, path: renamed(target.path) };
 }
 
+/** Whether keys lead to a node. YAML reads `50:` as a number, and a path is text, so keys are compared as text. */
+function hasPath(doc: Document, keys: string[]): boolean {
+  let node: unknown = doc.contents;
+  for (const key of keys) {
+    if (!isMap(node)) return false;
+    const pair = node.items.find((item) => isScalar(item.key) && String(item.key.value) === key);
+    if (!pair) return false;
+    node = pair.value;
+  }
+  return true;
+}
+
+/** A group's own color is written under its `$root`, at the group's path. */
+function atRoot(doc: Document, keys: string[]): string[] {
+  const node = doc.getIn(keys, true);
+  return isMap(node) && node.has(ROOT) ? [...keys, ROOT] : keys;
+}
+
 function keysOf(target: EditTarget, doc: Document): (string | number)[] {
   switch (target.kind) {
     case "constant":
-      return ["palette", ...target.path.split(".")];
+      return atRoot(doc, ["palette", ...target.path.split(".")]);
     case "system":
       return ["systems", ...target.path.split(".")];
     case "emit": {
@@ -107,11 +125,11 @@ function keysOf(target: EditTarget, doc: Document): (string | number)[] {
     case "default":
       return ["defaults", target.algorithm, ...target.path.split(".")];
     case "role":
-      return [target.section, ...target.path.split(".")];
+      return atRoot(doc, [target.section, ...target.path.split(".")]);
     case "group":
       return [target.root, ...target.path.split(".")];
     case "ref": {
-      const role = [target.section, ...target.role.split(".")];
+      const role = atRoot(doc, [target.section, ...target.role.split(".")]);
       const written = doc.getIn(role, true);
       // A role is a ref list, a block holding one under `refs`, or — in a
       // definition without modes — the ref itself.
@@ -748,7 +766,10 @@ function entryAt(text: string, target: EntryTarget | EmitTarget | GroupTarget): 
 }
 
 function withEntryRenamed(text: string, target: EntryTarget | GroupTarget, name: string): string {
-  const { doc, set, pair } = entryAt(text, target);
+  const { doc, keys, set, pair } = entryAt(text, target);
+  if (target.kind !== "group" && keys.at(-1) === ROOT) {
+    throw new Error(`${describeTarget(target)} is its group's own color, renamed with the group`);
+  }
   if (set.items.some((item) => isScalar(item.key) && item.key.value === name)) {
     throw new Error(`${describeTarget(renamedTarget(target, name))} is already written`);
   }
@@ -759,7 +780,7 @@ function withEntryRenamed(text: string, target: EntryTarget | GroupTarget, name:
     kind,
     target.path,
     renamedTarget(target, name).path,
-    target.kind === "group" ? (path) => doc.hasIn([target.root, ...path.split(".")]) : undefined,
+    target.kind === "group" ? (path) => hasPath(doc, [target.root, ...path.split(".")]) : undefined,
   );
 }
 
@@ -795,7 +816,15 @@ function pointersAt(
   if (top === "palette" && !(kind === "constant" && node.value.startsWith("gradient("))) return [];
   if (kind !== "constant" && (top === "systems" || top === "defaults")) return [];
   if (top === "systems" && !keys.includes("params")) return [];
-  const moved = (name: string) => (holds ? (name.startsWith(`${from}.`) && holds(name) ? to + name.slice(from.length) : null) : name === from ? to : null);
+  // A group's own color is pointed at by the group's path, so a ref that is the group itself moves with it.
+  const moved = (name: string) =>
+    holds
+      ? (name.startsWith(`${from}.`) && holds(name)) || (name === from && holds(`${from}.${ROOT}`))
+        ? to + name.slice(from.length)
+        : null
+      : name === from
+        ? to
+        : null;
   const renamedRef = (ref: string): string | null => {
     const gradient = /^gradient\((.*)\)$/s.exec(ref);
     if (gradient) {
@@ -832,7 +861,7 @@ function partsOutsideParens(text: string): string[] {
 }
 
 /** What a group says about itself, beside the entries it holds. */
-const GROUP_KEYS = { role: ["alias", "omit", "description"], constant: ["alias", "omit", "publish", "emit", "description"] };
+const GROUP_KEYS = { role: ["alias", "virtual", "description"], constant: ["alias", "virtual", "publish", "emit", "description"] };
 
 /**
  * The group's entries in a new order. Each entry's own text moves, a block
@@ -951,7 +980,7 @@ function refLists(doc: Document): YAMLSeq[] {
     if (!isMap(node)) return;
     for (const pair of node.items) {
       const key = isScalar(pair.key) ? String(pair.key.value) : "";
-      if (["alias", "omit", "description"].includes(key)) continue;
+      if (["alias", "virtual", "description"].includes(key)) continue;
       const value = pair.value;
       if (isSeq(value)) lists.push(value);
       else if (isMap(value) && value.has("refs")) {
@@ -1025,7 +1054,7 @@ function withModesWritten(text: string): string {
     if (!isMap(node)) return;
     for (const pair of node.items) {
       const key = isScalar(pair.key) ? String(pair.key.value) : "";
-      if (["alias", "omit", "description"].includes(key)) continue;
+      if (["alias", "virtual", "description"].includes(key)) continue;
       const value = pair.value;
       if (isScalar(value) && typeof value.value === "string" && value.range) bare.push(value as Located);
       else if (isMap(value) && value.has("refs")) {
