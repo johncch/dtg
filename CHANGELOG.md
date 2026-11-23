@@ -59,6 +59,15 @@
 - `dtg edit` in a folder with no `dtg.config.yaml` offers to set up a project,
   asking what `dtg init` asks, then opens it. Without a terminal to ask in, it
   says to run `dtg init`, as before.
+- Tailwind is an output of its own, `tailwind:`, beside `css:`, `scss:` and
+  `dtcg:`. `css: { format: tailwind }` becomes `tailwind: <path>` (or
+  `{ path, modes }`), and `--css-format tailwind` becomes `--tailwind <path>`;
+  the old spellings are refused with a pointer. The Tailwind file is unchanged.
+- The `css` output names palette colors and system steps as the definition
+  does, without the `--color-` prefix: `--color-white` is now `--white`,
+  `--color-sky-10` is `--sky-10`, and a palette gradient `--gradient-dawn` is
+  `--dawn`. Roles keep their names. If your stylesheets read a `--color-*` or
+  `--gradient-*` variable from the `css` output, rename those reads.
 
 ## [0.5.0] - 2026-11-20
 
