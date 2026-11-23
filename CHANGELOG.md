@@ -68,6 +68,13 @@
   `--color-sky-10` is `--sky-10`, and a palette gradient `--gradient-dawn` is
   `--dawn`. Roles keep their names. If your stylesheets read a `--color-*` or
   `--gradient-*` variable from the `css` output, rename those reads.
+- `omit` is replaced by two keys. A group's own color goes under `$root`, as in
+  the DTCG format: `label: { $root: [...], secondary: [...] }` publishes
+  `--label` beside `--label-secondary`, and refs point at it as `label`. A
+  group that only organizes takes `virtual: true` and is left out of names.
+  Both work in role groups and palette groups. Rewrite a role's
+  `{ omit: true, refs: [...] }` as its group's `$root`, and a group's
+  `omit: true` as `virtual: true`.
 
 ## [0.5.0] - 2026-11-20
 
