@@ -58,8 +58,9 @@ guessing them:
 - The `tailwind` output (for a Tailwind v4 build, instead of `css`) puts
   palette colors and steps behind `--color-` (`--color-gray-500`), which is
   what makes `bg-gray-500`, and wires each role in as a utility too.
-- `alias` renames one segment of a name, `omit: true` drops one. Refs always
-  use the definition's own names.
+- `alias` renames one segment of a name, `omit: true` drops one (on a role,
+  a role group or a palette group). Refs always use the definition's own
+  names.
 - A palette color, a step and a role can't publish the same name; the build
   says which two collide.
 - A palette color is published unless its group says `publish: false`. Put

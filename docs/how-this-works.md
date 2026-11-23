@@ -107,8 +107,10 @@ Canonical. The README carries the user-facing version of the same rules.
   `group → role → [ref per mode]`, where groups nest and are optional. A role
   may also be `{ refs, alias?, omit?, description? }`. `alias` (on a group, a
   system, the systems block, a collection, a group, or a role; string or
-  per-target map) replaces a public name; `omit: true` drops a segment. Refs
-  always use internal names. That is the _entire_ role grammar. No flags, no
+  per-target map) replaces a public name; `omit: true` drops a segment, on a
+  role, a role group or a palette group. A system group has no `omit`: its
+  steps are published only when something asks for them. Refs always use
+  internal names. That is the _entire_ role grammar. No flags, no
   options, no other object form.
 - A **ref** is one of:
   - `paper`, `ink.body` — a constant by path

@@ -652,6 +652,39 @@ s:
     );
   });
 
+  test("a palette group can be omitted from names, as a role group can", () => {
+    const r = resolveDefinition(`
+dtg: 1
+modes: [light]
+palette:
+  hues:
+    omit: true
+    red: "#ff0000"
+s:
+  d:
+    r: [hues.red]
+`);
+    assert.ok(emitCss(r, "css").includes("--red: #ff0000;"));
+    assert.ok(emitCss(r, "css").includes("--d-r: var(--red);"));
+    assert.ok(emitCss(r, "tailwind").includes("--color-red: #ff0000;"));
+  });
+
+  test("an omitted palette group cannot hide two colors under one name", () => {
+    assert.throws(
+      () =>
+        resolveDefinition(`
+dtg: 1
+modes: [light]
+palette:
+  red: "#ff0000"
+  hues:
+    omit: true
+    red: "#ee0000"
+`),
+      /css name collision: "red" is emitted by both red and hues\.red/,
+    );
+  });
+
   test("a system step and a role publishing one name", () => {
     assert.throws(
       () =>

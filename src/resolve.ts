@@ -417,13 +417,16 @@ export type ResolvedStatic = {
   emitted: boolean;
 };
 
-/** Joins a path for emitting, applying each segment's alias. */
+/** Joins a path for emitting, applying each segment's alias and dropping omitted ones. */
 export function publicPath(
   segments: PathSegment[],
   target: string,
   sep: string,
 ): string {
-  return segments.map((s) => aliasedName(s.alias, target, s.name)).join(sep);
+  return segments
+    .filter((s) => !s.omit)
+    .map((s) => aliasedName(s.alias, target, s.name))
+    .join(sep);
 }
 
 export type ResolvedSection = {
@@ -825,7 +828,7 @@ export function resolveDefinition(
   const silent = new Set<string>();
   function walkPalette(node: Record<string, unknown>, prefix: PathSegment[], emits: boolean) {
     for (const [key, raw] of Object.entries(node)) {
-      if ((key === "alias" || key === "publish" || key === "emit" || key === "description") && prefix.length > 0) continue;
+      if ((key === "alias" || key === "omit" || key === "publish" || key === "emit" || key === "description") && prefix.length > 0) continue;
       const segments = [...prefix, { name: key }];
       const path = segments.map((seg) => seg.name).join(".");
       if (typeof raw === "string") paletteOrder.push(path);
@@ -861,11 +864,15 @@ export function resolveDefinition(
         errors.push(`palette "${path}": \`publish\` on a group is true or false`);
         continue;
       }
+      if (block.omit !== undefined && typeof block.omit !== "boolean") {
+        errors.push(`palette "${path}": \`omit\` on a group is true or false`);
+        continue;
+      }
       const paletteDescription = descriptionOf(block.description, `palette "${path}"`);
       if (paletteDescription) groupDescriptions.palette[path] = paletteDescription;
       walkPalette(
         block,
-        [...prefix, { name: key, alias: parseAlias(block.alias, `palette "${path}"`) }],
+        [...prefix, { name: key, alias: parseAlias(block.alias, `palette "${path}"`), omit: block.omit === true }],
         (publish.value as boolean | undefined) ?? emits,
       );
     }
@@ -1637,20 +1644,25 @@ export function resolveDefinition(
 
   // ---- public-name uniqueness (aliases and omissions can collide) ----
   for (const target of ["css", "figma"]) {
-    const seen = new Map<string, string>();
-    const claim = (name: string, owner: string) => {
-      const prior = seen.get(name);
-      if (prior) {
-        errors.push(`${target} name collision: "${name}" is emitted by both ${prior} and ${owner}`);
-      } else {
-        seen.set(name, owner);
-      }
+    const claimer = () => {
+      const seen = new Map<string, string>();
+      return (name: string, owner: string) => {
+        const prior = seen.get(name);
+        if (prior) {
+          errors.push(`${target} name collision: "${name}" is emitted by both ${prior} and ${owner}`);
+        } else {
+          seen.set(name, owner);
+        }
+      };
     };
+    const claim = claimer();
+    // In Figma the palette is a group of its own, apart from every collection of roles.
+    const claimPalette = target === "css" ? claim : claimer();
+    for (const constant of [...statics, ...gradients]) {
+      if (constant.emitted) claimPalette(publicPath(constant.segments, target, target === "css" ? "-" : "/"), constant.path);
+    }
     // Primitives and roles share css names: tailwind wires each role in as --color-<role>.
     if (target === "css") {
-      for (const constant of [...statics, ...gradients]) {
-        if (constant.emitted) claim(publicPath(constant.segments, "css", "-"), constant.path);
-      }
       for (const system of resolvedSystems) {
         for (const step of system.steps) {
           claim(`${publicSystemName(system, "css")}-${step.publicStep}`, formatRef(system.system, step.selector));

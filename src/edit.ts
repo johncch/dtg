@@ -832,7 +832,7 @@ function partsOutsideParens(text: string): string[] {
 }
 
 /** What a group says about itself, beside the entries it holds. */
-const GROUP_KEYS = { role: ["alias", "omit", "description"], constant: ["alias", "publish", "emit", "description"] };
+const GROUP_KEYS = { role: ["alias", "omit", "description"], constant: ["alias", "omit", "publish", "emit", "description"] };
 
 /**
  * The group's entries in a new order. Each entry's own text moves, a block
