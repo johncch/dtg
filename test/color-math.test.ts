@@ -33,6 +33,16 @@ describe("color math", () => {
     assert.throws(() => parseColor("#ff00000", "seven digits"), /cannot read/);
   });
 
+  test("rgb() and rgba() read as CSS has them, spaces between", () => {
+    const red = parseColor("rgb(232 83 63 / 0.25)", "rgb");
+    assert.equal(formatColor(red, "srgb"), "rgba(232, 83, 63, 0.25)");
+    assert.deepEqual(parseColor("rgba(100% 0 0 / 25%)", "rgba").coords, parseColor("#ff0000", "hex").coords);
+    assert.throws(
+      () => parseColor("rgba(232, 83, 63, 0.25)", "commas"),
+      /separates with a comma — write spaces, as rgb\(232 83 63 \/ 0\.25\)/,
+    );
+  });
+
   test("alphaComposite endpoints are the ground and the layer", () => {
     const ink = hexToRgb("#001a28");
     const base = hexToRgb("#fafdff");

@@ -124,10 +124,12 @@ Canonical. The README carries the user-facing version of the same rules.
     followed mode by mode. The opacity is the last word, and it multiplies an
     alpha the color already has. It is written like a system, so no system can
     be named `transparent`
-  - a literal — `"#000000"`, `oklch(0 0 0)`, `color(display-p3 1 0 0)` — emitted
+  - a literal — `"#000000"`, `rgb(0 0 0)`, `oklch(0 0 0)`, `color(display-p3 1 0 0)` — emitted
     as its value. Hex takes an alpha as CSS does, in a fourth or eighth digit
     (`"#00000080"`); the others take it after `/`. The same parser reads it, so
-    no system can be named `oklch`, `oklab` or `color` either
+    no system can be named `rgb`, `rgba`, `oklch`, `oklab` or `color` either.
+    `rgba()` is CSS's other name for `rgb()`. Commas are refused, as everywhere
+    inside parentheses, with the spaced spelling in the error
   - `gradient(paper 0% sky(500) 100% angle=90deg)` — colors along a line. A word
     in `%` is the position of the color before it, and every other positional
     word is a stop, any ref that resolves to a color. Positions left out are

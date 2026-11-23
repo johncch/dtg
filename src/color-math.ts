@@ -1,7 +1,7 @@
 export type Rgb = [number, number, number];
 
 const COLOR_FORMS =
-  "#rgb, #rrggbb, #rgba, #rrggbbaa, oklch(L C H), oklab(L a b), color(srgb r g b) or color(display-p3 r g b), each with an optional `/ alpha`";
+  "#rgb, #rrggbb, #rgba, #rrggbbaa, rgb(r g b), oklch(L C H), oklab(L a b), color(srgb r g b) or color(display-p3 r g b), each with an optional `/ alpha`";
 
 /**
  * A color with less chroma than this has no hue, however it was written.
@@ -38,6 +38,9 @@ export function parseColor(value: unknown, context: string): Color {
     );
   }
   const fn = call[1].toLowerCase();
+  if (call[2].includes(",")) {
+    throw new Error(`${context}: "${text}" separates with a comma — write spaces, as ${spacedSpelling(call[1], call[2])}`);
+  }
   const [body, alphaText, ...extra] = call[2].split("/");
   if (extra.length > 0) {
     throw new Error(`${context}: ${JSON.stringify(value)} has more than one \`/\``);
@@ -65,6 +68,16 @@ export function parseColor(value: unknown, context: string): Color {
     return { space: "oklab", coords: oklchToOklab([L, C, H]), alpha };
   }
 
+  // rgba() is CSS's other name for rgb(), and reads the same.
+  if (fn === "rgb" || fn === "rgba") {
+    expectCount(parts, 3, fn, context, value);
+    return {
+      space: "srgb",
+      coords: parts.map((c, i) => component(c, 255, `${context}: ${fn} channel ${i + 1}`) / 255) as [number, number, number],
+      alpha,
+    };
+  }
+
   if (fn === "color") {
     const space = parts[0]?.toLowerCase();
     if (space !== "srgb" && space !== "display-p3") {
@@ -86,6 +99,15 @@ export function parseColor(value: unknown, context: string): Color {
   throw new Error(
     `${context}: unknown color function "${fn}" in ${JSON.stringify(value)} (${COLOR_FORMS})`,
   );
+}
+
+/** A call written with commas, as the grammar spells it: spaces, and a color's alpha after `/` as CSS has it. */
+export function spacedSpelling(name: string, inside: string): string {
+  const parts = inside.split(",").map((part) => part.trim());
+  if ((name === "rgb" || name === "rgba") && parts.length === 4) {
+    return `rgb(${parts.slice(0, 3).join(" ")} / ${parts[3]})`;
+  }
+  return `${name}(${parts.join(" ")})`;
 }
 
 function expectCount(

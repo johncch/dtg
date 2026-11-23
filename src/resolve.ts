@@ -19,6 +19,7 @@ import {
 import {
   needsMapping,
   parseColor,
+  spacedSpelling,
   isOpaque,
   formatAuthored,
   toOklab,
@@ -214,7 +215,7 @@ const RENAMED_ALGORITHMS: Record<string, string> = {
   "oklch-scale": "scale",
 };
 
-const LITERAL_FUNCTIONS = ["oklch", "oklab", "color"];
+const LITERAL_FUNCTIONS = ["rgb", "rgba", "oklch", "oklab", "color"];
 
 const TRANSPARENT_USAGE = `transparent() takes a color or a gradient, then an opacity, as transparent(shade 70) or transparent(sky(500) 70). For a system's uncomposited form, ask the algorithm — tint spells it "sky(3 tint)".`;
 
@@ -1287,9 +1288,7 @@ export function resolveDefinition(
   ): ResolvedRef | undefined {
     const call = parseCall(ref);
     if (call && call.selector.includes(",")) {
-      errors.push(
-        `${context}: "${ref}" separates with a comma — write spaces, as ${ref.replace(/\s*,\s*/g, " ")}`,
-      );
+      errors.push(`${context}: "${ref}" separates with a comma — write spaces, as ${spacedSpelling(call.name, call.selector)}`);
       return undefined;
     }
     if (ref.startsWith("#") || LITERAL_FUNCTIONS.includes(call?.name ?? "")) {
