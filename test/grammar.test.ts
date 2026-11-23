@@ -652,6 +652,22 @@ s:
     );
   });
 
+  test("a system step and a role publishing one name", () => {
+    assert.throws(
+      () =>
+        resolveDefinition(`
+dtg: 1
+modes: [light]
+systems:
+  teal: { algorithm: tint, params: { base: "#ffffff", tint: "#0d9488" }, publish: [50] }
+s:
+  teal:
+    "50": [teal(50)]
+`),
+      /css name collision: "teal-50" is emitted by both teal\(50\) and teal\.50/,
+    );
+  });
+
   test("circular role references", () => {
     assert.throws(
       () =>

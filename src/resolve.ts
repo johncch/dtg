@@ -1587,28 +1587,6 @@ export function resolveDefinition(
     constant.emitted = !silent.has(constant.path) || pointedAt.has(constant.path);
   }
 
-  // ---- public-name uniqueness (aliases and omissions can collide) ----
-  for (const target of ["css", "figma"]) {
-    const seen = new Map<string, string>();
-    for (const role of roles) {
-      const scope =
-        target === "figma"
-          ? `${aliasedName(sections.find((s) => s.name === role.section)?.alias, target, role.section)}/`
-          : "";
-      const name =
-        scope + publicRoleName(role, target, target === "css" ? "-" : "/");
-      const path = rolePath(role);
-      const prior = seen.get(name);
-      if (prior) {
-        errors.push(
-          `${target} name collision: "${name}" is emitted by both ${prior} and ${path}`,
-        );
-      } else {
-        seen.set(name, path);
-      }
-    }
-  }
-
   const resolvedSystems: ResolvedSystem[] = [];
   for (const [name, sys] of systems) {
     // What a system publishes is what its `publish` lists plus what refs demand.
@@ -1656,6 +1634,37 @@ export function resolveDefinition(
       emit: sys.emit,
       description: sys.description,
     });
+  }
+
+  // ---- public-name uniqueness (aliases and omissions can collide) ----
+  for (const target of ["css", "figma"]) {
+    const seen = new Map<string, string>();
+    const claim = (name: string, owner: string) => {
+      const prior = seen.get(name);
+      if (prior) {
+        errors.push(`${target} name collision: "${name}" is emitted by both ${prior} and ${owner}`);
+      } else {
+        seen.set(name, owner);
+      }
+    };
+    // Primitives and roles share css names: tailwind wires each role in as --color-<role>.
+    if (target === "css") {
+      for (const constant of [...statics, ...gradients]) {
+        if (constant.emitted) claim(publicPath(constant.segments, "css", "-"), constant.path);
+      }
+      for (const system of resolvedSystems) {
+        for (const step of system.steps) {
+          claim(`${publicSystemName(system, "css")}-${step.publicStep}`, formatRef(system.system, step.selector));
+        }
+      }
+    }
+    for (const role of roles) {
+      const scope =
+        target === "figma"
+          ? `${aliasedName(sections.find((s) => s.name === role.section)?.alias, target, role.section)}/`
+          : "";
+      claim(scope + publicRoleName(role, target, target === "css" ? "-" : "/"), rolePath(role));
+    }
   }
 
   // Every system's steps are gathered above, so a probe landing in the step
