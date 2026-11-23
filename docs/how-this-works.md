@@ -794,8 +794,9 @@ Anything outside those three is a real defect. Promoting this check into a
       and can still be selected. The original picker remains available for
       editing an authored value directly. The visualization, its view controls,
       Randomize's style and Harmonize sit in a sidebar on the right with its own
-      scrolling area. It starts closed, opens with the settings button at the
-      top right, and closes with × or Escape; this is browser UI state.
+      scrolling area. It opens with the settings button at the top right and
+      closes with × or Escape; whether it is open is kept per browser, like the
+      layout, and it starts closed the first time.
       Randomize sits beside the button, and Space still rolls colors while the
       sidebar is closed. Hovering between two swatches, or past the last, shows
       a + that adds an unlocked color at that place. A layout control shows the

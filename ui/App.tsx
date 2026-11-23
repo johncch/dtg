@@ -23,7 +23,7 @@ import { SystemPage } from "./pages/SystemPage.js";
 import { Link, useRoute, type Route } from "./router.js";
 import { useSnapshot } from "./snapshot.js";
 import { StoreProvider } from "./store.js";
-import { EDITABLE, SAVABLE } from "./mode.js";
+import { EDITABLE } from "./mode.js";
 import { PaletteColorsProvider } from "./palette-colors.js";
 import { Alert } from "./Alert.js";
 
@@ -146,7 +146,7 @@ function Nav({ snapshot, working }: { snapshot: Snapshot; working: Snapshot }) {
         <div className="nav-section">
           <div className="nav-links">
             <Link to={{ page: "definition" }}>Definition</Link>
-            {SAVABLE && <Link to={{ page: "modes" }}>Modes</Link>}
+            <Link to={{ page: "modes" }}>Modes</Link>
           </div>
         </div>
         {(snapshot.constants.length > 0 || EDITABLE) && (
@@ -336,7 +336,7 @@ function NotFound({ what }: { what: string }) {
 function Page({ route, snapshot, working }: { route: Route; snapshot: Snapshot; working: Snapshot }) {
   if (route.page === "unknown") return <NotFound what={route.path} />;
   if (route.page === "definition") return <DefinitionPage definition={snapshot.definition} warnings={snapshot.warnings} />;
-  if (route.page === "modes" && SAVABLE) return <ModesPage snapshot={snapshot} />;
+  if (route.page === "modes") return <ModesPage snapshot={snapshot} />;
   const named = [...snapshot.systems.map((system) => system.system), ...snapshot.roles.map((role) => role.group || role.role)].map((path) => path.split(".")[0]);
   if (route.page === "constants") {
     return snapshot.constants.length > 0 || EDITABLE ? (

@@ -16,6 +16,7 @@ import { useStore } from "../store.js";
 import { Alert } from "../Alert.js";
 import { ControlsCell, ControlsHead, copyName, EntryDuplicate, EntryRemove, GroupName, openNameOf } from "../EntryRow.js";
 import { useTrying } from "../preview.js";
+import { EDITABLE, SAVABLE } from "../mode.js";
 
 /**
  * The definition's modes and how this app shows each: its scheme, and the
@@ -166,7 +167,7 @@ function ModeRow({
       <td>
         <select
           aria-label={`Scheme of ${mode.name}`}
-          disabled={!written}
+          disabled={!written || !EDITABLE}
           value={schemeWritten}
           onChange={(event) => commit({ action: "set", target: { kind: "scheme", mode: mode.name }, value: event.target.value })}
         >
@@ -176,6 +177,7 @@ function ModeRow({
         </select>
       </td>
       <td>
+        {SAVABLE ? (
         <Popup
           title="Edit background"
           className="chip chip-editable"
@@ -214,7 +216,17 @@ function ModeRow({
             />
           )}
         </Popup>
-        {mode.backgroundOverridden && (
+        ) : (
+          <ColorTip color={shown}>
+            <span className="chip">
+              <span className="swatch">
+                <span className="swatch-color" style={{ background: paintCss(shown) }} />
+              </span>
+              <code>{mode.backgroundWritten}</code>
+            </span>
+          </ColorTip>
+        )}
+        {SAVABLE && mode.backgroundOverridden && (
           <button type="button" className="btn btn-small mode-reset" onClick={onDefault}>
             reset
           </button>
@@ -230,6 +242,7 @@ function ModeRow({
 /** Adds a mode at the end that extends this one, and opens its name. */
 function ModeExtend({ mode, snapshot }: { mode: string; snapshot: Snapshot }) {
   const { commit } = useTrying();
+  if (!EDITABLE) return null;
   return (
     <Hint text="Extend">
       <button

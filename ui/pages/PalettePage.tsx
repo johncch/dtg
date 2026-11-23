@@ -208,6 +208,16 @@ function storedSwatchSize(): SwatchSize {
   }
 }
 
+const TOOLS_OPEN_KEY = "dtg.palette.tools-open";
+
+function storedToolsOpen(): boolean {
+  try {
+    return localStorage.getItem(TOOLS_OPEN_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 function storeSwatchSize(size: SwatchSize) {
   try {
     localStorage.setItem(SWATCH_SIZE_KEY, size);
@@ -274,7 +284,7 @@ export function PalettePage({
   const [rollStyle, setRollStyle] = useState(storedRollStyle);
   /** The harmony last applied, whose arms the wheel shows until the colors are rolled. */
   const [shownHarmony, setShownHarmony] = useState<{ base: string; offsets: number[] } | null>(null);
-  const [toolsOpen, setToolsOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(storedToolsOpen);
   const toolsId = useId();
   const toolsToggle = useRef<HTMLButtonElement>(null);
   const toolsClose = useRef<HTMLButtonElement>(null);
@@ -507,6 +517,11 @@ export function PalettePage({
   useEffect(() => {
     if (previousToolsOpen.current === toolsOpen) return;
     previousToolsOpen.current = toolsOpen;
+    try {
+      localStorage.setItem(TOOLS_OPEN_KEY, String(toolsOpen));
+    } catch {
+      // An embedded or private page may refuse storage; the sidebar then starts closed on reload.
+    }
     (toolsOpen ? toolsClose : toolsToggle).current?.focus();
   }, [toolsOpen]);
 
