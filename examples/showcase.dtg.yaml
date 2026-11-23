@@ -1,0 +1,88 @@
+# Your color system, in three layers. The palette holds your colors, the
+# ones from your brand guide. Systems are the methods that generate new
+# colors from them. Roles name each color for how it is used, with one
+# value per mode.
+#
+# Each decision lives in one place. Change a palette color and every system
+# anchored to it moves; change a system's params and every role on it moves;
+# repoint a role and only that role changes. `npx dtg edit` opens it.
+#
+#   npx dtg edit --definition examples/showcase.dtg.yaml
+
+dtg: 1
+
+modes:
+  light: { scheme: light }
+  dark: { scheme: dark }
+
+palette:
+  white: "#ffffff"
+  black: "#000000"
+  hues:
+    publish: false
+    brand: "#5b5bd6"
+    coral: "#f2555a"
+    marigold: "#eea637"
+    pink: "#e2899e"
+    teal: "oklch(0.6898 0.1424 194.59)"
+  dawn: gradient(hues.coral 0% hues.brand 100% angle=135deg)
+
+systems:
+  paper:
+    algorithm: tint
+    params: { base: "#fbfbfd", tint: "#16161d" }
+  night:
+    algorithm: tint
+    params: { base: "#121218", tint: "#f4f4f8" }
+  brand:
+    algorithm: curve
+    params: { anchor: hues.brand }
+    publish: &steps [100, 200, 300, 400, 500, 600, 700, 800, 900]
+  coral:
+    algorithm: curve
+    params: { anchor: hues.coral }
+    publish: *steps
+  marigold:
+    algorithm: curve
+    params: { anchor: hues.marigold }
+    publish: *steps
+  pink:
+    algorithm: curve
+    params: { anchor: hues.pink }
+    publish: *steps
+  teal:
+    algorithm: curve
+    params: { anchor: hues.teal, chroma: { from: 0.4, to: 0.7, easing: [[0.39, 0.13, 0.68, 0.92], [0.33, 0.33, 0.67, 0.67]] } }
+    publish: *steps
+  shadow:
+    algorithm: overlay
+    params: { color: black }
+
+core:
+  surface:
+    canvas: [paper(2), night(0)]
+    card: [white, night(5)]
+    raised: [surface.card, night(9)]
+  separator: [paper(12), night(14)]
+  label:
+    primary: { omit: true, refs: [paper(100), night(100)] }
+    secondary: [paper(62), night(62)]
+  accent:
+    fill: [brand(500), brand(400)]
+    text: [brand(600), brand(300)]
+    subtle: [brand(50), brand(950)]
+  state:
+    hover: [paper(4 tint), night(6 tint)]
+    scrim: [shadow(40), shadow(60)]
+    veil: [transparent(white 70), transparent(black 50)]
+  danger: [coral(600), coral(400)]
+  warning: [marigold(700), marigold(400)]
+  success: [teal(600), teal(400)]
+  tag:
+    fill: [pink(100), transparent(pink(400) 18)]
+    text: [pink(800), pink(300)]
+
+marketing:
+  hero: [dawn, gradient(dawn angle=180deg)]
+  glow: ["gradient(transparent(hues.brand 40) white 70% kind=radial)", "gradient(transparent(hues.brand 50) night(0) 70% kind=radial)"]
+  badge: [transparent(dawn 85), transparent(dawn 70)]

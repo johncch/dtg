@@ -54,47 +54,6 @@ outputs:
 `;
 }
 
-const STARTER_DEFINITION = `# Your color system, as decisions. Raw colors live only in \`palette\` and
-# \`systems\`; roles point at them. Run \`npx dtg edit\` to open it in the editor.
-dtg: 1
-
-modes:
-  light: { scheme: light }
-  dark: { scheme: dark }
-
-palette:
-  hues:
-    publish: false
-    accent: "#0066ff"
-
-systems:
-  # A neutral ramp per mode: ink tinted over a base. light(3) is 3% ink.
-  light:
-    algorithm: tint
-    params: { base: "#ffffff", tint: "#000000" }
-  dark:
-    algorithm: tint
-    params: { base: "#111111", tint: "#ffffff" }
-  # A chromatic scale: the hue at 500, running toward white and black at
-  # the ends. accent(600) is the 600 stop.
-  accent:
-    algorithm: scale
-    params: { base: hues.accent, toward: ["#ffffff", "#111111"] }
-    publish: [100, 200, 400, 600, 800]
-
-roles:
-  surface:
-    canvas: [light(3), dark(0)]
-    card: [light(1), dark(1)]
-  label:
-    primary: [dark(0), light(0)]
-    secondary: [dark(30), light(40)]
-  separator:
-    primary: [light(15), dark(16)]
-  theme:
-    primary: [accent(600), accent(400)]
-`;
-
 /** Where `dtg init` offers to put the definition: under src/ when a project has one. */
 export function defaultDefinitionPath(): string {
   return existsSync("src") ? "src/colors.dtg.yaml" : "colors.dtg.yaml";
@@ -115,7 +74,7 @@ modes: [light, dark]
 
 /** What `dtg init` can write as the definition. The examples ship in dist/examples. */
 export const STARTS = {
-  starter: "a starter: two neutral ramps and an accent",
+  starter: "a starter: five hues, scales and roles for light and dark",
   blank: "a blank: the modes, and nothing else",
   tailwind: "Tailwind v4's palette, as curve systems",
   material: "Material 3's scheme, as tone systems",
@@ -123,9 +82,9 @@ export const STARTS = {
 export type Start = keyof typeof STARTS;
 
 function startingDefinition(from: Start): string {
-  if (from === "starter") return STARTER_DEFINITION;
   if (from === "blank") return BLANK_DEFINITION;
-  return readFileSync(new URL(`./examples/${from}.dtg.yaml`, import.meta.url), "utf8");
+  const example = from === "starter" ? "showcase" : from;
+  return readFileSync(new URL(`./examples/${example}.dtg.yaml`, import.meta.url), "utf8");
 }
 
 /**

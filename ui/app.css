@@ -765,7 +765,11 @@ button.entry-lock[aria-disabled="true"] {
   width: 14px;
   height: 14px;
 }
+.entry-name-text {
+  cursor: text;
+}
 .palette-entry-name {
+  position: relative;
   min-width: 0;
   font: inherit;
   font-size: var(--text-subhead);
@@ -806,11 +810,18 @@ button.entry-lock[aria-disabled="true"] {
   font: inherit;
   color: inherit;
 }
+/* Stretches the name's click target over the whole highlighted box, padding included. */
+.palette-entry-name .entry-name-text::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
 /* The field and its problem lie outside the name's box while it is retyped. */
 .palette-entry-name:has(.entry-name-editing) {
   overflow: visible;
 }
 .palette-entry-name .entry-name-input {
+  min-width: 24ch;
   color: var(--fg);
   font-family: var(--font-mono);
 }

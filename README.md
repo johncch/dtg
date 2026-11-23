@@ -408,9 +408,13 @@ with a hex color inside it in quotes: `"gradient(white #000000)"`.
 
 ## Examples
 
-dtg ships two full color scales out of the box. Use them, or modify them to your
-needs:
+dtg ships three examples. `dtg init --from <name>` starts a project from one;
+use them as they are, or modify them to your needs:
 
+- `starter`: five hues as `curve` scales, neutrals for light and dark, and two
+  collections of roles, gradients and `transparent()` included. It's what
+  `dtg init` starts from unless you pick another.
+  [Source.](https://github.com/johncch/dtg/blob/main/examples/showcase.dtg.yaml)
 - `tailwind`: Tailwind v4's palette as `curve` systems that share one lightness
   curve.
   [Source.](https://github.com/johncch/dtg/blob/main/examples/tailwind.dtg.yaml)

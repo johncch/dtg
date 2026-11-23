@@ -52,7 +52,8 @@ export function GroupPage({ snapshot, group }: { snapshot: Snapshot; group: stri
 export function RolesPage({ snapshot, working, section }: { snapshot: Snapshot; working: Snapshot; section?: string }) {
   const hash = useScrollToHash(section ?? "roles");
   const shown = section ? snapshot.roles.filter((role) => role.section === section) : snapshot.roles;
-  const groups = [...new Set(shown.map((role) => role.group))];
+  const written = [...new Set(shown.map((role) => role.group))];
+  const groups = [...written.filter((group) => group === ""), ...written.filter((group) => group !== "")];
   const named = groups.filter((group) => group !== "").length;
   const users = useMemo(() => roleUsers(snapshot.roles), [snapshot.roles]);
   return (

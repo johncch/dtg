@@ -63,7 +63,7 @@ function Retyped({
   if (typed == null) {
     return (
       <span className="entry-name">
-        <code title="Double-click to rename" onDoubleClick={() => setTyped(written)}>
+        <code className="entry-name-text" title="Click to rename" onClick={() => setTyped(written)}>
           {shown}
         </code>
         {after}

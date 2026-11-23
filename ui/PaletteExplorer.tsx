@@ -5,6 +5,7 @@ import {
 } from "../src/color-math.js";
 import type { Edit } from "../src/edit.js";
 import { EDITABLE } from "./mode.js";
+import { useProjectGamut } from "./gamut.js";
 import { useTrying } from "./preview.js";
 import { PalettePlots, type PaletteEntry } from "./PalettePlots.js";
 
@@ -19,6 +20,8 @@ type Props = {
 
 export function PaletteExplorer({ entries, selected, onSelect, onAdd, isLocked, guides }: Props) {
   const { preview, previewStep, commitStep } = useTrying();
+  const gamut = useProjectGamut();
+  const insideGamut = ([L, C, H]: Oklch): Oklch => [L, Math.min(C, maxChroma(L, H, gamut)), H];
   const pending = useRef<Edit[] | null>(null);
   /** The colors as a drag found them. `entries` is the preview while one runs, and turning by a preview would compound. */
   const dragStart = useRef<PaletteEntry[] | null>(null);
@@ -51,7 +54,7 @@ export function PaletteExplorer({ entries, selected, onSelect, onAdd, isLocked, 
     dragStart.current ??= entries;
     const target = dragStart.current.find((entry) => entry.path === path);
     if (!EDITABLE || !target || isLocked(target.path)) return;
-    const edits = [written(target, next)];
+    const edits = [written(target, insideGamut(next))];
     const [, startChroma, startHue] = oklabToOklch(toOklab(target.color));
     const turn = next[2] - startHue;
     const scale = next[1] / startChroma;
@@ -63,7 +66,7 @@ export function PaletteExplorer({ entries, selected, onSelect, onAdd, isLocked, 
         if (C < NO_HUE_BELOW_CHROMA) continue;
         const hue = ((H + turn) % 360 + 360) % 360;
         // A color hex could hold stays one hex can hold: chroma gives way where there is less room for it.
-        edits.push(written(other, [L, inGamut(lab, HEX_SPACE, 1e-4) ? Math.min(C * scale, maxChroma(L, hue, HEX_SPACE)) : C * scale, hue]));
+        edits.push(written(other, [L, Math.min(C * scale, maxChroma(L, hue, inGamut(lab, HEX_SPACE, 1e-4) ? HEX_SPACE : gamut)), hue]));
       }
     }
     if (edits.length === 1 && edits[0].action === "set" && edits[0].value === target.written && pending.current == null) return;
@@ -89,7 +92,7 @@ export function PaletteExplorer({ entries, selected, onSelect, onAdd, isLocked, 
         onChange={change}
         onFinish={finish}
         onCancel={cancel}
-        onAdd={(channels) => { finish(); onAdd(channels); }}
+        onAdd={(channels) => { finish(); onAdd(insideGamut(channels)); }}
         isLocked={isLocked}
         guides={guides}
         tools={EDITABLE && (

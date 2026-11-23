@@ -1256,17 +1256,11 @@ export function resolveDefinition(
     }
 
     const complete = perMode.length === modes.length;
-    const sameKind = new Set(perMode.map((entry) => entry.kind)).size === 1;
     if (complete && mixesKinds(perMode)) {
       problems.push({
         path,
         message: "A role must be all solid colors or all gradients.",
       });
-    }
-    if (complete && sameKind && new Set(perMode.map((entry) => entry.kind === "color" && isOpaque(entry.color))).size > 1) {
-      warnings.push(
-        `${path}: modes mix opaque and translucent values — probably a mistake`,
-      );
     }
     const resolvedRole: ResolvedRole = {
       section: raw.section,
