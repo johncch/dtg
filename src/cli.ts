@@ -2,6 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createInterface } from "node:readline/promises";
+import { parseArgs, type ParseArgsOptionsConfig } from "node:util";
 import {
   defaultDefinitionPath,
   hostCss,
@@ -22,17 +23,37 @@ const { version } = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as { version: string };
 
-const args = process.argv.slice(2);
-const command = args[0];
+const [command, ...rest] = process.argv.slice(2);
 
-function flagValue(name: string): string | undefined {
-  const i = args.indexOf(name);
-  if (i === -1) return undefined;
-  const value = args[i + 1];
-  if (value == null || value.startsWith("--")) {
-    fail(`${name} requires a value`);
+const DEFINITION = { definition: { type: "string" } } as const;
+const OUTPUTS = {
+  css: { type: "string" },
+  tailwind: { type: "string" },
+  "css-modes": { type: "string" },
+  scss: { type: "string" },
+  dtcg: { type: "string" },
+  "dtcg-color-space": { type: "string" },
+} as const;
+
+const REMOVED_FLAGS: Record<string, string> = {
+  "--css-format": "--css-format was removed — `--tailwind <path>` writes the Tailwind file, and `--css` plain CSS",
+  "--live": "`dtg build --live` is now `dtg build --watch`",
+};
+
+/** This command's flags, refusing any it doesn't take, and at most `positionals` bare arguments. */
+function parse<const Options extends ParseArgsOptionsConfig>(options: Options, positionals = 0) {
+  let parsed;
+  try {
+    parsed = parseArgs({ args: rest, options, allowPositionals: true });
+  } catch (e) {
+    const { code, message } = e as { code?: string; message: string };
+    if (code !== "ERR_PARSE_ARGS_UNKNOWN_OPTION") fail(`${command}: ${message}`);
+    const flag = /'([^']+)'/.exec(message)?.[1] ?? "";
+    fail(REMOVED_FLAGS[flag] ?? `${command}: unknown flag ${flag} — \`dtg --help\` lists each command's flags`);
   }
-  return value;
+  const extra = parsed.positionals[positionals];
+  if (extra != null) fail(`${command}: unexpected "${extra}"`);
+  return parsed;
 }
 
 function fail(message: string): never {
@@ -44,8 +65,7 @@ function fail(message: string): never {
  * Where the definition should live: `--definition`, or a question whose
  * Enter takes the default. Without a terminal, the default.
  */
-async function askDefinitionPath(): Promise<string> {
-  const given = flagValue("--definition");
+async function askDefinitionPath(given: string | undefined): Promise<string> {
   if (given) return given;
   const fallback = defaultDefinitionPath();
   if (!process.stdin.isTTY) return fallback;
@@ -63,8 +83,7 @@ function isStart(name: string): name is Start {
  * What the definition starts as: `--from`, or a question whose Enter takes
  * the starter. Without a terminal, the starter.
  */
-async function askStart(): Promise<Start> {
-  const given = flagValue("--from");
+async function askStart(given: string | undefined): Promise<Start> {
   if (given != null) {
     if (!isStart(given)) fail(`--from: unknown "${given}" (known: ${Object.keys(STARTS).join(", ")})`);
     return given;
@@ -82,10 +101,27 @@ async function askStart(): Promise<Start> {
   return picked;
 }
 
+/** The config, with the output flags `edit` and `build` both take laid over it. */
+function configFrom(values: { definition?: string } & { [Flag in keyof typeof OUTPUTS]?: string }) {
+  try {
+    return loadConfig({
+      definition: values.definition,
+      css: values.css,
+      cssModes: values["css-modes"],
+      tailwind: values.tailwind,
+      scss: values.scss,
+      dtcg: values.dtcg,
+      dtcgColorSpace: values["dtcg-color-space"],
+    });
+  } catch (e) {
+    fail((e as Error).message);
+  }
+}
+
 /** `dtg init`'s questions and files, and what it wrote, as a line to print. */
-async function setUp(): Promise<string> {
-  const definition = await askDefinitionPath();
-  const from = await askStart();
+async function setUp(given: { definition?: string; from?: string }): Promise<string> {
+  const definition = await askDefinitionPath(given.definition);
+  const from = await askStart(given.from);
   let definitionWritten = false;
   try {
     ({ definitionWritten } = writeStarter(definition, from));
@@ -106,12 +142,15 @@ async function askSetUp(): Promise<boolean> {
   return answer === "" || answer === "y" || answer === "yes";
 }
 
-if (command === "init") {
-  console.log(`${await setUp()} — \`dtg edit\` opens it`);
+if (rest.includes("--help") || rest.includes("-h")) {
+  printHelp(0);
+} else if (command === "init") {
+  const { values } = parse({ ...DEFINITION, from: { type: "string" } });
+  console.log(`${await setUp(values)} — \`dtg edit\` opens it`);
 } else if (command === "emit") {
   fail("`dtg emit` is now `dtg build` — the same flags, the same outputs");
 } else if (command === "skill") {
-  const sub = args[1] ?? "show";
+  const sub = parse({}, 1).positionals[0] ?? "show";
   const skillFile = (name: string) => readFileSync(new URL(`../skill/${name}`, import.meta.url), "utf8");
   if (sub === "show") {
     process.stdout.write(skillFile("guide.md"));
@@ -130,9 +169,10 @@ if (command === "init") {
     fail(`skill: unknown "${sub}" (known: show, setup)`);
   }
 } else if (command === "compare") {
-  const stylesheet = args[1] != null && !args[1].startsWith("--") ? args[1] : fail("compare: name the stylesheet, as `dtg compare <file>`");
+  const { values, positionals } = parse(DEFINITION, 1);
+  const stylesheet = positionals[0] ?? fail("compare: name the stylesheet, as `dtg compare <file>`");
   try {
-    const config = loadConfig({ definition: flagValue("--definition") });
+    const config = loadConfig({ definition: values.definition });
     const resolved = resolveDefinition(readFileSync(config.definition, "utf8"), [], config.gamut);
     const built = emitHostCss(resolved, { names: hostCss(config).names, modes: "nested" });
     console.log(formatComparison(compareStylesheets(readFileSync(stylesheet, "utf8"), built, resolved.modes), stylesheet));
@@ -141,71 +181,45 @@ if (command === "init") {
     fail((e as Error).message);
   }
 } else if (command === "docs") {
-  const out = flagValue("--out") ?? fail("docs: name the folder to write with --out <dir>");
+  const { values } = parse({ ...DEFINITION, out: { type: "string" }, editable: { type: "boolean" } });
+  const out = values.out ?? fail("docs: name the folder to write with --out <dir>");
   try {
-    const config = loadConfig({ definition: flagValue("--definition") });
-    const editable = args.includes("--editable");
-    console.log(`${writeSite(config.definition, config.gamut, out, "dtg.config.yaml", hostCss(config), editable)}\n  → ${out}/index.html`);
+    const config = loadConfig({ definition: values.definition });
+    console.log(`${writeSite(config.definition, config.gamut, out, "dtg.config.yaml", hostCss(config), values.editable ?? false)}\n  → ${out}/index.html`);
   } catch (e) {
     fail((e as Error).message);
   }
-} else if (command === "edit" || command === "build") {
+} else if (command === "edit") {
+  const { values } = parse({ ...DEFINITION, ...OUTPUTS, port: { type: "string" }, build: { type: "boolean" } });
   // `dtg edit` in a folder with no project sets one up the way `dtg init` does, then opens it.
-  if (command === "edit" && flagValue("--definition") == null && !existsSync("dtg.config.yaml")) {
+  if (values.definition == null && !existsSync("dtg.config.yaml")) {
     if (!(await askSetUp())) fail("no dtg project here — `dtg init` sets one up, or pass --definition");
-    console.log(await setUp());
+    console.log(await setUp({}));
   }
-  let config;
-  try {
-    config = loadConfig({
-      definition: flagValue("--definition"),
-      css: flagValue("--css"),
-      cssFormat: flagValue("--css-format"),
-      cssModes: flagValue("--css-modes"),
-      tailwind: flagValue("--tailwind"),
-      scss: flagValue("--scss"),
-      dtcg: flagValue("--dtcg"),
-      dtcgColorSpace: flagValue("--dtcg-color-space"),
-    });
-  } catch (e) {
-    fail((e as Error).message);
-  }
-
-  if (command === "edit") {
-    startDevServer(
-      config.definition,
-      Number(flagValue("--port") ?? "4401"),
-      config.gamut,
-      hostCss(config),
-      args.includes("--build") ? config : null,
-    );
-  } else {
-    const { definition } = config;
-
-    const emitOnce = () =>
-      writeOutputs(
-        config,
-        resolveDefinition(readFileSync(config.definition, "utf8"), [], config.gamut),
-      );
-
-    if (args.includes("--live")) fail("`dtg build --live` is now `dtg build --watch`");
-    if (args.includes("--watch")) {
-      const emitCaught = () => {
-        try {
-          emitOnce();
-        } catch (e) {
-          console.error((e as Error).message);
-        }
-      };
-      emitCaught();
-      watchDefinition(definition, emitCaught);
-      console.log(`watching ${definition} — Ctrl-C to stop`);
-    } else {
+  const config = configFrom(values);
+  const port = Number(values.port ?? "4401");
+  if (!Number.isInteger(port)) fail(`edit: --port takes a number, not "${values.port}"`);
+  startDevServer(config.definition, port, config.gamut, hostCss(config), values.build ? config : null);
+} else if (command === "build") {
+  const { values } = parse({ ...DEFINITION, ...OUTPUTS, watch: { type: "boolean" } });
+  const config = configFrom(values);
+  const emitOnce = () => writeOutputs(config, resolveDefinition(readFileSync(config.definition, "utf8"), [], config.gamut));
+  if (values.watch) {
+    const emitCaught = () => {
       try {
         emitOnce();
       } catch (e) {
-        fail((e as Error).message);
+        console.error((e as Error).message);
       }
+    };
+    emitCaught();
+    watchDefinition(config.definition, emitCaught);
+    console.log(`watching ${config.definition} — Ctrl-C to stop`);
+  } else {
+    try {
+      emitOnce();
+    } catch (e) {
+      fail((e as Error).message);
     }
   }
 } else if (command === "--version" || command === "-v") {
@@ -213,6 +227,10 @@ if (command === "init") {
 } else {
   const askedForHelp = command == null || command === "--help" || command === "-h";
   if (!askedForHelp) console.error(`unknown command "${command}"\n`);
+  printHelp(askedForHelp ? 0 : 1);
+}
+
+function printHelp(exitCode: number): never {
   console.log(`dtg ${version}
 
 usage: dtg <command> [flags]
@@ -272,5 +290,5 @@ outputs (build, and edit --build)
 other
   -v, --version               print the version
   -h, --help                  print this`);
-  process.exit(askedForHelp ? 0 : 1);
+  process.exit(exitCode);
 }

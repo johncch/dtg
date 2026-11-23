@@ -183,9 +183,6 @@ describe("the tailwind output", () => {
     inProject("outputs:\n  css: { path: out/c.css, format: tailwind }\n", () => {
       assert.throws(() => loadConfig({}), /outputs\.css\.format was removed — .*`tailwind: <path>`/);
     });
-    inProject(null, () => {
-      assert.throws(() => loadConfig({ definition: DEFINITION, cssFormat: "tailwind" }), /--css-format was removed/);
-    });
   });
 
   test("css and tailwind cannot write one file", () => {

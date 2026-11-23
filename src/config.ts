@@ -128,7 +128,6 @@ export function writeStarter(
 export function loadConfig(flags: {
   definition?: string;
   css?: string;
-  cssFormat?: string;
   cssModes?: string;
   tailwind?: string;
   scss?: string;
@@ -147,9 +146,6 @@ export function loadConfig(flags: {
     throw new Error(
       "dtg.config.yaml outputs.figma: the bespoke Figma payload was removed — use `dtcg` instead, which carries the same collections, modes, values and aliases plus stable identities",
     );
-  }
-  if (flags.cssFormat != null) {
-    throw new Error("--css-format was removed — `--tailwind <path>` writes the Tailwind file, and `--css` plain CSS");
   }
   const css = parseCssOutput(outputs.css, "css");
   const tailwind = parseCssOutput(outputs.tailwind, "tailwind");
