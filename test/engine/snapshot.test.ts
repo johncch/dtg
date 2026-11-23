@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { buildLineage, resolveDefinition } from "../dist/engine/resolve.js";
-import { backgroundProbes, buildSnapshot } from "../dist/engine/snapshot.js";
+import { buildLineage, resolveDefinition } from "../../dist/engine/resolve.js";
+import { backgroundProbes, buildSnapshot } from "../../dist/engine/snapshot.js";
 
 const SRC = `
 dtg: 1

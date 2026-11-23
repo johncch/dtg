@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { parseParams } from "../dist/engine/params.js";
-import { algorithmFor, curveDrawing, resolveDefinition } from "../dist/engine/resolve.js";
+import { parseParams } from "../../dist/engine/params.js";
+import { algorithmFor, curveDrawing, resolveDefinition } from "../../dist/engine/resolve.js";
 import { step } from "./step.ts";
 import {
   type Color,
@@ -15,7 +15,7 @@ import {
   oklabToOklch,
   parseColor,
   toOklab,
-} from "../dist/engine/color-math.js";
+} from "../../dist/engine/color-math.js";
 
 const css = (v: { color: Color }) => formatColor(v.color, "srgb");
 

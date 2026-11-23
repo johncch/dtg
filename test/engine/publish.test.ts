@@ -1,9 +1,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveDefinition } from "../dist/engine/resolve.js";
-import { emitCss } from "../dist/engine/emit.js";
-import { applyEdits, readValue } from "../dist/engine/edit.js";
-import { changesOf, openFile, withSpellingsOffered, workingText } from "../dist/engine/working-copy.js";
+import { resolveDefinition } from "../../dist/engine/resolve.js";
+import { emitCss } from "../../dist/engine/emit.js";
+import { applyEdits, readValue } from "../../dist/engine/edit.js";
+import { changesOf, openFile, withSpellingsOffered, workingText } from "../../dist/engine/working-copy.js";
 
 const SRC = `dtg: 1
 palette:

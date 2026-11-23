@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { algorithmFor } from "../dist/engine/resolve.js";
+import { algorithmFor } from "../../dist/engine/resolve.js";
 import { step } from "./step.ts";
 import {
   encodeIn,
@@ -15,7 +15,7 @@ import {
   parseColor,
   oklchToOklab,
   translucent,
-} from "../dist/engine/color-math.js";
+} from "../../dist/engine/color-math.js";
 
 describe("gamut", () => {
   test("every sRGB color is in the sRGB gamut and in P3", () => {

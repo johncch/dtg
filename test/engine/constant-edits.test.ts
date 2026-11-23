@@ -1,9 +1,9 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { formatColor } from "../dist/engine/color-math.js";
-import { applyEdits, readValue } from "../dist/engine/edit.js";
-import { resolveDefinition } from "../dist/engine/resolve.js";
-import { changesOf, editsOf, openFile, withEdit } from "../dist/engine/working-copy.js";
+import { formatColor } from "../../dist/engine/color-math.js";
+import { applyEdits, readValue } from "../../dist/engine/edit.js";
+import { resolveDefinition } from "../../dist/engine/resolve.js";
+import { changesOf, editsOf, openFile, withEdit } from "../../dist/engine/working-copy.js";
 
 const SRC = `dtg: 1
 palette:

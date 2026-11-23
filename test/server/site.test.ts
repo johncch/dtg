@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { appShell } from "../dist/server/app-shell.js";
+import { appShell } from "../../dist/server/app-shell.js";
 
 describe("the app's page", () => {
   test("served by dev, points at the bundle from the root", () => {

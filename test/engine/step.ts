@@ -1,6 +1,6 @@
-import type { Algorithm } from "../dist/engine/contract.js";
-import { parseParams } from "../dist/engine/params.js";
-import { orderOf, parseSelector, publicStepOf } from "../dist/engine/selector.js";
+import type { Algorithm } from "../../dist/engine/contract.js";
+import { parseParams } from "../../dist/engine/params.js";
+import { orderOf, parseSelector, publicStepOf } from "../../dist/engine/selector.js";
 
 /** One step of a system, the way the resolver produces it. */
 export function step(

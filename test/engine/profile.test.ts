@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { profileOf, resolveDefinition } from "../dist/engine/resolve.js";
-import { formatColor, hexToOklab } from "../dist/engine/color-math.js";
+import { profileOf, resolveDefinition } from "../../dist/engine/resolve.js";
+import { formatColor, hexToOklab } from "../../dist/engine/color-math.js";
 
 const systemOf = (yaml: string) => resolveDefinition(`dtg: 1\n${yaml}`).systems[0];
 const near = (a: number, b: number, within = 1e-4) => Math.abs(a - b) <= within;

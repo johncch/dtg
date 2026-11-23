@@ -1,5 +1,5 @@
 import { describe, test } from "node:test";
-import { cubicBezier, curveAt, type Ease } from "../dist/engine/curve-math.js";
+import { cubicBezier, curveAt, type Ease } from "../../dist/engine/curve-math.js";
 import assert from "node:assert/strict";
 import {
   alphaComposite,
@@ -7,13 +7,63 @@ import {
   convert,
   formatAuthored,
   formatColor,
+  hexToOklab,
   hexToRgb,
+  luminanceOf,
   NO_HUE_BELOW_CHROMA,
+  oklabToLinear,
+  oklabToOklch,
   parseColor,
   toOklab,
   oklabDeltaE,
   rgbToHex,
-} from "../dist/engine/color-math.js";
+  toneOf,
+} from "../../dist/engine/color-math.js";
+
+function assertClose(actual: readonly number[], expected: readonly number[], tolerance: number, label: string) {
+  actual.forEach((value, i) =>
+    assert.ok(Math.abs(value - expected[i]) <= tolerance, `${label}: got [${actual.join(", ")}], expected [${expected.join(", ")}]`),
+  );
+}
+
+describe("against published values", () => {
+  test("sRGB primaries in OKLab, as CSS Color 4 and Ottosson give them", () => {
+    assertClose(hexToOklab("#ff0000"), [0.62796, 0.22486, 0.12585], 1e-4, "red");
+    assertClose(hexToOklab("#00ff00"), [0.86644, -0.23389, 0.1795], 1e-4, "green");
+    assertClose(hexToOklab("#0000ff"), [0.45201, -0.03246, -0.31153], 1e-4, "blue");
+    assertClose(hexToOklab("#ffffff"), [1, 0, 0], 1e-4, "white");
+    assertClose(oklabToOklch(hexToOklab("#ff0000")), [0.62796, 0.25768, 29.2339], 1e-3, "red in oklch");
+  });
+
+  test("sRGB red in display-p3, as CSS Color 4 gives it", () => {
+    assertClose(convert(parseColor("#ff0000", "red"), "display-p3").coords, [0.9175, 0.2003, 0.1386], 1e-4, "red");
+  });
+
+  test("display-p3 primaries in linear sRGB follow the P3-to-sRGB matrix, unclamped", () => {
+    const linear = (css: string) => oklabToLinear(toOklab(parseColor(css, css)), "srgb");
+    assertClose(linear("color(display-p3 1 0 0)"), [1.2249, -0.042, -0.0197], 1e-3, "p3 red");
+    assertClose(linear("color(display-p3 0 1 0)"), [-0.2247, 1.0419, -0.0786], 1e-3, "p3 green");
+  });
+
+  test("WCAG relative luminance gives the published contrast ratios", () => {
+    const luminance = (hex: string) => luminanceOf(hexToOklab(hex));
+    const contrast = (a: string, b: string) => {
+      const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+      return (light + 0.05) / (dark + 0.05);
+    };
+    assertClose([contrast("#000000", "#ffffff")], [21], 1e-3, "black on white");
+    assertClose([contrast("#777777", "#ffffff")], [4.48], 5e-3, "#777 on white");
+  });
+
+  test("tone is CIE L*: #777 is mid gray and white is 100", () => {
+    assertClose([toneOf(hexToOklab("#777777"))], [50.03], 0.01, "#777");
+    assertClose([toneOf(hexToOklab("#ffffff"))], [100], 1e-3, "white");
+  });
+
+  test("CSS ease is cubic-bezier(0.25, 0.1, 0.25, 1), 0.8024 at the midpoint", () => {
+    assertClose([cubicBezier([0.25, 0.1, 0.25, 1], 0.5)], [0.8024], 1e-4, "ease(0.5)");
+  });
+});
 
 describe("color math", () => {
   test("hex round-trips through rgb", () => {

@@ -41,8 +41,8 @@
     "watch": "tsc --watch --preserveWatchOutput & vite build --watch",
     "dev": "tsc --watch --preserveWatchOutput & vite build --watch & node --watch dist/cli.js edit",
     "prepare": "tsc && vite build && node scripts/copy-examples.mjs",
-    "test": "tsc && node scripts/copy-examples.mjs && node --test --test-reporter=./test/reporter.mjs test/*.test.ts",
-    "test:spec": "tsc && node --test test/*.test.ts",
+    "test": "tsc && node scripts/copy-examples.mjs && node --test --test-reporter=./test/reporter.mjs 'test/**/*.test.ts'",
+    "test:spec": "tsc && node --test 'test/**/*.test.ts'",
     "release": "./scripts/release.sh"
   },
   "engines": {

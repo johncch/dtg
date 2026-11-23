@@ -39,7 +39,9 @@ Working notes:
   looks for one. An unnamed CSS output lands beside the definition, named
   after it (`colors.dtg.yaml` → `colors.generated.css`). Flags >
   `dtg.config.yaml` > defaults.
-- `pnpm test` builds, then runs `node --test` over `test/*.test.ts`. Tests
+- `pnpm test` builds, then runs `node --test` over `test/**/*.test.ts`.
+  `test/` mirrors `src/`: `test/engine/` for the engine, `test/server/`, and
+  the CLI and config at the top. Tests
   import from `dist/`, not `src/` — Node's type stripping does not remap a
   `.js` specifier onto a `.ts` file — so the script builds first and a stale
   artifact cannot give a false pass. Beyond that, verification is the dev

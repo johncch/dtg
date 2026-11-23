@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { compareStylesheets } from "../dist/engine/compare.js";
+import { compareStylesheets } from "../../dist/engine/compare.js";
 
 const OLD = `
 :root {

@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { changesOf, discard, editsOf, openFile, redo, undo, withEdit, withEdits, workingText } from "../dist/engine/working-copy.js";
-import { readValue } from "../dist/engine/edit.js";
+import { changesOf, discard, editsOf, openFile, redo, undo, withEdit, withEdits, workingText } from "../../dist/engine/working-copy.js";
+import { readValue } from "../../dist/engine/edit.js";
 
 const DISK = `dtg: 1
 palette:
