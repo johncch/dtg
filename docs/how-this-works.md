@@ -660,7 +660,17 @@ ESM TypeScript in `src/`, with explicit `.js` extensions on relative imports
 (NodeNext). `pnpm build` compiles to `dist/`; the `dtg` bin is `dist/cli.js`.
 Consumers run `dist/`, so rebuild after edits or they see stale code.
 
-- `cli.ts` — command dispatch and flag parsing for `edit`, `build` and `docs`.
+- `cli.ts` — command dispatch and flag parsing for `edit`, `build`, `docs`,
+  `compare` and `skill`.
+- `compare.ts` — `dtg compare`: an old stylesheet against the CSS the
+  definition builds, every `var()` followed to its color, mode by mode, by
+  OKLab ΔE. It reads just enough CSS for that (custom properties in plain
+  blocks, `.mode` and `[data-*]` selectors) and passes over `@supports` and
+  `@media`.
+- `skill/` (outside `src/`) — the guide `dtg skill` prints for coding agents,
+  and the Claude Code stub `dtg skill setup` writes. The guide covers what a
+  power user knows beyond the README, not the grammar; it is shipped in the
+  package, so an agent reads the version the project has installed.
 - `outputs.ts` — writing the configured outputs for a resolved definition.
   `build` calls it once, or on every change with `--watch`; `edit --build` calls
   it whenever the definition file changes. Outputs follow the file on disk,
