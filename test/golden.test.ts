@@ -2,7 +2,7 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { resolveDefinition } from "../dist/resolve.js";
-import { emitCss, emitDtcg } from "../dist/emit.js";
+import { emitCss, emitDtcg, emitTailwind } from "../dist/emit.js";
 
 // The property every refactor has to preserve: same definition, same bytes.
 // The fixture exercises every algorithm and every ref form, so a change that
@@ -13,12 +13,12 @@ const resolved = resolveDefinition(read("kitchen-sink.dtg.yaml"));
 
 describe("golden output", () => {
   test("CSS is byte-identical", () => {
-    assert.equal(emitCss(resolved, "css"), read("kitchen-sink.css"));
+    assert.equal(emitCss(resolved), read("kitchen-sink.css"));
   });
 
   test("tailwind CSS is byte-identical", () => {
     assert.equal(
-      emitCss(resolved, "tailwind"),
+      emitTailwind(resolved),
       read("kitchen-sink.tailwind.css"),
     );
   });
@@ -51,6 +51,6 @@ describe("golden output", () => {
 
   test("resolving twice gives identical bytes", () => {
     const again = resolveDefinition(read("kitchen-sink.dtg.yaml"));
-    assert.equal(emitCss(again, "css"), emitCss(resolved, "css"));
+    assert.equal(emitCss(again), emitCss(resolved));
   });
 });

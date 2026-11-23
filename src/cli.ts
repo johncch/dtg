@@ -134,7 +134,7 @@ if (command === "init") {
   try {
     const config = loadConfig({ definition: flagValue("--definition") });
     const resolved = resolveDefinition(readFileSync(config.definition, "utf8"), [], config.gamut);
-    const built = emitHostCss(resolved, hostCss(config).names, "nested");
+    const built = emitHostCss(resolved, { names: hostCss(config).names, modes: "nested" });
     console.log(formatComparison(compareStylesheets(readFileSync(stylesheet, "utf8"), built, resolved.modes), stylesheet));
     for (const warning of resolved.warnings) console.log(`  warning: ${warning}`);
   } catch (e) {

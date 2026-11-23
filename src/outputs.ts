@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { isOpaque } from "./color-math.js";
 import type { DtgConfig } from "./config.js";
-import { dtcgClipped, emitCss, emitDtcg, emitScss, emittedStatics } from "./emit.js";
+import { dtcgClipped, emitCss, emitDtcg, emitScss, emitTailwind, emittedStatics } from "./emit.js";
 import type { ResolvedDefinition } from "./resolve.js";
 
 /** Write every configured output for a resolved definition, and say what was written. */
@@ -15,9 +15,9 @@ export function writeOutputs(config: DtgConfig, resolved: ResolvedDefinition): v
     written.push(`${path} (${note})`);
   };
 
-  if (cssOut) write(cssOut, emitCss(resolved, "css", cssModes, definition), `css, ${cssModes} modes`);
+  if (cssOut) write(cssOut, emitCss(resolved, cssModes, definition), `css, ${cssModes} modes`);
   if (tailwindOut) {
-    write(tailwindOut, emitCss(resolved, "tailwind", tailwindModes, definition), `tailwind, ${tailwindModes} modes`);
+    write(tailwindOut, emitTailwind(resolved, tailwindModes, definition), `tailwind, ${tailwindModes} modes`);
   }
   if (scssOut) write(scssOut, emitScss(resolved, definition), "scss, flat");
   if (dtcgOut) {

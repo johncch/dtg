@@ -6,7 +6,7 @@ import {
   publicSystemName,
   resolveDefinition,
 } from "../dist/resolve.js";
-import { emitCss, emitDtcg } from "../dist/emit.js";
+import { emitCss, emitDtcg, emitTailwind } from "../dist/emit.js";
 import { readGradient, writeGradient } from "../dist/ref-functions.js";
 
 const BASE = `
@@ -135,7 +135,7 @@ roles:
 `);
     assert.deepEqual(r.systems[0].steps, []);
     assert.equal(r.statics[0].emitted, false);
-    const css = emitCss(r, "css");
+    const css = emitCss(r);
     assert.ok(css.includes("--d-veil: rgba(243, 246, 249, 0.4);"));
     assert.ok(!css.includes("--color-sky-3"));
     assert.ok(!css.includes("--color-quiet-mist"));
@@ -197,7 +197,7 @@ roles:
     bars: [gradient(paper 0% rose 10% repeat=true space=oklch angle=45deg)]
     veil: [transparent(d.spot 50)]
 `);
-    const css = emitCss(r, "css");
+    const css = emitCss(r);
     for (const line of [
       "--d-spot: radial-gradient(circle closest-side at 30% 20%, var(--paper), var(--rose) 80%);",
       "--d-glow: radial-gradient(ellipse farthest-corner at 50% 50%, var(--paper), var(--rose));",
@@ -255,7 +255,7 @@ ${roles}
       assert.equal(changed.repeat, true);
       assert.deepEqual(kept.stops.map((stop) => stop.position), [null, 60, null]);
       assert.deepEqual(kept.target, { kind: "gradient", of: { kind: "constant", name: "brand" } });
-      const css = emitCss(r, "css");
+      const css = emitCss(r);
       for (const line of [
         "--brand: repeating-radial-gradient(circle farthest-corner at 30% 50%, var(--paper), var(--rose) 60%, rgba(255, 0, 0, 0.2));",
         "--d-hero: var(--brand);",
@@ -272,7 +272,7 @@ ${roles}
     });
 
     test("in an emit: false group, emits with its colors once a role points at it", () => {
-      const css = emitCss(resolveDefinition(source("", "    fog: [quiet.haze, quiet.haze]")), "css");
+      const css = emitCss(resolveDefinition(source("", "    fog: [quiet.haze, quiet.haze]")));
       assert.ok(css.includes("--quiet-mist: #eeeeee;"));
       assert.ok(css.includes("--quiet-haze: linear-gradient(180deg, var(--quiet-mist), var(--paper));"));
       assert.ok(css.includes("--d-fog: var(--quiet-haze);"));
@@ -280,7 +280,7 @@ ${roles}
 
     test("is written for Tailwind and DTCG", () => {
       const r = resolveDefinition(source("  brand: gradient(paper rose angle=90deg)", "    hero: [brand, brand]"));
-      const tailwind = emitCss(r, "tailwind");
+      const tailwind = emitTailwind(r);
       assert.ok(tailwind.includes("@theme {\n  /* statics */\n  --color-paper: #ffffff;\n  --color-rose: #ff0000;\n}\n\n:root {\n  /* gradients */\n  --gradient-brand:"));
       assert.ok(tailwind.includes("@utility bg-brand {\n  background-image: var(--gradient-brand);\n}"));
       assert.ok(tailwind.includes("@utility bg-d-hero {\n  background-image: var(--d-hero);\n}"));
@@ -392,7 +392,7 @@ roles:
     ]);
     assert.deepEqual(veil.target, { kind: "transparent", of: { kind: "role", group: "d", role: "hero" }, alpha: 50 });
     assert.deepEqual(r.systems[0].steps, []);
-    const css = emitCss(r, "css");
+    const css = emitCss(r);
     assert.ok(css.includes("--d-veil: linear-gradient(45deg, rgba(255, 255, 255, 0.5), rgba(255, 0, 0, 0.5) 60%);"));
     assert.ok(css.includes("--d-haze: linear-gradient(180deg, rgba(255, 255, 255, 0.2), rgba(243, 246, 249, 0.2));"));
   });
@@ -407,7 +407,7 @@ s:
     assert.deepEqual(r.roles[0].perMode.map((entry) => entry.kind), ["gradient", "color"]);
     assert.deepEqual(r.roles[1].perMode.map((entry) => entry.kind), ["gradient", "color"]);
     assert.deepEqual(r.problems, [{ path: "d.hero", message: "A role must be all solid colors or all gradients." }]);
-    assert.throws(() => emitCss(r, "css"), /definition errors:\n- d\.hero: A role must be all solid colors or all gradients\./);
+    assert.throws(() => emitCss(r), /definition errors:\n- d\.hero: A role must be all solid colors or all gradients\./);
     assert.throws(() => emitDtcg(r), /A role must be all solid colors or all gradients/);
     assert.deepEqual(withRoles(`
 s:
@@ -441,7 +441,7 @@ roles:
     assert.deepEqual(r.warnings, []);
     assert.equal(r.roles[1].perMode[0].ref, "sky(3.0)");
     assert.deepEqual(r.roles[1].perMode[0].target, { kind: "step", system: "sky", selector: "3" });
-    const css = emitCss(r, "css");
+    const css = emitCss(r);
     assert.ok(css.includes("--sky-3: #123456;"));
     assert.ok(css.includes("--d-b: var(--sky-3);"));
     assert.ok(!css.includes("3_0"));
@@ -533,7 +533,7 @@ s:
   d:
     ink: ["#123456", "#654321"]
 `);
-    assert.match(emitCss(r, "css"), /--d-ink: #123456;/);
+    assert.match(emitCss(r), /--d-ink: #123456;/);
     const dtcg = emitDtcg(r) as { s: { d: { ink: { $value: { hex: string } } } } };
     assert.equal(dtcg.s.d.ink.$value.hex, "#123456");
   });
@@ -666,13 +666,13 @@ s:
     secondary: [gray.50, gray]
   echo: [label, label]
 `);
-    const css = emitCss(r, "css");
+    const css = emitCss(r);
     assert.ok(css.includes("--gray: #888888;"));
     assert.ok(css.includes("--gray-50: #fafafa;"));
     assert.ok(css.includes("--label: var(--gray);"));
     assert.ok(css.includes("--label-secondary: var(--gray-50);"));
     assert.ok(css.includes("--echo: var(--label);"));
-    assert.ok(emitCss(r, "tailwind").includes("--color-gray: #888888;"));
+    assert.ok(emitTailwind(r).includes("--color-gray: #888888;"));
     const dtcg = emitDtcg(r) as any;
     assert.equal(dtcg.s.label.$root.$value, "{systems.static.gray}");
     assert.equal(dtcg.s.echo.$value, "{s.label}");
@@ -701,9 +701,9 @@ s:
   d:
     r: [hues.red]
 `);
-    assert.ok(emitCss(r, "css").includes("--red: #ff0000;"));
-    assert.ok(emitCss(r, "css").includes("--d-r: var(--red);"));
-    assert.ok(emitCss(r, "tailwind").includes("--color-red: #ff0000;"));
+    assert.ok(emitCss(r).includes("--red: #ff0000;"));
+    assert.ok(emitCss(r).includes("--d-r: var(--red);"));
+    assert.ok(emitTailwind(r).includes("--color-red: #ff0000;"));
   });
 
   test("a virtual palette group cannot hide two colors under one name", () => {
@@ -799,7 +799,7 @@ scheme:
     const echo = resolved.roles.find((role) => role.role === "echo")!;
     assert.equal(echo.group, "");
     assert.deepEqual(echo.perMode[0].target, { kind: "role", group: "", role: "primary" });
-    const css = emitCss(resolved, "css");
+    const css = emitCss(resolved);
     assert.match(css, /--primary: var\(--ink\);/);
     assert.match(css, /--echo: var\(--primary\);/);
     assert.match(JSON.stringify(emitDtcg(resolved)), /"\{scheme\.primary\}"/);

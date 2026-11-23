@@ -418,7 +418,25 @@ export type ResolvedStatic = {
   emitted: boolean;
 };
 
-/** Joins a path for emitting, applying each segment's alias and dropping omitted ones. */
+/**
+ * Where a palette color or a role named `key` sits under `parent`: its
+ * segments, and the path refs and edits name it by. A `$root` is its group's
+ * own color, so it takes the group's path and adds a segment no name shows.
+ * Any other name starting with `$` is refused.
+ */
+function placeEntry(
+  parent: PathSegment[],
+  key: string,
+): { segments: PathSegment[]; path: string; root: boolean } | { error: string } {
+  const root = key === ROOT;
+  if (key.startsWith("$") && !(root && parent.length > 0)) {
+    return { error: root ? "`$root` is a group's own color, so it goes in a group" : "a name cannot start with $" };
+  }
+  const segments: PathSegment[] = [...parent, root ? { name: key, virtual: true } : { name: key }];
+  return { segments, path: (root ? parent : segments).map((seg) => seg.name).join("."), root };
+}
+
+/** A palette color's, system's or role's public name for a target: each segment's alias applied, virtual segments dropped. */
 export function publicPath(
   segments: PathSegment[],
   target: string,
@@ -624,18 +642,6 @@ export function publicSystemName(
   return publicPath(system.segments, target, sep);
 }
 
-/** The role's public path segments for a target, alias applied, omissions dropped. */
-export function publicRoleName(
-  role: ResolvedRole,
-  target: string,
-  separator: string,
-): string {
-  return role.segments
-    .filter((seg) => !seg.virtual)
-    .map((seg) => aliasedName(seg.alias, target, seg.name))
-    .join(separator);
-}
-
 const MODE_KEYS = ["extends", "scheme"];
 
 /**
@@ -829,13 +835,12 @@ export function resolveDefinition(
   function walkPalette(node: Record<string, unknown>, prefix: PathSegment[], emits: boolean) {
     for (const [key, raw] of Object.entries(node)) {
       if ((key === "alias" || key === "virtual" || key === "publish" || key === "emit" || key === "description") && prefix.length > 0) continue;
-      const root = key === ROOT;
-      if (key.startsWith("$") && !(root && prefix.length > 0)) {
-        errors.push(`palette "${[...prefix.map((seg) => seg.name), key].join(".")}": ${root ? "`$root` is a group's own color, so it goes in a group" : "a name cannot start with $"}`);
+      const placed = placeEntry(prefix, key);
+      if ("error" in placed) {
+        errors.push(`palette "${[...prefix.map((seg) => seg.name), key].join(".")}": ${placed.error}`);
         continue;
       }
-      const segments: PathSegment[] = [...prefix, root ? { name: key, virtual: true } : { name: key }];
-      const path = (root ? prefix : segments).map((seg) => seg.name).join(".");
+      const { segments, path } = placed;
       if (typeof raw === "string") paletteOrder.push(path);
       if (typeof raw === "string" && raw.startsWith("gradient(")) {
         writtenGradients.push({ path, segments, written: raw });
@@ -1119,13 +1124,12 @@ export function resolveDefinition(
     ): void => {
       for (const [name, raw] of Object.entries(node)) {
         if (name === "alias" || name === "virtual" || name === "description") continue;
-        const root = name === ROOT;
-        if (name.startsWith("$") && !(root && trail.length > 0)) {
-          errors.push(`${sectionName}.${[...trail.map((seg) => seg.name), name].join(".")}: ${root ? "`$root` is a group's own color, so it goes in a group" : "a name cannot start with $"}`);
+        const placed = placeEntry(trail, name);
+        if ("error" in placed) {
+          errors.push(`${sectionName}.${[...trail.map((seg) => seg.name), name].join(".")}: ${placed.error}`);
           continue;
         }
-        const segments: PathSegment[] = [...trail, root ? { name, virtual: true } : { name }];
-        const path = (root ? trail : segments).map((seg) => seg.name).join(".");
+        const { segments, path, root } = placed;
         const context = `${sectionName}.${path}`;
 
         let refs: (string | null)[] | undefined;
@@ -1680,7 +1684,7 @@ export function resolveDefinition(
         target === "figma"
           ? `${aliasedName(sections.find((s) => s.name === role.section)?.alias, target, role.section)}/`
           : "";
-      claim(scope + publicRoleName(role, target, target === "css" ? "-" : "/"), rolePath(role));
+      claim(scope + publicPath(role.segments, target, target === "css" ? "-" : "/"), rolePath(role));
     }
   }
 

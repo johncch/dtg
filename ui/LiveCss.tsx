@@ -16,7 +16,7 @@ const EMBEDDED = window.parent !== window;
  */
 export function LiveCss({ resolved, host }: { resolved: ResolvedDefinition; host: HostCss }) {
   // A definition with problems draws but is not written out, so the host keeps the CSS it last got.
-  const css = useMemo(() => (EMBEDDED && resolved.problems.length === 0 ? emitHostCss(resolved, host.names, host.modes) : null), [resolved, host]);
+  const css = useMemo(() => (EMBEDDED && resolved.problems.length === 0 ? emitHostCss(resolved, host) : null), [resolved, host]);
   const latest = useRef(css);
 
   useEffect(() => {

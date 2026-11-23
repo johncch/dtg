@@ -694,7 +694,7 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `resolve.ts` — the grammar lives here. YAML in, `ResolvedDefinition` out
   (systems with their steps, statics, collections, roles with a ref per mode,
   plus accumulated warnings). Public-name resolution is here too: `aliasedName`,
-  `publicSystemName`, `publicRoleName`.
+  `publicSystemName`.
 - `contract.ts` — the `Algorithm` interface.
 - `params.ts` — a system's params checked against what its algorithm declares,
   and parsed.

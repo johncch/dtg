@@ -1,6 +1,6 @@
 import { Download } from "lucide-react";
 import { useMemo, useState } from "react";
-import { emitCss, emitDtcg, emitScss } from "../src/emit.js";
+import { emitCss, emitDtcg, emitScss, emitTailwind } from "../src/emit.js";
 import type { ResolvedDefinition } from "../src/resolve.js";
 import type { Snapshot } from "../src/snapshot.js";
 import { Popup } from "./Popup.js";
@@ -17,7 +17,7 @@ const FORMATS: { format: Format; label: string; suffix: string }[] = [
 function emit(resolved: ResolvedDefinition, format: Format): string {
   if (format === "scss") return emitScss(resolved);
   if (format === "dtcg") return JSON.stringify(emitDtcg(resolved, "srgb"), null, 2) + "\n";
-  return emitCss(resolved, format, "nested");
+  return format === "tailwind" ? emitTailwind(resolved) : emitCss(resolved);
 }
 
 function definitionStem(path: string): string {

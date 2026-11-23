@@ -12,7 +12,6 @@ import {
   aliasedName,
   buildLineage,
   publicPath,
-  publicRoleName,
   publicSystemName,
   rolesUnder,
   type GradientStop,
@@ -74,12 +73,12 @@ function roleVarName(
   modes: ModeRendering,
   modeCount: number,
 ): string {
-  const name = publicRoleName(role, "css", "-");
+  const name = publicPath(role.segments, "css", "-");
   return modes === "flat" && modeCount > 1 ? `${mode}-${name}` : name;
 }
 
 function cssVarName(role: ResolvedRole): string {
-  return publicRoleName(role, "css", "-");
+  return publicPath(role.segments, "css", "-");
 }
 
 function parentModeIndex(
@@ -286,22 +285,34 @@ function generatedNote(source: string | undefined): [string, string] {
   ];
 }
 
+/** Custom properties in `:root`, every color named as the definition names it. */
 export function emitCss(
   resolved: ResolvedDefinition,
-  format: CssFormat = "css",
   modes: ModeRendering = "nested",
   /** The definition's path, as the project names it. */
   source?: string,
 ): string {
-  return writeCss(resolved, format, format === "tailwind", modes, source);
+  return writeCss(resolved, "css", false, modes, source);
 }
 
 /**
- * The CSS a page hosting the editor applies over its own: named as the
- * project's CSS output names it, but with no `@theme`, which a browser drops.
+ * CSS for a Tailwind v4 build: palette colors and steps in its theme
+ * namespaces inside `@theme`, and roles wired into utilities. Without
+ * `theme`, the same names go into `:root` and nothing is wired, which is
+ * what a page hosting the editor needs: a browser drops `@theme`.
  */
-export function emitHostCss(resolved: ResolvedDefinition, names: CssFormat, modes: ModeRendering): string {
-  return writeCss(resolved, names, false, modes, undefined);
+export function emitTailwind(
+  resolved: ResolvedDefinition,
+  modes: ModeRendering = "nested",
+  source?: string,
+  { theme = true }: { theme?: boolean } = {},
+): string {
+  return writeCss(resolved, "tailwind", theme, modes, source);
+}
+
+/** The CSS the editor hands a page hosting it, named as the project's own CSS output. */
+export function emitHostCss(resolved: ResolvedDefinition, host: HostCss): string {
+  return host.names === "tailwind" ? emitTailwind(resolved, host.modes, undefined, { theme: false }) : emitCss(resolved, host.modes);
 }
 
 function writeCss(
@@ -713,7 +724,7 @@ export function emitDtcg(
       $extensions: {
         [DTCG_NS]: {
           id: path,
-          name: publicRoleName(role, "figma", "/"),
+          name: publicPath(role.segments, "figma", "/"),
           modes: Object.fromEntries(
             resolved.modes.map((m, i) => [m, dtcgRef(resolved, role.perMode[i], colorSpace)]),
           ),

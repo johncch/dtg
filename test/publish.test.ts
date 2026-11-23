@@ -21,7 +21,7 @@ roles:
 `;
 
 describe("publish", () => {
-  const css = emitCss(resolveDefinition(SRC), "css");
+  const css = emitCss(resolveDefinition(SRC));
 
   test("false on a palette group keeps its colors as inputs", () => {
     assert.ok(!css.includes("--hues-sky"));
@@ -36,7 +36,7 @@ describe("publish", () => {
   });
 
   test("emit, its earlier spelling, means the same", () => {
-    assert.equal(emitCss(resolveDefinition(SRC.replaceAll("publish:", "emit:")), "css"), css);
+    assert.equal(emitCss(resolveDefinition(SRC.replaceAll("publish:", "emit:"))), css);
   });
 
   test("written beside emit is an error", () => {
