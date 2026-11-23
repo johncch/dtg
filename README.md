@@ -55,6 +55,7 @@ dtg edit  [--port <n>] [--build]                  # open the editor; offers setu
 dtg build [--watch]                               # write the configured outputs
 dtg docs  --out <dir> [--editable]                # the editor as static files
 dtg compare <stylesheet>                          # what moved against what build writes
+dtg skill [setup]                                 # the guide for coding agents
 ```
 
 `dtg compare` is for moving an existing stylesheet onto dtg. It reads both,
@@ -427,6 +428,21 @@ use them as they are, or modify them to your needs:
 - `material`: Material 3's color scheme as `tone` systems, with contrast held
   per tone.
   [Source.](https://github.com/johncch/dtg/blob/main/examples/material.dtg.yaml)
+
+## Coding agents
+
+dtg ships a guide for coding agents: how to convert an existing color system,
+what the names will be, and when to hand a decision back to you. Install it
+as a Claude Code skill in your project:
+
+```sh
+npx dtg skill setup
+```
+
+That writes `.claude/skills/dtg/SKILL.md`, a few lines that tell the agent to
+run `npx @fifthrevision/dtg skill` and follow what it prints, so the guide
+always matches the dtg your project has installed. `npx dtg skill` prints it
+for any other agent.
 
 ## Share the editor
 

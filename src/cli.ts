@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
 import { createInterface } from "node:readline/promises";
 import {
   defaultDefinitionPath,
@@ -109,6 +110,25 @@ if (command === "init") {
   console.log(`${await setUp()} — \`dtg edit\` opens it`);
 } else if (command === "emit") {
   fail("`dtg emit` is now `dtg build` — the same flags, the same outputs");
+} else if (command === "skill") {
+  const sub = args[1] ?? "show";
+  const skillFile = (name: string) => readFileSync(new URL(`../skill/${name}`, import.meta.url), "utf8");
+  if (sub === "show") {
+    process.stdout.write(skillFile("guide.md"));
+  } else if (sub === "setup") {
+    const target = ".claude/skills/dtg/SKILL.md";
+    const stub = skillFile("SKILL.md");
+    if (existsSync(target)) {
+      if (readFileSync(target, "utf8") !== stub) fail(`${target} is already here and differs — remove it to set up again`);
+      console.log(`${target} is already set up`);
+    } else {
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, stub);
+      console.log(`wrote ${target} — Claude Code in this project now reads dtg's guide when it works on colors`);
+    }
+  } else {
+    fail(`skill: unknown "${sub}" (known: show, setup)`);
+  }
 } else if (command === "compare") {
   const stylesheet = args[1] != null && !args[1].startsWith("--") ? args[1] : fail("compare: name the stylesheet, as `dtg compare <file>`");
   try {
@@ -204,6 +224,8 @@ commands
   docs      write a copy of the editor as static files, to publish
   compare   compare a stylesheet with what build would write: every color,
             in every mode, with var() chains followed
+  skill     print the guide dtg gives coding agents; \`skill setup\` installs
+            it as a Claude Code skill in this project
 
 init
   --definition <file>         where to put the definition (asked otherwise)

@@ -33,6 +33,7 @@
   },
   "files": [
     "dist",
+    "skill",
     "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
