@@ -7,6 +7,11 @@ This guide is what a power user knows on top of the README; for the grammar
 itself, read `node_modules/@fifthrevision/dtg/README.md`, and for flags,
 `npx dtg --help`.
 
+Sections: How to work · Names · Converting an existing color system ·
+Modes · Algorithms and tuning · Contrast across modes · Translucency ·
+Roles that stay maintainable · Keeping public names stable · Gradients,
+wide gamut, sharing. Read How to work and Names, then the one your task is.
+
 ## How to work
 
 - Find the definition through `dtg.config.yaml` (`definitions:`). There is no
@@ -32,6 +37,9 @@ itself, read `node_modules/@fifthrevision/dtg/README.md`, and for flags,
   page that shows it: a system's page for a ramp, a collection's page for
   roles side by side across modes. Don't call a palette or ramp good from
   the numbers alone.
+- When the person can't be asked, do what leaves the output the same or what
+  they asked for exactly, and end with each decision you left open: what you
+  would show them in the editor, and the question.
 
 ## Names
 
@@ -164,3 +172,148 @@ should leave nothing you can't explain. Every difference falls into one of:
 
 Anything else is a defect in the definition. Show the person the system
 pages before calling the conversion done.
+
+## Modes: dark, high contrast, themes
+
+- A mode with no `extends` names every color. A mode that `extends` another
+  says only what differs: the role's list may stop early, and `~` holds the
+  place of a mode that says nothing. `dark-hc: { extends: dark }` plus
+  `border: [sky(12), night(16), night(40)]` changes only the border in
+  `dark-hc`; every role that doesn't mention it takes dark's ref.
+- An extending mode copies the ref, not the color, and resolves it again in
+  its own mode. So repointing one role in `dark-hc` moves every role that
+  points at it there too. Use that: point roles at roles (`raised:
+  [surface.card, ...]`) so a variant mode overrides a handful of roots.
+- Set `scheme: light | dark` on every root mode. That needs the map form;
+  `modes: [light, dark]` becomes `modes: { light: { scheme: light }, dark:
+  { scheme: dark } }`, with the same order. It becomes `color-scheme`
+  in the CSS, so form controls and scrollbars match, and the editor picks its
+  background from it. It's never read off the mode's name.
+- In the CSS the first mode is `:root` and every other mode is a class
+  (`.dark`), which also selects its extending modes (`.dark, .dark-hc`). What
+  puts `.dark` on the page is the app's job. If the app switches by
+  `[data-theme]` or a media query, either change the app or use
+  `modes: flat` on the output and map the variables yourself.
+- A mode is for colors one page switches between at runtime. A brand or
+  theme that ships as its own build, with different anchors but the same
+  roles, is better as its own definition built separately
+  (`dtg build --definition brand-b.dtg.yaml --css ...`); a definition holds one
+  set of systems, and modes only change which refs roles take.
+
+## Algorithms and tuning
+
+The README says what each does; this is how to steer them.
+
+- `tint`: the step is the ink's percent over the base, so the number reads
+  as the recipe (`sky(12)` is 12% ink). Retune the whole ramp by moving
+  `base` or `tint`; move one use by changing the number in the role. Steps
+  can be fractional (`sky(3.5)`).
+- `curve`: change the anchor to recolor a ramp, keep the shape. Shape lives in
+  `lightness`, `chroma` and `hue` curves; edit them by dragging in the editor,
+  where every step redraws live, rather than by guessing numbers. Shared
+  shapes go in `defaults: { curve: { lightness: ... } }`, so every hue moves
+  together and each system is just `anchor:`.
+- `overlay`: one color at an opacity, never flattened. For shadows and
+  scrims, over things you can't predict.
+- `tone`: the step is lightness itself (CIELAB L*), so the same step is
+  equally light in every palette. Reach for it when contrast has to hold
+  across hues; see below.
+- `scale`: a base at 500 between two end colors you pick; `midpoint` bends
+  it. For when the ends are the point.
+- `overrides` pin a flattened step to an exact color; the recipe still
+  drives every other step. More than a couple per system means the params
+  are wrong.
+- `publish: [50, 500, 950]` on a system publishes steps no role uses yet,
+  for an app that reads the ramp directly.
+
+## Contrast across modes
+
+dtg doesn't check contrast, so check pairs that carry text yourself: compute
+the WCAG ratio, `(L1 + 0.05) / (L2 + 0.05)` from relative luminance, on the
+built values in every mode (build to a scratch path and follow the `var()`s).
+Body text wants 4.5:1, large text and icons 3:1.
+
+- Which pairs: every text and icon role against every surface role it can
+  sit on, in every mode. Borders that are the only edge of a control want 3:1
+  too.
+- When one fails, move the role to a step that passes: the next step of the
+  same palette group or system, before adding a new color. Say what moved; a
+  heavier muted text is a design change the person should see.
+- With `tint` on a known ground, contrast follows the percent: a label at
+  `sky(62)` over a canvas at `sky(3)` is the same pair whatever else moves.
+  Pick label steps by checking them against the surface they sit on, in each
+  mode, and keep the dark ramp's numbers mirroring the light one's.
+- `tone` makes contrast a property of the step: tone 40 is about 6.5:1
+  against white and tone 50 about 4.5:1, for any hue. Material's example
+  (`npx dtg init --from material`) pairs `primary(40)` with `on-primary`
+  `primary(100)`, and `primary(80)` with `primary(20)` in dark, so swapping
+  the source color can't break a pair.
+- Translucent colors have no contrast of their own; check them flattened
+  over the surface they sit on.
+
+## Translucency
+
+Four ways, and they mean different things. An overlay meant to work on any
+background is still one per mode: dark ink over light grounds, light ink
+over dark ones (`[transparent(black 10), transparent(white 12)]`).
+
+- `sky(15)`: flattened. A solid color, 15% ink over the ramp's base. Right
+  when the ground is known: surfaces, separators, text.
+- `sky(15 tint)`: the same ink at 15% opacity, not flattened. Right for
+  something that sits on top of other colors, like a hover state, and that
+  should look like `sky(15)` where it lands on the base. Twins are written
+  as sibling roles (`hover`, `hover-flat`).
+- `shadow(40)` from an `overlay` system: a named family of opacities of one
+  color. Right for shadows and scrims, published together.
+- `transparent(white 70)`: any color at an opacity, written out as a value.
+  It doesn't publish what it wraps, and it multiplies an alpha the color
+  already has. Right for one-off veils, for fading a gradient, and for any
+  of the above in a project with no systems yet.
+
+## Roles that stay maintainable
+
+- Name a role for its use (`surface.card`, `label.secondary`), never its
+  look (`gray-light`). Collections and groups are free; split by use.
+- Point roles at roles when one is defined in terms of another
+  (`floating: [surface.card, night(6)]`), so a change lands once.
+- A literal in a role is fine once. Written twice, it wants a name.
+- When several roles read from one family of colors, that family is a system
+  trying to be born: move it into one and point the roles at its steps.
+- Use `description` on a role, group or system for anything a reader needs
+  that the name doesn't say; DTCG carries it to Figma.
+- After any restructuring, `dtg compare` the generated file: same colors,
+  same names.
+
+## Keeping public names stable
+
+- Renaming in the editor rewrites every ref to the renamed color, role or
+  system in one step. By hand, rename the key and every ref yourself; the
+  build fails on any you miss.
+- A rename changes the published name. To change the internal name and keep
+  the public one, add `alias: <old name>` to it; to drop a segment from every
+  name below it, `omit: true`.
+- Steps appear and disappear with demand: a step nothing points at stops
+  being published. If the app reads a step directly, list it in the system's
+  `publish`.
+- DTCG gives every color an id that survives renames, so Figma syncs rename
+  variables instead of making new ones. Say what changed in the definition's
+  `changelog` (`- 2026-11-20: renamed surface.base to surface.canvas`); it
+  travels with the DTCG file to whoever syncs it.
+
+## Gradients, wide gamut, sharing
+
+- A gradient used in more than one place goes in the palette by name
+  (`dawn: gradient(hues.brand 0% white 100% angle=180deg)`); a role restyles
+  it with `gradient(dawn angle=135deg)`. A role that is a gradient must be
+  one in every mode. In `tailwind` output a gradient role gets a
+  `bg-<role>` class, not a color utility.
+- Colors past sRGB are written twice in CSS: mapped into sRGB, then again at
+  full strength in an `@supports` block. `gamut` in the config is the
+  widest the project means to use; past it, the build warns. DTCG writes one
+  color space (`outputs.dtcg.colorSpace`), which must match the Figma file's.
+- `npx dtg docs --out <dir>` writes the editor as static files, for showing
+  the system to someone without dtg; `--editable` lets them try changes in
+  their browser.
+- For Figma, build a `dtcg` output and sync from it; the file's
+  `$extensions` tell an agent how. The Figma document's color profile has to
+  be set by hand to match first.
