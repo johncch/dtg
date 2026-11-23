@@ -11,14 +11,18 @@ task: |
      and `git diff <tag>..HEAD --stat` for what they touched. Read files
      where a commit message is too thin to say what changed for a user.
   3. Read CHANGELOG.md.
-  4. If it has a `## Unreleased` section, keep every line of it, add what
-     is missing, and retitle it. Otherwise write a new section. Either way
-     the section goes right after the `# Changelog` heading.
+  4. If it has a `## Unreleased` section, keep every line of it, add any
+     larger change it is missing, and retitle it. Otherwise write a new
+     section. Either way the section goes right after the `# Changelog`
+     heading.
 
   Rules:
   - The heading is `## [{{version}}] - {{date}}`.
+  - Only larger changes get a bullet: new capabilities, and changes someone
+    on the previous version has to act on. Skip tweaks, polish and bug
+    fixes, even ones a user would notice.
   - Bullets say what changed for someone using the previous version, not
-    how. Skip commits that change nothing a user sees.
+    how.
   - American English. No em dashes.
 
 tools:

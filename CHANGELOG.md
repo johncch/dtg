@@ -19,19 +19,6 @@
     it there, and Reset to defaults or Reset to built-in removes the system's
     own value.
   - The steps table marks a step listed in `publish` as `publish`.
-- A name is renamed with a single click, where it took a double click. In a
-  palette's Grid and Strip the whole highlighted name opens it, not only its
-  text, and the field is wide enough to show the color's group, so retyping
-  the name no longer moves it out of the group by accident.
-- `dtg init`'s starter is a fuller definition: five hues as `curve` scales,
-  neutrals for light and dark, and two collections of roles with gradients and
-  `transparent()`. It is `examples/showcase.dtg.yaml` in the repository.
-- A collection's roles table lists the roles in no group first, above its
-  groups, as a palette lists its colors.
-- Dragging a color on the palette's hue and chroma disk or in its 3D view, or
-  double-clicking the disk to add one, keeps it inside the project's `gamut`,
-  as the picker does: chroma stops where the gamut does at that lightness and
-  hue. A color typed in is still kept as written, with a warning.
 - `scale`'s `midpoint` and `hueShift` can each be a pair, `[light, dark]`, to
   shape the two halves of the ramp apart; one number still means both. The
   editor always shows both ends and writes the shortest form.
