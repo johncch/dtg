@@ -94,6 +94,8 @@ export type Comparison = {
   onlyAfter: string[];
   /** Selectors in the old stylesheet that name no mode of the definition. */
   unplaced: string[];
+  /** Modes the definition has and the old stylesheet doesn't, left out of the comparison. */
+  newModes: string[];
 };
 
 const SAME_BELOW = 5e-5;
@@ -114,10 +116,12 @@ export function compareStylesheets(before: string, after: string, modes: string[
   const beforeNames = declared(beforeBlocks);
   const afterNames = declared(afterBlocks);
 
+  const placed = new Set(beforeBlocks.flatMap((block) => block.selectors.map(modeOf)));
+  const compared = modes.filter((mode, i) => i === 0 || placed.has(mode));
   const moved: Moved[] = [];
   const differing: Comparison["differing"] = [];
   const isColorBefore = new Set<string>();
-  modes.forEach((mode) => {
+  compared.forEach((mode) => {
     const old = valuesIn(beforeBlocks, mode);
     const built = valuesIn(afterBlocks, mode);
     for (const name of beforeNames) {
@@ -140,7 +144,8 @@ export function compareStylesheets(before: string, after: string, modes: string[
   });
   moved.sort((x, y) => y.deltaE - x.deltaE || x.name.localeCompare(y.name));
   return {
-    modes,
+    modes: compared,
+    newModes: modes.filter((mode) => !compared.includes(mode)),
     shared: [...beforeNames].filter((name) => afterNames.has(name)).length,
     moved,
     differing,
@@ -163,6 +168,9 @@ export function formatComparison(comparison: Comparison, beforeName: string): st
   if (onlyBefore.length > 0) lines.push(`  ${onlyBefore.length} colors only in ${beforeName}: ${list(onlyBefore)}`);
   if (onlyAfter.length > 0) lines.push(`  ${onlyAfter.length} only in dtg's: ${list(onlyAfter)}`);
   if (unplaced.length > 0) lines.push(`  not compared, naming no mode: ${unplaced.join(", ")}`);
+  if (comparison.newModes.length > 0) {
+    lines.push(`  not compared, no such mode in ${beforeName}: ${comparison.newModes.join(", ")}`);
+  }
   if (moved.length > 0) {
     lines.push("", "moved (OKLab ΔE; about 0.02 is just noticeable)");
     const width = Math.max(...moved.map((m) => m.name.length));

@@ -47,4 +47,11 @@ describe("compare", () => {
     assert.deepEqual(c.onlyAfter, ["--gray-55"]);
     assert.deepEqual(c.unplaced, ['[dir="rtl"]']);
   });
+
+  test("leaves out a mode the old stylesheet doesn't have", () => {
+    const c = compareStylesheets(OLD, BUILT + ".dark-hc { --text-muted: #ffffff; }", ["light", "dark", "dark-hc"]);
+    assert.deepEqual(c.modes, ["light", "dark"]);
+    assert.deepEqual(c.newModes, ["dark-hc"]);
+    assert.ok(!c.moved.some((m) => m.mode === "dark-hc"));
+  });
 });
