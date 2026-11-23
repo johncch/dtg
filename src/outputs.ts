@@ -37,7 +37,7 @@ export function writeOutputs(config: DtgConfig, resolved: ResolvedDefinition): v
       ? `${resolved.roles.length} roles × ${resolved.modes.length} modes`
       : `${resolved.roles.length} roles`;
   console.log(
-    `${new Date().toLocaleTimeString()}  ${tokenCount} primitives + ${emittedStatics(resolved).length} statics, ${roles}`,
+    `${new Date().toLocaleTimeString()}  ${tokenCount} steps + ${emittedStatics(resolved).length} palette colors, ${roles}`,
   );
   for (const w of written) console.log(`  → ${w}`);
 
