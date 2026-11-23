@@ -1,5 +1,5 @@
-import type { Edit } from "../src/edit.js";
-import type { SnapshotSystem } from "../src/snapshot.js";
+import type { Edit } from "../src/engine/edit.js";
+import type { SnapshotSystem } from "../src/engine/snapshot.js";
 
 /** The system's `publish` list set to `selectors`: one that is only a number is written as a number. */
 export function emitEdit(system: SnapshotSystem, selectors: string[]): Edit {

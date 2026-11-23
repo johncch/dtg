@@ -1,13 +1,13 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { formatColor, isOpaque, parseColor } from "../dist/color-math.js";
+import { formatColor, isOpaque, parseColor } from "../dist/engine/color-math.js";
 import {
   publicPath,
   publicSystemName,
   resolveDefinition,
-} from "../dist/resolve.js";
-import { emitCss, emitDtcg, emitTailwind } from "../dist/emit.js";
-import { readGradient, writeGradient } from "../dist/ref-functions.js";
+} from "../dist/engine/resolve.js";
+import { emitCss, emitDtcg, emitTailwind } from "../dist/engine/emit.js";
+import { readGradient, writeGradient } from "../dist/engine/ref-functions.js";
 
 const BASE = `
 dtg: 1

@@ -1,6 +1,6 @@
 import { Fragment } from "react";
-import type { SnapshotUse } from "../src/snapshot.js";
-import { rolePath } from "../src/selector.js";
+import type { SnapshotUse } from "../src/engine/snapshot.js";
+import { rolePath } from "../src/engine/selector.js";
 import { Link } from "./router.js";
 
 export function UsedBy({ uses }: { uses: SnapshotUse[] }) {

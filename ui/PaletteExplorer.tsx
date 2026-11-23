@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   colorFromOklab, formatAuthored, HEX_SPACE, inGamut, maxChroma, NO_HUE_BELOW_CHROMA,
   oklabToOklch, oklchToOklab, toOklab, type Oklch,
-} from "../src/color-math.js";
-import type { Edit } from "../src/edit.js";
+} from "../src/engine/color-math.js";
+import type { Edit } from "../src/engine/edit.js";
 import { EDITABLE } from "./mode.js";
 import { useProjectGamut } from "./gamut.js";
 import { useTrying } from "./preview.js";

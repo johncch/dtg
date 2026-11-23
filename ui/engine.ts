@@ -1,10 +1,10 @@
-import type { Color, Gamut } from "../src/color-math.js";
-import type { DevState } from "../src/dev-state.js";
-import { applyEdits, type Edit } from "../src/edit.js";
-import { buildLineage, resolveDefinition, type Lineage, type ResolvedDefinition } from "../src/resolve.js";
-import { overridesAfterChanges } from "../src/dev-settings.js";
-import { backgroundProbes, buildSnapshot, type Snapshot } from "../src/snapshot.js";
-import { changesOf, workingText } from "../src/working-copy.js";
+import type { Color, Gamut } from "../src/engine/color-math.js";
+import type { DevState } from "../src/server/dev-state.js";
+import { applyEdits, type Edit } from "../src/engine/edit.js";
+import { buildLineage, resolveDefinition, type Lineage, type ResolvedDefinition } from "../src/engine/resolve.js";
+import { overridesAfterChanges } from "../src/engine/dev-settings.js";
+import { backgroundProbes, buildSnapshot, type Snapshot } from "../src/engine/snapshot.js";
+import { changesOf, workingText } from "../src/engine/working-copy.js";
 
 /** A working copy that resolved, kept to draw from while a later one does not. */
 export type Resolved = { resolved: ResolvedDefinition; lineage: Lineage };

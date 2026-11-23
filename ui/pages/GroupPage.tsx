@@ -1,14 +1,14 @@
 import { Fragment, useMemo, type ReactNode } from "react";
-import { throughTransparent, type RefTarget } from "../../src/resolve.js";
-import type { Snapshot, SnapshotRole } from "../../src/snapshot.js";
-import type { EditTarget } from "../../src/edit.js";
+import { throughTransparent, type RefTarget } from "../../src/engine/resolve.js";
+import type { Snapshot, SnapshotRole } from "../../src/engine/snapshot.js";
+import type { EditTarget } from "../../src/engine/edit.js";
 import { ColorChip } from "../ColorChip.js";
 import { ControlsCell, ControlsHead, entryRowProps } from "../EntryRow.js";
 import { NewRoleRow, RoleDuplicate, RoleGrip, roleUsers, RoleGroupName, RoleName, RoleRemove, roleRowGroup } from "../RoleNaming.js";
 import { Link, useScrollToHash } from "../router.js";
 import { CollectionSettings } from "../CollectionNaming.js";
 import { EDITABLE } from "../mode.js";
-import { INHERIT, rolePath } from "../../src/selector.js";
+import { INHERIT, rolePath } from "../../src/engine/selector.js";
 import { stepAnchor } from "../Strip.js";
 import { constantAnchor } from "../ConstantRow.js";
 

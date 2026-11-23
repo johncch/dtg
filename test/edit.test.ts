@@ -1,8 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { applyEdits, readValue } from "../dist/edit.js";
-import { resolveDefinition } from "../dist/resolve.js";
-import { formatAuthored, formatColor, oklchToOklab } from "../dist/color-math.js";
+import { applyEdits, readValue } from "../dist/engine/edit.js";
+import { resolveDefinition } from "../dist/engine/resolve.js";
+import { formatAuthored, formatColor, oklchToOklab } from "../dist/engine/color-math.js";
 
 const SRC = `# the palette
 dtg: 1

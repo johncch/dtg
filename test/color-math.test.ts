@@ -1,5 +1,5 @@
 import { describe, test } from "node:test";
-import { cubicBezier, curveAt, type Ease } from "../dist/curve-math.js";
+import { cubicBezier, curveAt, type Ease } from "../dist/engine/curve-math.js";
 import assert from "node:assert/strict";
 import {
   alphaComposite,
@@ -13,7 +13,7 @@ import {
   toOklab,
   oklabDeltaE,
   rgbToHex,
-} from "../dist/color-math.js";
+} from "../dist/engine/color-math.js";
 
 describe("color math", () => {
   test("hex round-trips through rgb", () => {

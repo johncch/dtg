@@ -11,9 +11,9 @@ import {
   rgbToHex,
   toOklab,
   type Color,
-} from "../src/color-math.js";
-import { gradientCss, stopPositions } from "../src/emit.js";
-import type { ResolvedGradientRef } from "../src/resolve.js";
+} from "../src/engine/color-math.js";
+import { gradientCss, stopPositions } from "../src/engine/emit.js";
+import type { ResolvedGradientRef } from "../src/engine/resolve.js";
 import { useColorName } from "./names.js";
 import { isGradient, paintCss, paintIsOpaque, type Paint } from "./paint.js";
 

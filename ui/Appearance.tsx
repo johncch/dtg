@@ -1,7 +1,7 @@
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
-import { parseColor, toOklab, type Color } from "../src/color-math.js";
-import type { SnapshotBackground } from "../src/snapshot.js";
+import { parseColor, toOklab, type Color } from "../src/engine/color-math.js";
+import type { SnapshotBackground } from "../src/engine/snapshot.js";
 import { paintCss } from "./paint.js";
 import { Popup } from "./Popup.js";
 

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
-import { emitHostCss, type HostCss } from "../src/emit.js";
-import type { ResolvedDefinition } from "../src/resolve.js";
+import { emitHostCss, type HostCss } from "../src/engine/emit.js";
+import type { ResolvedDefinition } from "../src/engine/resolve.js";
 
 const EMBEDDED = window.parent !== window;
 

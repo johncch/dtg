@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { Edit, EditTarget } from "../src/edit.js";
+import type { Edit, EditTarget } from "../src/engine/edit.js";
 import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { ParamScopeControl, unlinkEdit, type ParamScope } from "./ParamScope.js";

@@ -1,4 +1,4 @@
-import type { AppMode } from "../src/app-shell.js";
+import type { AppMode } from "../src/server/app-shell.js";
 
 /**
  * Served by `dtg edit`, with the API behind it, or a static copy written by

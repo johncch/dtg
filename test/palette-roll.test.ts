@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { hexToOklab, inGamut, oklabToOklch } from "../dist/color-math.js";
-import { addToPalette, harmonizePalette, rollPalette, type RollColor } from "../dist/palette-roll.js";
+import { hexToOklab, inGamut, oklabToOklch } from "../dist/engine/color-math.js";
+import { addToPalette, harmonizePalette, rollPalette, type RollColor } from "../dist/engine/palette-roll.js";
 
 /** A repeatable stand-in for Math.random. */
 function seeded(seed = 1) {

@@ -1,6 +1,6 @@
 import { CircleOff } from "lucide-react";
-import type { CssFormat } from "../src/emit.js";
-import type { SnapshotConstant, SnapshotGradient } from "../src/snapshot.js";
+import type { CssFormat } from "../src/engine/emit.js";
+import type { SnapshotConstant, SnapshotGradient } from "../src/engine/snapshot.js";
 import { Hint } from "./Hint.js";
 import { isGradient, type Paint } from "./paint.js";
 

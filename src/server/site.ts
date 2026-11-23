@@ -2,12 +2,12 @@ import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { appShell } from "./app-shell.js";
-import type { Gamut } from "./color-math.js";
-import { readBackgroundOverrides } from "./dev-settings.js";
+import type { Gamut } from "../engine/color-math.js";
+import { readBackgroundOverrides } from "../engine/dev-settings.js";
 import type { DevState } from "./dev-state.js";
-import type { HostCss } from "./emit.js";
-import { resolveDefinition } from "./resolve.js";
-import { openFile } from "./working-copy.js";
+import type { HostCss } from "../engine/emit.js";
+import { resolveDefinition } from "../engine/resolve.js";
+import { openFile } from "../engine/working-copy.js";
 
 /**
  * A copy of the browsing app as plain files: the page, the bundle, and the
@@ -39,7 +39,7 @@ export function writeSite(
     backgroundOverrides,
     hostCss,
   };
-  const bundle = fileURLToPath(new URL("./ui", import.meta.url));
+  const bundle = fileURLToPath(new URL("../ui", import.meta.url));
   if (!existsSync(join(bundle, "dtg-ui.js"))) throw new Error(`no editor bundle at ${bundle} — run the build first`);
 
   mkdirSync(outDir, { recursive: true });

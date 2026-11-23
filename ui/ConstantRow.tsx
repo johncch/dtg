@@ -1,11 +1,11 @@
 import { Fragment, type ReactNode } from "react";
-import type { ConstantTarget } from "../src/edit.js";
-import type { SnapshotConstant } from "../src/snapshot.js";
+import type { ConstantTarget } from "../src/engine/edit.js";
+import type { SnapshotConstant } from "../src/engine/snapshot.js";
 import { useCssNames } from "./css-names.js";
 import { NO_LOCK, NotAColor, paletteVariable, type PaletteRow } from "./PaletteEntries.js";
 import { isGradient } from "./paint.js";
 import { ColorChip } from "./ColorChip.js";
-import { rolePath } from "../src/selector.js";
+import { rolePath } from "../src/engine/selector.js";
 import { ControlsCell, ControlsHead, copyName, EntryDuplicate, EntryGrip, EntryName, EntryRemove, entryRowProps, groupOf, nameOf, openNameOf, pathProblem } from "./EntryRow.js";
 import { Hint } from "./Hint.js";
 import { LockIcon } from "./LockIcon.js";

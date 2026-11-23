@@ -1,8 +1,8 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resolveDefinition } from "../dist/resolve.js";
-import { emitCss, emitDtcg, emitTailwind } from "../dist/emit.js";
+import { resolveDefinition } from "../dist/engine/resolve.js";
+import { emitCss, emitDtcg, emitTailwind } from "../dist/engine/emit.js";
 
 // The property every refactor has to preserve: same definition, same bytes.
 // The fixture exercises every algorithm and every ref form, so a change that

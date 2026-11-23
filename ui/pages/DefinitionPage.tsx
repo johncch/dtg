@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { parseColor } from "../../src/color-math.js";
-import type { SnapshotDefinition } from "../../src/snapshot.js";
+import { parseColor } from "../../src/engine/color-math.js";
+import type { SnapshotDefinition } from "../../src/engine/snapshot.js";
 import { paintCss } from "../paint.js";
 
 export function DefinitionPage({ definition, warnings }: { definition: SnapshotDefinition; warnings: string[] }) {

@@ -1,10 +1,10 @@
 import { Info, Link } from "lucide-react";
 import { useEffect, useState } from "react";
-import { parseColor, type Color } from "../../src/color-math.js";
-import { readValue } from "../../src/edit.js";
-import type { BackgroundOverrides } from "../../src/dev-settings.js";
-import { rolePath } from "../../src/selector.js";
-import type { Snapshot, SnapshotMode } from "../../src/snapshot.js";
+import { parseColor, type Color } from "../../src/engine/color-math.js";
+import { readValue } from "../../src/engine/edit.js";
+import type { BackgroundOverrides } from "../../src/engine/dev-settings.js";
+import { rolePath } from "../../src/engine/selector.js";
+import type { Snapshot, SnapshotMode } from "../../src/engine/snapshot.js";
 import { ColorTip } from "../ColorTip.js";
 import { probeOf } from "../engine.js";
 import { useProjectGamut } from "../gamut.js";

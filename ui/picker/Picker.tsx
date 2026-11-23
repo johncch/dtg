@@ -12,7 +12,7 @@ import {
   toOklab,
   type Gamut,
   type Oklch,
-} from "../../src/color-math.js";
+} from "../../src/engine/color-math.js";
 import { isExactIn, NOTATIONS, type Box, type Notation, type NotationId } from "./notations.js";
 import { Hint } from "../Hint.js";
 

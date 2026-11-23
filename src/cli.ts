@@ -10,13 +10,13 @@ import {
   writeStarter,
   type Start,
 } from "./config.js";
-import { compareStylesheets, formatComparison } from "./compare.js";
-import { startDevServer } from "./dev-server.js";
-import { emitHostCss } from "./emit.js";
+import { compareStylesheets, formatComparison } from "./engine/compare.js";
+import { startDevServer } from "./server/dev-server.js";
+import { emitHostCss } from "./engine/emit.js";
 import { writeOutputs } from "./outputs.js";
-import { resolveDefinition } from "./resolve.js";
-import { writeSite } from "./site.js";
-import { watchDefinition } from "./watch.js";
+import { resolveDefinition } from "./engine/resolve.js";
+import { writeSite } from "./server/site.js";
+import { watchDefinition } from "./server/watch.js";
 
 const { version } = JSON.parse(
   readFileSync(new URL("../package.json", import.meta.url), "utf8"),

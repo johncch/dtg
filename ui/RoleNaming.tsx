@@ -1,9 +1,9 @@
 import { Plus } from "lucide-react";
 import { useState } from "react";
-import type { RoleTarget } from "../src/edit.js";
-import { colorRefsOf, throughTransparent } from "../src/resolve.js";
-import { INHERIT, rolePath } from "../src/selector.js";
-import type { Snapshot, SnapshotRole } from "../src/snapshot.js";
+import type { RoleTarget } from "../src/engine/edit.js";
+import { colorRefsOf, throughTransparent } from "../src/engine/resolve.js";
+import { INHERIT, rolePath } from "../src/engine/selector.js";
+import type { Snapshot, SnapshotRole } from "../src/engine/snapshot.js";
 import { AddRow, copyName, ENTRY_NAME, ENTRY_NAME_RULE, EntryDuplicate, EntryGrip, EntryName, EntryRemove, GroupName, openNameOf, pathProblem } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";
 import { firstError, useTrying } from "./preview.js";

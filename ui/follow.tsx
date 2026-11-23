@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef } from "react";
-import type { Snapshot } from "../src/snapshot.js";
+import type { Snapshot } from "../src/engine/snapshot.js";
 import { groupOf, openNameOf } from "./EntryRow.js";
 import { navigate, type Route } from "./router.js";
 

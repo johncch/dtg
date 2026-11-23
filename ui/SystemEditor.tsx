@@ -1,11 +1,11 @@
 import { Plus, SlidersHorizontal } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import { parse } from "yaml";
-import type { Algorithm, ParamKind } from "../src/contract.js";
-import type { Edit, SystemTarget } from "../src/edit.js";
-import { builtinAlgorithms } from "../src/resolve.js";
-import type { Snapshot, SnapshotSystem } from "../src/snapshot.js";
-import { rolePath } from "../src/selector.js";
+import type { Algorithm, ParamKind } from "../src/engine/contract.js";
+import type { Edit, SystemTarget } from "../src/engine/edit.js";
+import { builtinAlgorithms } from "../src/engine/resolve.js";
+import type { Snapshot, SnapshotSystem } from "../src/engine/snapshot.js";
+import { rolePath } from "../src/engine/selector.js";
 import { previewOf } from "./engine.js";
 import { ENTRY_NAME, usedByRefusal } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";

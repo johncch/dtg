@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Edit } from "../src/edit.js";
+import type { Edit } from "../src/engine/edit.js";
 import { previewOf, type Drawn } from "./engine.js";
 import { openOnceThere, type Opening } from "./follow.js";
 import { useStore } from "./store.js";

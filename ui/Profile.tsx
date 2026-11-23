@@ -1,8 +1,8 @@
 import { useMemo } from "react";
-import { hueOf, maxChroma, oklabToOklch, toOklab, type Color, type Gamut } from "../src/color-math.js";
-import { profileOf, type Profile as Measured } from "../src/resolve.js";
-import type { ProfileLane } from "../src/profile.js";
-import type { SnapshotSystem } from "../src/snapshot.js";
+import { hueOf, maxChroma, oklabToOklch, toOklab, type Color, type Gamut } from "../src/engine/color-math.js";
+import { profileOf, type Profile as Measured } from "../src/engine/resolve.js";
+import type { ProfileLane } from "../src/engine/profile.js";
+import type { SnapshotSystem } from "../src/engine/snapshot.js";
 import { paintCss } from "./paint.js";
 
 const WIDTH = 460;

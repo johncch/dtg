@@ -1,7 +1,7 @@
 // Rewrites the golden outputs. Run deliberately, and read the diff.
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolveDefinition } from "../../dist/resolve.js";
-import { emitCss, emitDtcg, emitTailwind } from "../../dist/emit.js";
+import { resolveDefinition } from "../../dist/engine/resolve.js";
+import { emitCss, emitDtcg, emitTailwind } from "../../dist/engine/emit.js";
 
 const here = new URL(".", import.meta.url);
 const src = readFileSync(new URL("kitchen-sink.dtg.yaml", here), "utf8");

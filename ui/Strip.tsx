@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
-import { formatColor, isOpaque, oklabDeltaE, type Color } from "../src/color-math.js";
-import type { SnapshotSystem } from "../src/snapshot.js";
+import { formatColor, isOpaque, oklabDeltaE, type Color } from "../src/engine/color-math.js";
+import type { SnapshotSystem } from "../src/engine/snapshot.js";
 import { ColorTip } from "./ColorTip.js";
 import { paintCss } from "./paint.js";
 import { Link } from "./router.js";

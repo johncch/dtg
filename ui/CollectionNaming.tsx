@@ -1,9 +1,9 @@
 import { Plus, SlidersHorizontal } from "lucide-react";
 import { useState } from "react";
-import type { Edit } from "../src/edit.js";
-import { TOP_LEVEL_RESERVED } from "../src/resolve.js";
-import { rolePath } from "../src/selector.js";
-import type { Snapshot } from "../src/snapshot.js";
+import type { Edit } from "../src/engine/edit.js";
+import { TOP_LEVEL_RESERVED } from "../src/engine/resolve.js";
+import { rolePath } from "../src/engine/selector.js";
+import type { Snapshot } from "../src/engine/snapshot.js";
 import { Alert } from "./Alert.js";
 import { ENTRY_NAME, ENTRY_NAME_RULE, usedByRefusal } from "./EntryRow.js";
 import { Popup, type PopupPanel } from "./Popup.js";

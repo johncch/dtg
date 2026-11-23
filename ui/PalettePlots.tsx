@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent, type ReactNode } from "react";
-import { colorFromOklab, formatColor, hueOf, oklabToOklch, oklchToOklab, toOklab, type Color, type Oklch } from "../src/color-math.js";
+import { colorFromOklab, formatColor, hueOf, oklabToOklch, oklchToOklab, toOklab, type Color, type Oklch } from "../src/engine/color-math.js";
 import { EDITABLE } from "./mode.js";
 import { paintCss } from "./paint.js";
 import { LockIcon } from "./LockIcon.js";

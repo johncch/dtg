@@ -1,9 +1,9 @@
 import { ChevronRight, TriangleAlert, Redo2, Undo2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { earlierSpelling, type Edit, type EditTarget } from "../src/edit.js";
-import type { Snapshot } from "../src/snapshot.js";
-import { rolePath } from "../src/selector.js";
-import type { Change } from "../src/working-copy.js";
+import { earlierSpelling, type Edit, type EditTarget } from "../src/engine/edit.js";
+import type { Snapshot } from "../src/engine/snapshot.js";
+import { rolePath } from "../src/engine/selector.js";
+import type { Change } from "../src/engine/working-copy.js";
 import { Popup } from "./Popup.js";
 import { Link } from "./router.js";
 import { useStore } from "./store.js";

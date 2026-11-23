@@ -37,7 +37,7 @@
     "THIRD_PARTY_NOTICES.md"
   ],
   "scripts": {
-    "build": "tsc && tsc -p ui && vite build && node scripts/copy-examples.mjs",
+    "build": "tsc && tsc -p src/engine && tsc -p ui && vite build && node scripts/copy-examples.mjs",
     "watch": "tsc --watch --preserveWatchOutput & vite build --watch",
     "dev": "tsc --watch --preserveWatchOutput & vite build --watch & node --watch dist/cli.js edit",
     "prepare": "tsc && vite build && node scripts/copy-examples.mjs",

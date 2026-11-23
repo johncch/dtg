@@ -1,4 +1,4 @@
-import type { Edit } from "../src/edit.js";
+import type { Edit } from "../src/engine/edit.js";
 
 /** Where a top-level param's value is read from, and what it would fall back to if the system stopped writing it. */
 export type ParamScope = {

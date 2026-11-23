@@ -1,11 +1,11 @@
 import { GraphStar, Plus, Target, X } from "lucide-react";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from "react";
-import { colorFromOklab, formatAuthored, oklabToOklch, oklchToOklab, toOklab, type Oklab } from "../../src/color-math.js";
-import type { ConstantTarget, Edit } from "../../src/edit.js";
-import { addToPalette, harmonizePalette, harmonyHues, randomColor, rollPalette, type Harmony, type RollStyle } from "../../src/palette-roll.js";
-import type { Snapshot, SnapshotConstant, SnapshotGradient } from "../../src/snapshot.js";
+import { colorFromOklab, formatAuthored, oklabToOklch, oklchToOklab, toOklab, type Oklab } from "../../src/engine/color-math.js";
+import type { ConstantTarget, Edit } from "../../src/engine/edit.js";
+import { addToPalette, harmonizePalette, harmonyHues, randomColor, rollPalette, type Harmony, type RollStyle } from "../../src/engine/palette-roll.js";
+import type { Snapshot, SnapshotConstant, SnapshotGradient } from "../../src/engine/snapshot.js";
 import { NO_LOCK, NotAColor, paletteRows } from "../PaletteEntries.js";
-import type { Change } from "../../src/working-copy.js";
+import type { Change } from "../../src/engine/working-copy.js";
 import { EditableChip } from "../ColorChip.js";
 import { ColorTip } from "../ColorTip.js";
 import { CONSTANT_COLUMN_COUNT, ConstantsHead, ConstantName, ConstantRow, constantUsers, RESERVED } from "../ConstantRow.js";

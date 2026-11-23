@@ -1,14 +1,14 @@
 import { Fragment, useState } from "react";
-import { colorFromOklab, formatAuthored } from "../../src/color-math.js";
-import { randomColor } from "../../src/palette-roll.js";
-import type { SnapshotConstant, SnapshotGradient } from "../../src/snapshot.js";
+import { colorFromOklab, formatAuthored } from "../../src/engine/color-math.js";
+import { randomColor } from "../../src/engine/palette-roll.js";
+import type { SnapshotConstant, SnapshotGradient } from "../../src/engine/snapshot.js";
 import { paletteRows } from "../PaletteEntries.js";
 import { CONSTANT_COLUMN_COUNT, ConstantsHead, constantAnchor, ConstantRow, RESERVED } from "../ConstantRow.js";
 import { AddRow, groupOf, openNameOf } from "../EntryRow.js";
 import { colorNameOf } from "../names.js";
 import { useTrying } from "../preview.js";
 import { Link, useScrollToHash } from "../router.js";
-import type { Change } from "../../src/working-copy.js";
+import type { Change } from "../../src/engine/working-copy.js";
 import { addedSinceSave, keyFor, newColorFor, palettesOf, storedRollStyle, UNNAMED, type Palette } from "./PalettePage.js";
 
 /**

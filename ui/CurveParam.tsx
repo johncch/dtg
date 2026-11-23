@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import type { Color } from "../src/color-math.js";
-import { curveAt, type CurveValue, type Ease } from "../src/curve-math.js";
-import type { Edit, EditTarget } from "../src/edit.js";
-import { curveDrawing, type CurveDrawing as Drawing, type ResolvedCurve } from "../src/resolve.js";
-import type { SnapshotSystem } from "../src/snapshot.js";
+import type { Color } from "../src/engine/color-math.js";
+import { curveAt, type CurveValue, type Ease } from "../src/engine/curve-math.js";
+import type { Edit, EditTarget } from "../src/engine/edit.js";
+import { curveDrawing, type CurveDrawing as Drawing, type ResolvedCurve } from "../src/engine/resolve.js";
+import type { SnapshotSystem } from "../src/engine/snapshot.js";
 import { EDITABLE } from "./mode.js";
 import { paintCss } from "./paint.js";
 import { Popup, type PopupPanel } from "./Popup.js";

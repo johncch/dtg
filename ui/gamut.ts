@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { Gamut } from "../src/color-math.js";
+import type { Gamut } from "../src/engine/color-math.js";
 
 const ProjectGamut = createContext<Gamut>("display-p3");
 

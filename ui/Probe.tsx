@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
-import type { Color, Gamut } from "../src/color-math.js";
-import type { Selector } from "../src/contract.js";
-import { formatRef, formatSelector } from "../src/selector.js";
-import type { SnapshotSystem } from "../src/snapshot.js";
+import type { Color, Gamut } from "../src/engine/color-math.js";
+import type { Selector } from "../src/engine/contract.js";
+import { formatRef, formatSelector } from "../src/engine/selector.js";
+import type { SnapshotSystem } from "../src/engine/snapshot.js";
 import { ColorFacts } from "./ColorTip.js";
 import { probeOf } from "./engine.js";
 import { carriedOver, StepControls } from "./picker/StepControls.js";

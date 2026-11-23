@@ -1,6 +1,6 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { readBackgroundOverrides, withBackgroundOverrides } from "../dist/dev-settings.js";
+import { readBackgroundOverrides, withBackgroundOverrides } from "../dist/engine/dev-settings.js";
 
 const CONFIG = `# project config
 gamut: srgb

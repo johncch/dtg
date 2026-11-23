@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import type { DevState } from "../src/dev-state.js";
-import type { Snapshot } from "../src/snapshot.js";
-import { discard, redo, undo, withEdits, type WorkingCopy } from "../src/working-copy.js";
-import type { HostCss } from "../src/emit.js";
+import type { DevState } from "../src/server/dev-state.js";
+import type { Snapshot } from "../src/engine/snapshot.js";
+import { discard, redo, undo, withEdits, type WorkingCopy } from "../src/engine/working-copy.js";
+import type { HostCss } from "../src/engine/emit.js";
 import { drawState, type Drawn, type Resolved } from "./engine.js";
 import { STATIC } from "./mode.js";
 import { bridgeStore, type Store } from "./store.js";

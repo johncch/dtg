@@ -1,9 +1,9 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { isOpaque } from "./color-math.js";
+import { isOpaque } from "./engine/color-math.js";
 import type { DtgConfig } from "./config.js";
-import { dtcgClipped, emitCss, emitDtcg, emitScss, emitTailwind, emittedStatics } from "./emit.js";
-import type { ResolvedDefinition } from "./resolve.js";
+import { dtcgClipped, emitCss, emitDtcg, emitScss, emitTailwind, emittedStatics } from "./engine/emit.js";
+import type { ResolvedDefinition } from "./engine/resolve.js";
 
 /** Write every configured output for a resolved definition, and say what was written. */
 export function writeOutputs(config: DtgConfig, resolved: ResolvedDefinition): void {

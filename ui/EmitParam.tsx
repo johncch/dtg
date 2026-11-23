@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { SnapshotSystem } from "../src/snapshot.js";
+import type { SnapshotSystem } from "../src/engine/snapshot.js";
 import { emitEdit } from "./emit-list.js";
 import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";

@@ -1,10 +1,10 @@
 import { ChevronDown, Plus } from "lucide-react";
 import { useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
-import { parseColor, type Color } from "../../src/color-math.js";
-import { gradientCss, stopPositions } from "../../src/emit.js";
-import { readGradient, writeGradient, type WrittenGradient } from "../../src/ref-functions.js";
-import { GEOMETRY_ARGUMENTS, RADIAL_SHAPES, RADIAL_SIZES, type GradientGeometry, type ResolvedGradientRef } from "../../src/resolve.js";
-import type { SnapshotConstant, SnapshotSystem } from "../../src/snapshot.js";
+import { parseColor, type Color } from "../../src/engine/color-math.js";
+import { gradientCss, stopPositions } from "../../src/engine/emit.js";
+import { readGradient, writeGradient, type WrittenGradient } from "../../src/engine/ref-functions.js";
+import { GEOMETRY_ARGUMENTS, RADIAL_SHAPES, RADIAL_SIZES, type GradientGeometry, type ResolvedGradientRef } from "../../src/engine/resolve.js";
+import type { SnapshotConstant, SnapshotSystem } from "../../src/engine/snapshot.js";
 import { isGradient, paintCss, paintIsOpaque } from "../paint.js";
 import { Popup, type PopupPanel } from "../Popup.js";
 import { TrashIcon } from "../TrashIcon.js";

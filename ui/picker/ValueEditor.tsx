@@ -11,10 +11,10 @@ import {
   toOklab,
   type Color,
   type Oklch,
-} from "../../src/color-math.js";
-import type { EditTarget } from "../../src/edit.js";
-import { formatRef, INHERIT } from "../../src/selector.js";
-import type { SnapshotConstant, SnapshotGradient, SnapshotSystem } from "../../src/snapshot.js";
+} from "../../src/engine/color-math.js";
+import type { EditTarget } from "../../src/engine/edit.js";
+import { formatRef, INHERIT } from "../../src/engine/selector.js";
+import type { SnapshotConstant, SnapshotGradient, SnapshotSystem } from "../../src/engine/snapshot.js";
 import { ColorFacts, ColorTip } from "../ColorTip.js";
 import { useProjectGamut } from "../gamut.js";
 import { Alert } from "../Alert.js";
@@ -22,7 +22,7 @@ import { Hint } from "../Hint.js";
 import { isGradient, paintCss, paintIsOpaque, type Paint } from "../paint.js";
 import type { PopupPanel } from "../Popup.js";
 import { firstError, useTrying } from "../preview.js";
-import type { ResolvedGradientRef } from "../../src/resolve.js";
+import type { ResolvedGradientRef } from "../../src/engine/resolve.js";
 import { GradientControls } from "./GradientControls.js";
 import { Picker } from "./Picker.js";
 import {

@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react";
-import type { BackgroundOverrides } from "../src/dev-settings.js";
-import type { Edit } from "../src/edit.js";
+import type { BackgroundOverrides } from "../src/engine/dev-settings.js";
+import type { Edit } from "../src/engine/edit.js";
 
 /**
  * Everything the page can do to the working copy and the settings. Each

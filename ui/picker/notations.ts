@@ -7,7 +7,7 @@ import {
   type Gamut,
   type Oklch,
   type Rgb,
-} from "../../src/color-math.js";
+} from "../../src/engine/color-math.js";
 
 export type Box = { name: string; min: number; max: number; step: number; digits: number };
 

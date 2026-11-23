@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { applyEdits } from "../dist/edit.js";
-import { resolveDefinition } from "../dist/resolve.js";
+import { applyEdits } from "../dist/engine/edit.js";
+import { resolveDefinition } from "../dist/engine/resolve.js";
 
 const SRC = `dtg: 1
 defaults:

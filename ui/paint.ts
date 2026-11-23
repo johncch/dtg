@@ -1,6 +1,6 @@
-import { formatColor, isOpaque, needsMapping, type Color } from "../src/color-math.js";
-import { gradientCss } from "../src/emit.js";
-import type { ResolvedGradientRef } from "../src/resolve.js";
+import { formatColor, isOpaque, needsMapping, type Color } from "../src/engine/color-math.js";
+import { gradientCss } from "../src/engine/emit.js";
+import type { ResolvedGradientRef } from "../src/engine/resolve.js";
 
 /** What a swatch is filled with: a color, or a gradient of them. */
 export type Paint = Color | ResolvedGradientRef;

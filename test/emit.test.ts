@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveDefinition } from "../dist/resolve.js";
-import { dtcgClipped, emitCss, emitDtcg, emitHostCss, emitScss, emitTailwind } from "../dist/emit.js";
+import { resolveDefinition } from "../dist/engine/resolve.js";
+import { dtcgClipped, emitCss, emitDtcg, emitHostCss, emitScss, emitTailwind } from "../dist/engine/emit.js";
 
 const SRC = `
 dtg: 1

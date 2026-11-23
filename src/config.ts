@@ -6,8 +6,8 @@ import {
   MODE_RENDERINGS,
   type HostCss,
   type ModeRendering,
-} from "./emit.js";
-import type { Gamut } from "./color-math.js";
+} from "./engine/emit.js";
+import type { Gamut } from "./engine/color-math.js";
 
 export type DtgConfig = {
   /** The single resolved definition file. */

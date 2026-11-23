@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from "react";
-import { hexToOklab, toOklab, type Color, type Oklab } from "../src/color-math.js";
+import { hexToOklab, toOklab, type Color, type Oklab } from "../src/engine/color-math.js";
 
 type Named = { name: string; lab: Oklab };
 

@@ -1,7 +1,7 @@
-import type { Gamut } from "./color-math.js";
-import type { BackgroundOverrides } from "./dev-settings.js";
-import type { HostCss } from "./emit.js";
-import type { WorkingCopy } from "./working-copy.js";
+import type { Gamut } from "../engine/color-math.js";
+import type { BackgroundOverrides } from "../engine/dev-settings.js";
+import type { HostCss } from "../engine/emit.js";
+import type { WorkingCopy } from "../engine/working-copy.js";
 
 /**
  * What `dtg edit` hands the page at `/api/state`: the working copy and the

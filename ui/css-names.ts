@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { CssFormat } from "../src/emit.js";
+import type { CssFormat } from "../src/engine/emit.js";
 
 const CssNames = createContext<CssFormat>("css");
 

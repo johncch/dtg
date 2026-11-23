@@ -1,8 +1,8 @@
 import { Download } from "lucide-react";
 import { useMemo, useState } from "react";
-import { emitCss, emitDtcg, emitScss, emitTailwind } from "../src/emit.js";
-import type { ResolvedDefinition } from "../src/resolve.js";
-import type { Snapshot } from "../src/snapshot.js";
+import { emitCss, emitDtcg, emitScss, emitTailwind } from "../src/engine/emit.js";
+import type { ResolvedDefinition } from "../src/engine/resolve.js";
+import type { Snapshot } from "../src/engine/snapshot.js";
 import { Popup } from "./Popup.js";
 
 type Format = "css" | "tailwind" | "scss" | "dtcg";

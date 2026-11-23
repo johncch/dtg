@@ -1,5 +1,5 @@
 import { createContext, useContext } from "react";
-import type { SnapshotConstant } from "../src/snapshot.js";
+import type { SnapshotConstant } from "../src/engine/snapshot.js";
 
 const PaletteColors = createContext<SnapshotConstant[]>([]);
 

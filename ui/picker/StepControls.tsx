@@ -1,8 +1,8 @@
 import { useId } from "react";
-import type { Selector, SelectorField, SelectorShape } from "../../src/contract.js";
-import { formatRef, formatSelector, parseCall, parseSelector } from "../../src/selector.js";
+import type { Selector, SelectorField, SelectorShape } from "../../src/engine/contract.js";
+import { formatRef, formatSelector, parseCall, parseSelector } from "../../src/engine/selector.js";
 import { Hint } from "../Hint.js";
-import type { SnapshotConstant, SnapshotSystem } from "../../src/snapshot.js";
+import type { SnapshotConstant, SnapshotSystem } from "../../src/engine/snapshot.js";
 
 export type Step = { kind: "step"; system: SnapshotSystem; selector: Selector };
 /** `opacity` null is the constant itself; a number is it taken through transparent(). */

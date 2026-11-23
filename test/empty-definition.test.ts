@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { applyEdits } from "../dist/edit.js";
-import { resolveDefinition } from "../dist/resolve.js";
+import { applyEdits } from "../dist/engine/edit.js";
+import { resolveDefinition } from "../dist/engine/resolve.js";
 
 describe("an empty definition", () => {
   test("resolves to nothing", () => {
@@ -38,7 +38,7 @@ roles:
 
 describe("the grammar version", () => {
   test("goes at the top of a definition that does not say it", async () => {
-    const { withGrammarVersion } = await import("../dist/edit.js");
+    const { withGrammarVersion } = await import("../dist/engine/edit.js");
     assert.equal(withGrammarVersion("palette:\n  ink: \"#000000\"\n"), "dtg: 1\n\npalette:\n  ink: \"#000000\"\n");
     assert.equal(withGrammarVersion(""), "dtg: 1\n");
     assert.equal(withGrammarVersion("dtg: 1\npalette: {}\n"), "dtg: 1\npalette: {}\n");

@@ -8,6 +8,9 @@ deterministic generation, explicit over inferred). `README.md` is the user-facin
 
 Working notes:
 
+- `src/engine/` runs in the browser as well as in Node: no `node:` imports
+  there (`tsc -p src/engine` fails the build on one). `src/server/` is the dev
+  server and `dtg docs`; `cli.ts`, `config.ts` and `outputs.ts` stay at the top.
 - Source is ESM TypeScript in `src/` with explicit `.js` extensions on
   relative imports (NodeNext). `pnpm build` → `dist/`; the `dtg` bin is
   `dist/cli.js`.
@@ -25,9 +28,9 @@ Working notes:
   place. `ui/app.css` maps its own names onto Mosaic's at the top.
 - The editor is a React app in `ui/`, bundled by Vite into `dist/ui/`.
   The dev server serves one HTML shell for every page address plus
-  `/api/state` (`src/dev-state.ts`): the working copy and settings, not
+  `/api/state` (`src/server/dev-state.ts`): the working copy and settings, not
   resolved. The app resolves it in the page (`ui/engine.ts`, which imports
-  the resolver and `src/snapshot.ts`), routes, and draws. It has its
+  the resolver and `src/engine/snapshot.ts`), routes, and draws. It has its
   own `ui/tsconfig.json`; `pnpm build` type-checks it. React and Vite are
   devDependencies — the bundle is what ships.
 - Conventions the tool promises (see README): a `dtg.config.yaml` project config at

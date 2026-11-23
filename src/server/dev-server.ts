@@ -5,20 +5,20 @@ import {
 } from "node:http";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync, watch, writeFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Gamut } from "./color-math.js";
-import type { DtgConfig } from "./config.js";
-import type { HostCss } from "./emit.js";
+import type { Gamut } from "../engine/color-math.js";
+import type { DtgConfig } from "../config.js";
+import type { HostCss } from "../engine/emit.js";
 import {
   overridesAfterChanges,
   readBackgroundOverrides,
   withBackgroundOverrides,
   type BackgroundOverrides,
-} from "./dev-settings.js";
-import { writeOutputs } from "./outputs.js";
-import { describeTarget, withGrammarVersion, type Edit } from "./edit.js";
-import { problemText, resolveDefinition } from "./resolve.js";
+} from "../engine/dev-settings.js";
+import { writeOutputs } from "../outputs.js";
+import { describeTarget, withGrammarVersion, type Edit } from "../engine/edit.js";
+import { problemText, resolveDefinition } from "../engine/resolve.js";
 import { appShell } from "./app-shell.js";
 import type { DevState } from "./dev-state.js";
 import { watchDefinition } from "./watch.js";
@@ -33,7 +33,7 @@ import {
   withoutEdits,
   workingText,
   type WorkingCopy,
-} from "./working-copy.js";
+} from "../engine/working-copy.js";
 
 const CONFIG_PATH = "dtg.config.yaml";
 
@@ -121,17 +121,17 @@ export function startDevServer(
   // but compare content, since `tsc` rewrites every file on every build and
   // a banner that cries wolf is one you learn to ignore.
   let stale = false;
-  const own = dirname(fileURLToPath(import.meta.url));
+  const own = fileURLToPath(new URL("..", import.meta.url));
   const fingerprint = () => {
     const hash = createHash("sha1");
-    for (const name of readdirSync(own).sort()) {
-      if (name.endsWith(".js")) hash.update(readFileSync(join(own, name)));
+    for (const name of readdirSync(own, { recursive: true, encoding: "utf8" }).sort()) {
+      if (name.endsWith(".js") && !name.startsWith(`ui${sep}`)) hash.update(readFileSync(join(own, name)));
     }
     return hash.digest("hex");
   };
   try {
     const built = fingerprint();
-    watch(own, () => {
+    watch(own, { recursive: true }, () => {
       if (stale || fingerprint() === built) return;
       stale = true;
       console.log("dtg's own code changed — restart the dev server");
@@ -191,7 +191,7 @@ export function startDevServer(
     const uiAsset = /^\/ui\/([\w.-]+\.(js|css|png))$/.exec(url.pathname);
     if (uiAsset) {
       try {
-        const body = readFileSync(new URL(`./ui/${uiAsset[1]}`, import.meta.url));
+        const body = readFileSync(new URL(`../ui/${uiAsset[1]}`, import.meta.url));
         res.writeHead(200, {
           "content-type": UI_CONTENT_TYPES[uiAsset[2]],
           "cache-control": "no-cache",

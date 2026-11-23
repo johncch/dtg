@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { formatColor } from "../src/color-math.js";
-import type { EditTarget } from "../src/edit.js";
+import { formatColor } from "../src/engine/color-math.js";
+import type { EditTarget } from "../src/engine/edit.js";
 import { ColorFacts, ColorTip } from "./ColorTip.js";
 import { LockIcon } from "./LockIcon.js";
 import { EDITABLE } from "./mode.js";

@@ -1,7 +1,7 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
-import { resolveDefinition } from "../dist/resolve.js";
-import { formatColor } from "../dist/color-math.js";
+import { resolveDefinition } from "../dist/engine/resolve.js";
+import { formatColor } from "../dist/engine/color-math.js";
 
 const SRC = `
 dtg: 1

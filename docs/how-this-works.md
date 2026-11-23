@@ -168,7 +168,7 @@ Canonical. The README carries the user-facing version of the same rules.
   same holds in `publish` and in `overrides` keys. Until 2026-11-20 the name was
   built from the text as written, so `sky(3.0)` emitted a second primitive,
   `sky-3_0`, with the same color.
-- **A ref function is declared once.** `src/ref-functions.ts` lists
+- **A ref function is declared once.** `src/engine/ref-functions.ts` lists
   `transparent` and `gradient` with what their ref arguments may resolve to and
   which arguments are named. The resolver checks a call against that line, the
   error names what the function takes, and TypeScript infers from the same line
@@ -578,7 +578,7 @@ base lock to noise.
 
 ### The algorithm contract
 
-`src/contract.ts` defines `Algorithm`:
+`src/engine/contract.ts` defines `Algorithm`:
 
 - `name` is what a system's `algorithm:` names.
 - `description` is one short paragraph, rendered in the browsing UI: what the
@@ -670,9 +670,14 @@ ESM TypeScript in `src/`, with explicit `.js` extensions on relative imports
 (NodeNext). `pnpm build` compiles to `dist/`; the `dtg` bin is `dist/cli.js`.
 Consumers run `dist/`, so rebuild after edits or they see stale code.
 
+`src/engine/` is everything the editor page also runs, so nothing in it
+imports from `node:`; its own tsconfig, with no Node types, holds that line at
+build time. `src/server/` is the dev server and `dtg docs`. The CLI, config and
+output writing stay at the top of `src/`.
+
 - `cli.ts` — command dispatch and flag parsing for `edit`, `build`, `docs`,
   `compare` and `skill`.
-- `compare.ts` — `dtg compare`: an old stylesheet against the CSS the
+- `engine/compare.ts` — `dtg compare`: an old stylesheet against the CSS the
   definition builds, every `var()` followed to its color, mode by mode, by
   OKLab ΔE. It reads just enough CSS for that (custom properties in plain
   blocks, `.mode` and `[data-*]` selectors) and passes over `@supports` and
@@ -691,33 +696,33 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
 - `config.ts` — reading `dtg.config.yaml`, and `dtg init`'s placeholder for it.
   Where the definition is has no default; the config or a flag names it.
   Precedence is CLI flags, then `dtg.config.yaml`, then defaults.
-- `resolve.ts` — the grammar lives here. YAML in, `ResolvedDefinition` out
+- `engine/resolve.ts` — the grammar lives here. YAML in, `ResolvedDefinition` out
   (systems with their steps, statics, collections, roles with a ref per mode,
   plus accumulated warnings). Public-name resolution is here too: `aliasedName`,
   `publicSystemName`.
-- `contract.ts` — the `Algorithm` interface.
-- `params.ts` — a system's params checked against what its algorithm declares,
+- `engine/contract.ts` — the `Algorithm` interface.
+- `engine/params.ts` — a system's params checked against what its algorithm declares,
   and parsed.
-- `ref-functions.ts` — the functions a ref can call, each with what its
+- `engine/ref-functions.ts` — the functions a ref can call, each with what its
   arguments accept and which are named; and a gradient's text taken apart and
   written back, which is how the editor changes one piece of one.
-- `selector.ts` — how a selector is written, and the public name and ordering
+- `engine/selector.ts` — how a selector is written, and the public name and ordering
   that follow from it. The only file that knows the spelling.
-- `algorithms/` — the three built-ins.
-- `color-math.ts` — hex parsing, compositing, and the OKLCH and OKLAB math.
-- `emit.ts` — the CSS and DTCG emitters.
-- `dev-server.ts`, `dev-state.ts`, `watch.ts` — the HTTP and SSE server and
+- `engine/algorithms/` — the five built-ins: tint, overlay, curve, scale, tone.
+- `engine/color-math.ts` — hex parsing, compositing, and the OKLCH and OKLAB math.
+- `engine/emit.ts` — the CSS and DTCG emitters.
+- `server/dev-server.ts`, `server/dev-state.ts`, `server/watch.ts` — the HTTP and SSE server and
   definition file watching. The server holds no markup and draws nothing: it
   serves one HTML shell, the built editor bundle, and `/api/state`, the working
   copy with the settings around it. It resolves only to write outputs and to
   refuse a definition that is broken at startup.
-- `app-shell.ts`, `site.ts` — the app's one HTML page, and `dtg docs`, which
+- `server/app-shell.ts`, `server/site.ts` — the app's one HTML page, and `dtg docs`, which
   writes that page, the bundle and the definition as files. The page names its
   mode: `served` by edit, or `static`, where the app reads `state.json` beside
   it, addresses pages in the fragment so any host at any folder can serve it,
   and saves nothing. A static page built with `--editable` keeps its visitors'
   edits in the page alone (`ui/store.ts`).
-- `edit.ts` — writing one value into the definition's text: an authored color,
+- `engine/edit.ts` — writing one value into the definition's text: an authored color,
   or the ref a role holds for a mode. An edit is a `set`, which needs a value to
   write over, or for a constant also an `add`, `rename` or `remove`. A rename
   carries the constant's pointers with it: each ref, `transparent()` and color
@@ -734,12 +739,12 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   typed; re-serialising the YAML restyles the whole file. A ref edit can also
   carry `~`, putting a mode back to inheriting; a ref for a mode past the end of
   the role's list is added to it, with `~` holding any modes in between.
-- `dev-settings.ts` — what a project keeps under `editor` in `dtg.config.yaml`
+- `engine/dev-settings.ts` — what a project keeps under `editor` in `dtg.config.yaml`
   for the editor's own use: today the background to view each mode on. The
   server reads it, watches it, and writes it straight to the file when the Modes
   page changes it. It is config, not the definition, so it stays out of the
   working copy and its undo, and `emit` never reads it.
-- `working-copy.ts` — the file's text plus the edits not yet written to it. An
+- `engine/working-copy.ts` — the file's text plus the edits not yet written to it. An
   edit names a color, not a line, so unsaved edits survive the file changing
   underneath them. The dev server holds one working copy, draws the app from it,
   and writes the file only when asked to save. Edits come in steps, which is
@@ -747,7 +752,7 @@ Consumers run `dist/`, so rebuild after edits or they see stale code.
   What counts as a change follows an entry through renames, its own and those of
   the group, system or role that holds it, so renaming one back is no change at
   all.
-- `snapshot.ts` — the resolved definition as plain data for the pages to draw,
+- `engine/snapshot.ts` — the resolved definition as plain data for the pages to draw,
   built in the page from the working copy.
 - `ui/` (outside `src/`) — the browsing UI, a React app bundled by Vite into
   `dist/ui/`. It runs the resolver, the edits and the color math itself
