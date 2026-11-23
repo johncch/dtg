@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## [0.6.0] - 2026-11-23
 
 - Editor UI improvements on a system's page:
   - A profile of the ramp beside its params: lightness, chroma and hue across
