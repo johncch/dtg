@@ -54,7 +54,13 @@ dtg init  [--definition <file>] [--from <name>]   # set up a project; asks what 
 dtg edit  [--port <n>] [--build]                  # open the editor; offers setup if there's no project
 dtg build [--watch]                               # write the configured outputs
 dtg docs  --out <dir> [--editable]                # the editor as static files
+dtg compare <stylesheet>                          # what moved against what build writes
 ```
+
+`dtg compare` is for moving an existing stylesheet onto dtg. It reads both,
+follows every `var()` to the color it ends at, and lists, mode by mode, what
+moved and by how much (OKLab ΔE, where about 0.02 is just noticeable), and the
+colors only one side has.
 
 ## Concepts
 

@@ -9,7 +9,9 @@ import {
   writeStarter,
   type Start,
 } from "./config.js";
+import { compareStylesheets, formatComparison } from "./compare.js";
 import { startDevServer } from "./dev-server.js";
+import { emitHostCss } from "./emit.js";
 import { writeOutputs } from "./outputs.js";
 import { resolveDefinition } from "./resolve.js";
 import { writeSite } from "./site.js";
@@ -107,6 +109,16 @@ if (command === "init") {
   console.log(`${await setUp()} — \`dtg edit\` opens it`);
 } else if (command === "emit") {
   fail("`dtg emit` is now `dtg build` — the same flags, the same outputs");
+} else if (command === "compare") {
+  const stylesheet = args[1] != null && !args[1].startsWith("--") ? args[1] : fail("compare: name the stylesheet, as `dtg compare <file>`");
+  try {
+    const config = loadConfig({ definition: flagValue("--definition") });
+    const resolved = resolveDefinition(readFileSync(config.definition, "utf8"), [], config.gamut);
+    const built = emitHostCss(resolved, hostCss(config).names, "nested");
+    console.log(formatComparison(compareStylesheets(readFileSync(stylesheet, "utf8"), built, resolved.modes), stylesheet));
+  } catch (e) {
+    fail((e as Error).message);
+  }
 } else if (command === "docs") {
   const out = flagValue("--out") ?? fail("docs: name the folder to write with --out <dir>");
   try {
@@ -190,6 +202,8 @@ commands
             offers to set one up first
   build     write the configured outputs
   docs      write a copy of the editor as static files, to publish
+  compare   compare a stylesheet with what build would write: every color,
+            in every mode, with var() chains followed
 
 init
   --definition <file>         where to put the definition (asked otherwise)
@@ -212,7 +226,7 @@ docs
   --editable                  let visitors edit the colors in their page; edits
                               are never saved, and a reload starts over
 
-edit, build and docs
+edit, build, docs and compare
   --definition <file>         the definition to read (default: \`definitions\`
                               in dtg.config.yaml)
 
