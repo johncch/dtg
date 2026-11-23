@@ -8,8 +8,12 @@ import { ChoiceParam } from "../ChoiceParam.js";
 import { CurveParam } from "../CurveParam.js";
 import { EmitParam } from "../EmitParam.js";
 import { EDITABLE } from "../mode.js";
+import { Hint } from "../Hint.js";
 import { NumberParam } from "../NumberParam.js";
+import type { ParamScope } from "../ParamScope.js";
+import { algorithmFor } from "../../src/resolve.js";
 import { Probe } from "../Probe.js";
+import { Profile } from "../Profile.js";
 import { useScrollToHash } from "../router.js";
 import { SystemSettings } from "../SystemEditor.js";
 import { stepAnchor, stepDeltaE, Strip } from "../Strip.js";
@@ -36,14 +40,19 @@ export function SystemPage({ system, snapshot, working }: { system: SnapshotSyst
       </div>
       {system.note && <p className="note">{system.note}</p>}
       <p className="desc">{system.description}</p>
-      <Params system={system} constants={constants} />
-      <Probe key={system.system} system={system} definition={snapshot.definition.text} gamut={snapshot.gamut} />
-      <section className="box">
-        <h2 className="box-title">Steps</h2>
-        <div className="steps-body">
-          <Strip system={system} withDeltas />
-        </div>
-      </section>
+      <div className="system-overview">
+        <Params system={system} constants={constants} />
+        <Profile system={system} constants={constants} gamut={snapshot.gamut} />
+      </div>
+      <div className="system-overview">
+        <Probe key={system.system} system={system} definition={snapshot.definition.text} gamut={snapshot.gamut} />
+        <section className="box">
+          <h2 className="box-title">Published steps</h2>
+          <div className="steps-body">
+            <Strip system={system} withDeltas />
+          </div>
+        </section>
+      </div>
       <table className="steps-table">
         <thead>
           <tr>
@@ -78,7 +87,7 @@ export function SystemPage({ system, snapshot, working }: { system: SnapshotSyst
                   {system.emit.includes(step.selector) && (
                     <span className="muted">
                       {step.usedBy.length > 0 && ", "}
-                      published
+                      publish
                     </span>
                   )}
                 </td>
@@ -110,22 +119,25 @@ function StepValue({ step }: { step: SnapshotStep }) {
 function Params({ system, constants }: { system: SnapshotSystem; constants: ReadonlyMap<string, Color> }) {
   const entries = Object.entries(system.params);
   return (
-    <div className="params">
-      {entries.map(([key, value]) => (
-        <div className="param" key={key}>
-          {key}
+    <section className="box">
+      <h2 className="box-title">Params</h2>
+      <div className="params">
+        {entries.map(([key, value]) => (
+          <div className="param" key={key}>
+            <ParamName name={key} description={algorithmFor(system.algorithm)?.params[key]?.description ?? null} />
+            <div className="param-value">
+              <ParamValue value={value} path={key} system={system} constants={constants} />
+            </div>
+          </div>
+        ))}
+        <div className="param">
+          <ParamName name="publish" description="Steps published even when no role uses them." />
           <div className="param-value">
-            <ParamValue value={value} path={key} system={system} constants={constants} />
+            <EmitParam key={system.system} system={system} />
           </div>
         </div>
-      ))}
-      <div className="param">
-        publish
-        <div className="param-value">
-          <EmitParam key={system.system} system={system} />
-        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -154,15 +166,35 @@ function ParamValue({
     ? anchor.role === "anchor"
       ? `shared as &${anchor.name}`
       : `same as &${anchor.name}`
-    : defaulted
-      ? "default"
-      : shared
-        ? "shared"
-        : null;
+    : shared
+      ? "defaults"
+      : null;
   const readOnly = anchor?.role === "alias";
+  const kind = algorithmFor(system.algorithm)?.params[top];
+  // A number with one value per end is shown as all of them, however it is
+  // written; an edit to one writes the whole param, in its shortest form.
+  const ends = kind?.kind === "number" ? kind.ends : undefined;
+  const perEnd = (written: unknown): number[] => (Array.isArray(written) ? written : Array<number>(ends ?? 0).fill(written as number));
+  const whole = ends != null && path !== top;
   const target: EditTarget = shared
-    ? { kind: "default", algorithm: system.algorithm, path }
-    : { kind: "param", system: system.system, path };
+    ? { kind: "default", algorithm: system.algorithm, path: whole ? top : path }
+    : { kind: "param", system: system.system, path: whole ? top : path };
+  const builtIn = kind != null && (("default" in kind && kind.default !== undefined) || (kind.kind === "number" && kind.optional === true));
+  // An item of a list param is unlinked and reset with its whole list, so its scope is the list's.
+  const [, index, ...deeper] = path.split(".");
+  const list = ends != null ? perEnd(system.params[top]) : system.params[top];
+  const item = index != null && deeper.length === 0 && Array.isArray(list) ? { index: Number(index), list, shorthand: ends != null } : null;
+  const scope: ParamScope | null =
+    anchor || (path.includes(".") && !item)
+      ? null
+      : {
+          system: system.system,
+          algorithm: system.algorithm,
+          path: top,
+          from: defaulted ? "built-in" : shared ? "defaults" : "system",
+          fallback: system.paramsInDefaults.includes(top) ? "defaults" : builtIn ? "built-in" : null,
+          item,
+        };
   const curve = system.curves[path];
   if (curve) {
     return (
@@ -175,31 +207,43 @@ function ParamValue({
         note={note}
         dim={defaulted}
         readOnly={readOnly}
+        scope={scope}
       />
     );
   }
   const colorParam = colorParams.find((param) => param.path === path);
   if (colorParam) {
     return (
-      <ColorChip color={colorParam.color} label={String(value)} edit={readOnly ? undefined : target}>
-        {note && <span className="muted">{note}</span>}
+      <ColorChip color={colorParam.color} label={String(value)} edit={readOnly ? undefined : target} editor={{ scope }}>
+        {note && <span className="muted param-note">{note}</span>}
       </ColorChip>
     );
   }
   const options = system.choices[path];
   if (options && typeof value === "string") {
-    return <ChoiceParam name={path} value={value} options={options} target={target} note={note} dim={defaulted} readOnly={readOnly} />;
+    return <ChoiceParam name={path} value={value} options={options} target={target} note={note} dim={defaulted} readOnly={readOnly} scope={scope} />;
+  }
+  if (ends != null && path === top) {
+    return (
+      <span className="cell">
+        {perEnd(value).map((end, index) => (
+          <ParamValue key={index} value={end} path={`${path}.${index}`} system={system} constants={constants} />
+        ))}
+      </span>
+    );
   }
   if (typeof value === "number") {
     return (
       <NumberParam
-        name={path}
+        name={whole && ends === 2 ? `${top}, ${index === "0" ? "light" : "dark"} end` : path}
         value={value}
         target={target}
+        compose={item?.shorthand ? (n) => shortestOf(item.list.map((other, at) => (at === item.index ? n : other))) : undefined}
         range={system.numberRanges[path] ?? null}
         note={note}
         dim={defaulted}
         readOnly={readOnly}
+        scope={scope}
       />
     );
   }
@@ -230,4 +274,21 @@ function ParamValue({
     );
   }
   return <code>{String(value)}</code>;
+}
+
+/** A value per end as the file would be written by hand: one number when every end has the same. */
+export function shortestOf(values: unknown[]): string {
+  return values.every((value) => value === values[0]) ? String(values[0]) : JSON.stringify(values);
+}
+
+/** A param's name, with the algorithm's line on what it does on hover. */
+function ParamName({ name, description }: { name: string; description: string | null }) {
+  if (!description) return <span>{name}</span>;
+  return (
+    <Hint text={description}>
+      <span className="param-name" tabIndex={0}>
+        {name}
+      </span>
+    </Hint>
+  );
 }

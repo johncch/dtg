@@ -2,14 +2,17 @@ import type { Color } from "./color-math.js";
 import type { CurveValue, Pivot } from "./curve-math.js";
 
 /** What a param is. dtg validates against it and parses it before any hook runs. */
-export type ParamKind =
+export type ParamKind = (
   | { kind: "color" }
   /**
    * `min` and `max` bound the value; dtg rejects one outside them, and the app
    * offers a slider between them. An `optional` number with no default may be
-   * left out, and the algorithm decides what that means.
+   * left out, and the algorithm decides what that means. With `ends`, it may
+   * also be written as a list of that many numbers, one for each end of the
+   * selector's range in order, as `[light, dark]`; a single number stands for
+   * every end, and the hooks always receive the list.
    */
-  | { kind: "number"; default?: number; min?: number; max?: number; optional?: boolean }
+  | { kind: "number"; default?: number; min?: number; max?: number; optional?: boolean; ends?: number }
   | { kind: "choice"; options: string[]; default?: string }
   | { kind: "list"; of: ParamKind; length?: number; default?: unknown[] }
   | { kind: "map"; of: ParamKind }
@@ -21,7 +24,11 @@ export type ParamKind =
    * left out takes the default's. `label` says what the curve's values
    * measure and `unit` is written after them, for the page's axis.
    */
-  | { kind: "curve"; along: string; min: number; max: number; default: CurveValue; label?: string; unit?: string };
+  | { kind: "curve"; along: string; min: number; max: number; default: CurveValue; label?: string; unit?: string }
+) & {
+  /** One line on what the param does, shown where it is edited. */
+  description?: string;
+};
 
 /**
  * A system's params as the hooks receive them: every color already a
@@ -32,9 +39,13 @@ export type Params = Record<string, unknown>;
 /** A color among a system's params: `tint`, `toward.0`, `toward.red`. */
 export type ColorParam = { path: string; color: Color };
 
-export type SelectorField =
+export type SelectorField = (
   | { name: string; kind: "number"; min: number; max: number }
-  | { name: string; kind: "choice"; options: string[] };
+  | { name: string; kind: "choice"; options: string[] }
+) & {
+  /** One line on what the field picks, shown where a step is chosen. */
+  description?: string;
+};
 
 /**
  * What a ref into this system is made of. The algorithm names the parts;
@@ -45,10 +56,15 @@ export type SelectorShape = {
   fields: SelectorField[];
   /** Other values the same selector can ask for, such as a layer before compositing. */
   forms?: string[];
+  /** One line on what each form is, by form, shown where a step is chosen. */
+  formDescriptions?: Record<string, string>;
 };
 
 /** One value per field, by field name, plus `form`: the form asked for, or null. */
 export type Selector = Record<string, number | string | null>;
+
+/** A channel the editor measures a system's colors in, for one lane of its profile. */
+export type ProfileChannel = "oklab.l" | "cielab.l" | "oklch.c" | "oklch.h" | "alpha";
 
 export type Algorithm = {
   /** What a system's `algorithm:` names. */
@@ -67,6 +83,12 @@ export type Algorithm = {
    * the curve. Only the editor uses it; outputs come from `resolve` alone.
    */
   curveSwatch?(params: Params, name: string, value: number): Color;
+  /**
+   * The channels the editor plots this algorithm's ramp in, one lane each, in
+   * order: the space it works in, so what it holds simple draws straight.
+   * OKLab lightness, OKLCH chroma and hue when unset.
+   */
+  profile?: ProfileChannel[];
 };
 
 /**

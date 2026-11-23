@@ -1,4 +1,5 @@
 import { Blend, Boxes, CornerLeftUp, Palette, Pipette, SquareFunction, SwatchBook, type LucideIcon } from "lucide-react";
+import { ParamScopeControl, unlinkEdit, type ParamScope } from "../ParamScope.js";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   formatAuthored,
@@ -80,6 +81,8 @@ export function ValueEditor({
   panel,
   onPreview,
   onCommit,
+  scopeLine,
+  scopeKey,
 }: {
   /** As written when the editor opens; `INHERIT` on a role that says nothing for its mode. */
   value: string;
@@ -102,6 +105,10 @@ export function ValueEditor({
   /** Called with the value being tried, or null when it is back to the one it opened on. */
   onPreview: (value: string | null) => void;
   onCommit: (value: string) => void;
+  /** A line under the heading about where the value is written, given a way to put the value back and a way to close without keeping it. */
+  scopeLine?: (controls: { original: string; drop: () => void }) => ReactNode;
+  /** Changes when the place the value is written changes, so the value being tried is tried again there. */
+  scopeKey?: string;
 }) {
   const gamut = useProjectGamut();
   // The surface redraws with the value being tried, so what it opened on is taken once.
@@ -152,11 +159,12 @@ export function ValueEditor({
     }
     setText(next);
   };
-  useEffect(() => onPreview(tried), [tried]);
+  useEffect(() => onPreview(tried), [tried, scopeKey]);
+  const dropped = useRef(false);
   useEffect(
     () => () => {
       // A refused value was already said to be refused, in the panel; closing drops it without saying so again.
-      if (latest.current.tried != null && !latest.current.refused && !panel.escaped())
+      if (latest.current.tried != null && !latest.current.refused && !panel.escaped() && !dropped.current)
         latest.current.onCommit(latest.current.tried);
       else latest.current.onPreview(null);
     },
@@ -310,6 +318,12 @@ export function ValueEditor({
         </span>
         {panel.close}
       </div>
+      {scopeLine?.({
+        original,
+        drop: () => {
+          dropped.current = true;
+        },
+      })}
 
       {tried != null && drawn.kind === "refused" && (
         <Alert className="editor-refusal">
@@ -500,14 +514,17 @@ export function ValueEditor({
 export function TargetValueEditor({
   target,
   color,
+  scope = null,
   ...editor
 }: {
   target: EditTarget;
   /** What the value comes to as drawn now, which follows the value being tried. */
   color: Color;
+  /** Where a top-level system param lives, for the panel to unlink from `defaults` or reset; null elsewhere. */
+  scope?: ParamScope | null;
 } & Omit<
   Parameters<typeof ValueEditor>[0],
-  "drawn" | "onPreview" | "onCommit"
+  "drawn" | "onPreview" | "onCommit" | "scopeLine" | "scopeKey"
 >) {
   const { preview, commit, refusal } = useTrying();
   const drawn: Drawn = !refusal
@@ -521,6 +538,19 @@ export function TargetValueEditor({
         preview(value == null ? null : { action: "set", target, value })
       }
       onCommit={(value) => commit({ action: "set", target, value })}
+      scopeKey={target.kind}
+      scopeLine={({ original, drop }) => (
+        <ParamScopeControl
+          scope={scope}
+          unlink={() => scope && commit(unlinkEdit(scope, original))}
+          fallBack={(removal) => {
+            drop();
+            preview(null);
+            commit(removal);
+            editor.panel.dismiss();
+          }}
+        />
+      )}
     />
   );
 }

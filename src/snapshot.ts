@@ -210,6 +210,8 @@ export type SnapshotSystem = {
   note: string | null;
   /** The top-level params the system wrote itself. */
   ownParams: string[];
+  /** The top-level params the `defaults` block writes for this system's algorithm. */
+  paramsInDefaults: string[];
   /** The params nothing writes; their value in `params` is the algorithm's default, and setting one writes it into the system. */
   defaultedParams: string[];
   /** Each `curve` param, every field filled in, with its pivot and bounds, for the page to draw and edit. */
@@ -321,6 +323,7 @@ export function buildSnapshot({
       params: system.params,
       note: system.description ?? null,
       ownParams: system.ownParams,
+      paramsInDefaults: system.paramsInDefaults,
       defaultedParams: system.defaultedParams,
       curves: system.curves,
       numberRanges: numberRangesOf(system.algorithm),
@@ -381,8 +384,11 @@ function choicesOf(algorithm: string): Record<string, string[]> {
 function numberRangesOf(algorithm: string): Record<string, { min: number; max: number }> {
   const params = algorithmFor(algorithm)?.params ?? {};
   return Object.fromEntries(
-    Object.entries(params).flatMap(([name, kind]) =>
-      kind.kind === "number" && kind.min != null && kind.max != null ? [[name, { min: kind.min, max: kind.max }]] : [],
-    ),
+    Object.entries(params).flatMap(([name, kind]) => {
+      if (kind.kind !== "number" || kind.min == null || kind.max == null) return [];
+      const range = { min: kind.min, max: kind.max };
+      const ends = Array.from({ length: kind.ends ?? 0 }, (_, index) => [`${name}.${index}`, range]);
+      return [[name, range], ...ends];
+    }),
   );
 }

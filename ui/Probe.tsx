@@ -22,14 +22,14 @@ export function Probe({ system, definition, gamut }: { system: SnapshotSystem; d
 
   return (
     <section className="box">
-      <h2 className="box-title">Preview</h2>
+      <h2 className="box-title">Preview step</h2>
       <div className="probe-body">
-        <div className="probe-preview">
-          {answer.kind === "color" && <ColorFacts color={answer.color} reference={<code>{ref}</code>} />}
-        </div>
         <div className="probe-controls">
           <StepControls step={{ kind: "step", system, selector }} onChange={(next) => setSelector(next.selector)} />
           {answer.kind === "refused" && <Alert className="inline-alert">{answer.error}</Alert>}
+        </div>
+        <div className="probe-preview">
+          {answer.kind === "color" && <ColorFacts color={answer.color} reference={<code>{ref}</code>} />}
         </div>
       </div>
     </section>

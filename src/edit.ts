@@ -43,6 +43,7 @@ type EmitTarget = Extract<EditTarget, { kind: "emit" }>;
 export type ModeTarget = Extract<EditTarget, { kind: "mode" }>;
 export type CollectionTarget = Extract<EditTarget, { kind: "collection" }>;
 type SchemeTarget = Extract<EditTarget, { kind: "scheme" }>;
+export type ParamTarget = Extract<EditTarget, { kind: "param" }>;
 /** What is added, renamed and removed whole. */
 export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
 
@@ -68,7 +69,8 @@ export type EntryTarget = ConstantTarget | SystemTarget | RoleTarget;
  * takes its place out of every ref list; one another mode extends, or the
  * last mode, stays. A collection is added empty at the end of the file,
  * renamed, and removed with every role in it; refs name roles without their
- * collection, so none is rewritten.
+ * collection, so none is rewritten. A system's own top-level param is
+ * removed, and the value falls back to `defaults` or the algorithm's own.
  */
 export type Edit =
   | { action: "set"; target: EditTarget; value: string }
@@ -76,7 +78,7 @@ export type Edit =
   | { action: "rename"; target: EntryTarget | GroupTarget | ModeTarget | CollectionTarget; name: string }
   | { action: "place"; target: ConstantTarget | RoleTarget; path: string }
   | { action: "move"; target: ConstantTarget | RoleTarget; after: string | null }
-  | { action: "remove"; target: EntryTarget | ModeTarget | CollectionTarget };
+  | { action: "remove"; target: EntryTarget | ModeTarget | CollectionTarget | ParamTarget };
 
 /** Where a constant or a role is after it is placed at `path`. */
 export function placedTarget<Target extends ConstantTarget | RoleTarget>(target: Target, path: string): Target {
@@ -137,7 +139,7 @@ export function describeTarget(target: EditTarget): string {
     case "param":
       return `${target.system} ${target.path}`;
     case "default":
-      return `the shared ${target.algorithm} ${target.path}`;
+      return `defaults ${target.algorithm} ${target.path}`;
     case "ref":
       return `${target.role}, mode ${target.mode + 1}`;
     case "role":
@@ -239,6 +241,8 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
         ? withModeRemoved(text, edit.target)
         : edit.target.kind === "collection"
         ? withCollectionRemoved(text, edit.target)
+        : edit.target.kind === "param"
+        ? withParamRemoved(text, edit.target)
         : edit.target.kind === "system" ? withEntryRemoved(text, edit.target) : withGroupedRemoved(text, edit.target);
       continue;
     }
@@ -281,9 +285,11 @@ export function applyEdits(yamlText: string, edits: Edit[]): string {
         `${describeTarget(edit.target)} is \`*${alias.name}\`, a YAML alias of the value anchored at ${alias.anchoredAt ?? `\`&${alias.name}\``} — edit it there, which changes every place it is used, or write a value of its own here`,
       );
     }
-    const structure = structureSource(edit.value) != null ? structureAt(text, edit.target) : null;
+    // A param can change shape, a number becoming a list or a list a number, as a value per end does.
+    const structured = structureSource(edit.value);
+    const structure = structureAt(text, edit.target, structured != null);
     if (structure) {
-      text = text.slice(0, structure.start) + structureSource(edit.value) + text.slice(structure.end);
+      text = text.slice(0, structure.start) + (structured ?? plainSource(edit.value)) + text.slice(structure.end);
       continue;
     }
     const node = nodeAt(text, edit.target);
@@ -334,7 +340,7 @@ export function readValue(yamlText: string, target: EditTarget): string | null {
   if (target.kind === "mode" || target.kind === "scheme") return modeValue(yamlText, target);
   if (target.kind === "collection") return collectionPair(parseDocument(yamlText), target.name) ? "{}" : null;
   if (target.kind === "spelling") return earlierSpellings(parseDocument(yamlText), target.key).length > 0 ? RESPELLINGS[target.key].earlier : target.key;
-  if (structureAt(yamlText, target)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
+  if (structureAt(yamlText, target, false)) return JSON.stringify((writtenAt(yamlText, target) as YAMLMap | YAMLSeq).toJSON());
   const node = nodeAt(yamlText, target);
   if (node) return node.value == null ? INHERIT : String(node.value);
   return lastRefBefore(yamlText, target) ? INHERIT : null;
@@ -400,11 +406,22 @@ function writtenAt(yamlText: string, target: EditTarget): unknown {
 }
 
 /** A list or map written at a param, as the span its contents occupy. */
-function structureAt(yamlText: string, target: EditTarget): { start: number; end: number } | null {
+/**
+ * The span of a param's written list or map, which a value is written over
+ * whole; with `orScalar`, a written scalar's too, for a list or map to
+ * replace.
+ */
+function structureAt(yamlText: string, target: EditTarget, orScalar: boolean): { start: number; end: number } | null {
   if (target.kind !== "param" && target.kind !== "default") return null;
   const node = writtenAt(yamlText, target);
+  if (orScalar && isScalar(node) && node.range && node.value != null) return { start: node.range[0], end: node.range[1] };
   if (!(isSeq(node) || isMap(node)) || !node.range) return null;
   return { start: node.range[0], end: node.flow ? node.range[1] : lastWrittenEnd(node) };
+}
+
+/** A scalar written where a list or map was: a number bare, a plain word bare, anything else quoted. */
+function plainSource(value: string): string {
+  return /^-?\d+(\.\d+)?$/.test(value) || plainSafe(value) ? value : JSON.stringify(value);
 }
 
 /**
@@ -612,6 +629,18 @@ function isSystem(node: unknown): node is YAMLMap {
 }
 
 /** A param the system does not write yet, added to its `params` block: the algorithm's default stops applying. */
+function withParamRemoved(text: string, target: ParamTarget): string {
+  if (target.path.includes(".")) throw new Error(`${describeTarget(target)} is part of a param; a param is removed whole`);
+  const doc = parseDocument(text);
+  const keys = ["systems", ...target.system.split("."), "params", target.path];
+  const set = doc.getIn(keys.slice(0, -1), true);
+  const pair = isMap(set) ? set.items.find((item) => isScalar(item.key) && item.key.value === target.path) : undefined;
+  if (!isMap(set) || !pair || !isScalar(pair.key) || !pair.key.range) {
+    throw new Error(`nothing written for ${describeTarget(target)} to remove`);
+  }
+  return withEntryRemoved(text, target, { doc, keys, set, pair: pair as Entry["pair"] }, false);
+}
+
 function withParamAdded(text: string, target: Extract<EditTarget, { kind: "param" }>, value: string): string {
   const source = /^-?\d+(\.\d+)?$/.test(value) || plainSafe(value) ? value : (structureSource(value) ?? JSON.stringify(value));
   return withEntryAdded(text, ["systems", ...target.system.split("."), "params"], target.path, source, target, "but not as a value");
@@ -861,7 +890,7 @@ function withGroupedRemoved(text: string, target: RoleTarget | ConstantTarget): 
  */
 function withEntryRemoved(
   text: string,
-  target: EntryTarget | EmitTarget | SchemeTarget | CollectionTarget,
+  target: EntryTarget | EmitTarget | SchemeTarget | CollectionTarget | ParamTarget,
   { doc, keys, set, pair }: Entry = entryAt(text, target as EntryTarget | EmitTarget),
   /** Stands apart from its neighbors by a blank line; one of the two around it goes with it. */
   spaced = target.kind === "system",

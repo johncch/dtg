@@ -8,14 +8,16 @@ import type { Color } from "../color-math.js";
 export const overlay: Algorithm = {
   name: "overlay",
   description:
-    "One color at a range of opacities, for anything that sits over content you don't control.",
+    "One color at a range of opacities, never flattened, for shadows and scrims over content you don't control. The step is the opacity.",
+
+  profile: ["alpha"],
 
   params: {
-    color: { kind: "color" },
+    color: { kind: "color", description: "The color, at the step's opacity." },
   },
 
   selector: () => ({
-    fields: [{ name: "opacity", kind: "number", min: 0, max: 100 }],
+    fields: [{ name: "opacity", kind: "number", min: 0, max: 100, description: "How opaque the color is, from 0 to 100." }],
   }),
 
   resolve(selector, params) {

@@ -9,16 +9,17 @@ import { composite, type Color } from "../color-math.js";
 export const tint: Algorithm = {
   name: "tint",
   description:
-    "Light washes of one color over a background.",
+    "A tint color laid over a base and flattened to a solid color. The step is the tint's percent.",
 
   params: {
-    base: { kind: "color" },
-    tint: { kind: "color" },
+    base: { kind: "color", description: "The background the tint is laid over." },
+    tint: { kind: "color", description: "The color laid over the base." },
   },
 
   selector: () => ({
-    fields: [{ name: "percent", kind: "number", min: 0, max: 100 }],
+    fields: [{ name: "percent", kind: "number", min: 0, max: 100, description: "How much of the tint is laid over the base, from 0 to 100." }],
     forms: ["tint"],
+    formDescriptions: { tint: "Use only the tint color, see-through instead of mixed with the base." },
   }),
 
   resolve(selector, params) {

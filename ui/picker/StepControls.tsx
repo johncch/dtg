@@ -1,6 +1,7 @@
 import { useId } from "react";
 import type { Selector, SelectorField, SelectorShape } from "../../src/contract.js";
 import { formatRef, formatSelector, parseCall, parseSelector } from "../../src/selector.js";
+import { Hint } from "../Hint.js";
 import type { SnapshotConstant, SnapshotSystem } from "../../src/snapshot.js";
 
 export type Step = { kind: "step"; system: SnapshotSystem; selector: Selector };
@@ -70,7 +71,7 @@ export function StepControls({ step, onChange }: { step: Step; onChange: (step: 
       ))}
       {forms.map((form) => (
         <label className="ref-control ref-control-check" key={form}>
-          <span>{form}</span>
+          <FieldName name={form} description={system.selector.formDescriptions?.[form] ?? null} />
           <input
             type="checkbox"
             checked={selector.form === form}
@@ -109,12 +110,12 @@ function FieldControl({
 }) {
   if (field.kind === "number") {
     return (
-      <NumberControl name={field.name} min={field.min} max={field.max} value={Number(value)} inUse={inUse} onChange={onChange} />
+      <NumberControl name={field.name} description={field.description ?? null} min={field.min} max={field.max} value={Number(value)} inUse={inUse} onChange={onChange} />
     );
   }
   return (
     <label className="ref-control">
-      <span>{field.name}</span>
+      <FieldName name={field.name} description={field.description ?? null} />
       <select value={String(value)} onChange={(event) => onChange(event.target.value)}>
         {field.options.map((option) => (
           <option key={option} value={option}>
@@ -128,6 +129,7 @@ function FieldControl({
 
 function NumberControl({
   name,
+  description,
   min,
   max,
   value,
@@ -135,6 +137,7 @@ function NumberControl({
   onChange,
 }: {
   name: string;
+  description: string | null;
   min: number;
   max: number;
   value: number;
@@ -149,7 +152,7 @@ function NumberControl({
   };
   return (
     <label className="ref-control">
-      <span>{name}</span>
+      <FieldName name={name} description={description} />
       <input
         type="range"
         min={min}
@@ -174,5 +177,15 @@ function NumberControl({
         onChange={(event) => onNumber(event.target.value)}
       />
     </label>
+  );
+}
+
+/** A field's name, with the algorithm's line on what it picks on hover. */
+function FieldName({ name, description }: { name: string; description: string | null }) {
+  if (!description) return <span>{name}</span>;
+  return (
+    <Hint text={description}>
+      <span className="param-name">{name}</span>
+    </Hint>
   );
 }

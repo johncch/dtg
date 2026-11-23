@@ -47,16 +47,23 @@ export function parseParams(
         colors.push({ path, color, constant: null });
         return color;
       }
-      case "number":
-        if (typeof value !== "number" || !Number.isFinite(value)) {
-          throw new Error(
-            `${context}: expected a number, got ${JSON.stringify(value)}`,
-          );
+      case "number": {
+        const one = (n: unknown, where: string): number => {
+          if (typeof n !== "number" || !Number.isFinite(n)) {
+            throw new Error(`${where}: expected a number, got ${JSON.stringify(n)}`);
+          }
+          if ((kind.min != null && n < kind.min) || (kind.max != null && n > kind.max)) {
+            throw new Error(`${where}: expected ${kind.min ?? "-∞"}–${kind.max ?? "∞"}, got ${n}`);
+          }
+          return n;
+        };
+        if (kind.ends == null) return one(value, context);
+        if (!Array.isArray(value)) return Array<number>(kind.ends).fill(one(value, context));
+        if (value.length !== kind.ends) {
+          throw new Error(`${context}: expected a number, or a list of ${kind.ends}, one for each end; got ${value.length}`);
         }
-        if ((kind.min != null && value < kind.min) || (kind.max != null && value > kind.max)) {
-          throw new Error(`${context}: expected ${kind.min ?? "-∞"}–${kind.max ?? "∞"}, got ${value}`);
-        }
-        return value;
+        return value.map((n, index) => one(n, `${algorithm.name} param '${path}.${index}'`));
+      }
       case "choice":
         if (typeof value !== "string" || !kind.options.includes(value)) {
           throw new Error(
@@ -97,7 +104,7 @@ export function parseParams(
     if (value != null) {
       values[key] = parseValue(kind, value, key);
     } else if ("default" in kind && kind.default !== undefined) {
-      values[key] = kind.default;
+      values[key] = kind.kind === "number" && kind.ends != null ? Array<number>(kind.ends).fill(kind.default as number) : kind.default;
     } else if (kind.kind === "number" && kind.optional) {
       continue;
     } else {

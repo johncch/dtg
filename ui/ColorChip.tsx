@@ -55,9 +55,7 @@ export function ColorChip({
       </span>
       {children ? (
         <span>
-          <code>{label}</code>
-          <br />
-          {children}
+          <code>{label}</code> {children}
         </span>
       ) : (
         <code>{label}</code>

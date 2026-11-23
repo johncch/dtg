@@ -22,7 +22,7 @@ function nameOf(target: EditTarget, modes: string[]): string {
     case "param":
       return `${target.system} ${target.path}`;
     case "default":
-      return `${target.algorithm} ${target.path} (shared)`;
+      return `defaults ${target.algorithm} ${target.path}`;
     case "mode":
       return `mode ${target.name}`;
     case "scheme":

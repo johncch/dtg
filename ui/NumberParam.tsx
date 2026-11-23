@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type { EditTarget } from "../src/edit.js";
+import type { Edit, EditTarget } from "../src/edit.js";
 import { EDITABLE } from "./mode.js";
 import { Popup, type PopupPanel } from "./Popup.js";
+import { ParamScopeControl, unlinkEdit, type ParamScope } from "./ParamScope.js";
 import { firstError, useTrying } from "./preview.js";
 import { Alert } from "./Alert.js";
 
@@ -16,33 +17,36 @@ export function NumberParam({
   note = null,
   dim = false,
   readOnly = false,
+  scope = null,
+  compose,
 }: {
   name: string;
   value: number;
   target: EditTarget;
   range: Range | null;
-  /** Where the value comes from, when that is not simply the system: "default", "shared", "shared as &name", "same as &name". */
+  /** Where the value comes from, when that is not simply the system: "defaults", "shared as &name", "same as &name". */
   note?: string | null;
   /** Shown faded: nothing writes it, so it is the algorithm's default. */
   dim?: boolean;
   /** Shown but not editable here, such as a YAML alias whose value is written elsewhere. */
   readOnly?: boolean;
+  /** Where a top-level param lives, for the panel to switch; null for part of one. */
+  scope?: ParamScope | null;
+  /** Writes the whole param from this value, when the value is one part of it, such as one end of a value per end. */
+  compose?: (n: number) => string;
 }) {
   const label = (
     <span>
       <code className={dim ? "muted" : undefined}>{value}</code>
       {note && (
-        <>
-          <br />
-          <span className="muted">{note}</span>
-        </>
+        <span className="muted param-note">{note}</span>
       )}
     </span>
   );
   if (!EDITABLE || readOnly) return <span className="chip">{label}</span>;
   return (
     <Popup title={`Edit ${name}`} className="chip chip-editable number-param" label={label} focus="field">
-      {(panel) => <NumberEditor name={name} original={value} target={target} range={range} panel={panel} />}
+      {(panel) => <NumberEditor scope={scope} compose={compose} name={name} original={value} target={target} range={range} panel={panel} />}
     </Popup>
   );
 }
@@ -54,12 +58,16 @@ function NumberEditor({
   target,
   range,
   panel,
+  scope,
+  compose,
 }: {
   name: string;
   original: number;
   target: EditTarget;
   range: Range | null;
   panel: PopupPanel;
+  scope: ParamScope | null;
+  compose?: (n: number) => string;
 }) {
   const { preview, commit, refusal } = useTrying();
   // The page shows the number being tried, so `original` follows it; the panel compares against what it opened on.
@@ -69,13 +77,20 @@ function NumberEditor({
   const valid = text.trim() !== "" && Number.isFinite(parsed);
   // Arrow keys and the slider step by what the value is written in: whole numbers by 1, fractions by 0.01.
   const step = Number.isInteger(opened) ? 1 : 0.01;
-  const edit = valid && parsed !== opened ? { action: "set" as const, target, value: String(parsed) } : null;
+  const edit = valid && parsed !== opened ? { action: "set" as const, target, value: compose ? compose(parsed) : String(parsed) } : null;
   const latest = useRef(edit);
   latest.current = edit;
-  useEffect(() => preview(edit), [text]);
+  const fellBack = useRef(false);
+  const fallBack = (removal: Edit) => {
+    fellBack.current = true;
+    preview(null);
+    commit(removal);
+    panel.dismiss();
+  };
+  useEffect(() => preview(edit), [text, target.kind]);
   useEffect(
     () => () => {
-      if (latest.current && !panel.escaped()) commit(latest.current);
+      if (latest.current && !panel.escaped() && !fellBack.current) commit(latest.current);
       else preview(null);
     },
     [],
@@ -93,6 +108,7 @@ function NumberEditor({
         <span className="ref-editor-heading">{name}</span>
         {panel.close}
       </div>
+      <ParamScopeControl scope={scope} unlink={() => scope && commit(unlinkEdit(scope, String(opened)))} fallBack={fallBack} />
       <input
         className="ref-input"
         type="number"

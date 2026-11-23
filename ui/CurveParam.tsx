@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { Color } from "../src/color-math.js";
 import { curveAt, type CurveValue, type Ease } from "../src/curve-math.js";
-import type { EditTarget } from "../src/edit.js";
+import type { Edit, EditTarget } from "../src/edit.js";
 import { curveDrawing, type CurveDrawing as Drawing, type ResolvedCurve } from "../src/resolve.js";
 import type { SnapshotSystem } from "../src/snapshot.js";
 import { EDITABLE } from "./mode.js";
 import { paintCss } from "./paint.js";
 import { Popup, type PopupPanel } from "./Popup.js";
+import { ParamScopeControl, unlinkEdit, type ParamScope } from "./ParamScope.js";
 import { firstError, useTrying } from "./preview.js";
 import { Alert } from "./Alert.js";
 
@@ -24,6 +25,7 @@ export function CurveParam({
   note,
   dim = false,
   readOnly = false,
+  scope = null,
 }: {
   name: string;
   curve: ResolvedCurve;
@@ -31,31 +33,28 @@ export function CurveParam({
   system: SnapshotSystem;
   constants: ReadonlyMap<string, Color>;
   target: EditTarget;
-  /** Where the value comes from, when that is not simply the system: "default", "shared", "shared as &name", "same as &name". */
+  /** Where the value comes from, when that is not simply the system: "defaults", "shared as &name", "same as &name". */
   note: string | null;
   /** Shown faded: nothing writes it, so it is the algorithm's default. */
   dim?: boolean;
   /** Shown but not editable here, such as a YAML alias whose value is written elsewhere. */
   readOnly?: boolean;
+  /** Where a top-level param lives, for the panel to switch; null for part of one. */
+  scope?: ParamScope | null;
 }) {
   const range = displayRange(curve);
   const { samples, swatches } = useMemo(() => curveDrawing(system, constants, name), [system, constants, name]);
   const drawn = { ...curve, samples, swatches };
   const label = (
-    <span>
+    <span className="curve-chip-label">
       <CurveDrawing curve={curve.value} drawn={drawn} range={range} width={72} height={32} />
-      {note && (
-        <>
-          <br />
-          <span className="muted">{note}</span>
-        </>
-      )}
+      {note && <span className="muted param-note">{note}</span>}
     </span>
   );
   if (!EDITABLE || readOnly) return <span className="chip">{label}</span>;
   return (
     <Popup title={`Edit ${name}`} className="chip chip-editable curve-param" label={label} focus="panel">
-      {(panel) => <CurveEditor name={name} original={curve} drawn={drawn} range={range} target={target} panel={panel} />}
+      {(panel) => <CurveEditor scope={scope} name={name} original={curve} drawn={drawn} range={range} target={target} panel={panel} />}
     </Popup>
   );
 }
@@ -76,6 +75,7 @@ function CurveEditor({
   range,
   target,
   panel,
+  scope,
 }: {
   name: string;
   original: ResolvedCurve;
@@ -83,6 +83,7 @@ function CurveEditor({
   range: Range;
   target: EditTarget;
   panel: PopupPanel;
+  scope: ParamScope | null;
 }) {
   const { preview, commit, refusal } = useTrying();
   // While the edit is tried, the page shows it, so `original` follows it; what to compare against is the curve as the panel opened on it.
@@ -95,10 +96,17 @@ function CurveEditor({
   const edit = changed ? { action: "set" as const, target, value: JSON.stringify(written) } : null;
   const latest = useRef(edit);
   latest.current = edit;
-  useEffect(() => preview(edit), [JSON.stringify(value)]);
+  const fellBack = useRef(false);
+  const fallBack = (removal: Edit) => {
+    fellBack.current = true;
+    preview(null);
+    commit(removal);
+    panel.dismiss();
+  };
+  useEffect(() => preview(edit), [JSON.stringify(value), target.kind]);
   useEffect(
     () => () => {
-      if (latest.current && !panel.escaped()) commit(latest.current);
+      if (latest.current && !panel.escaped() && !fellBack.current) commit(latest.current);
       else preview(null);
     },
     [],
@@ -122,16 +130,17 @@ function CurveEditor({
         <span className="ref-editor-heading">{name}</span>
         {panel.close}
       </div>
+      <ParamScopeControl scope={scope} unlink={() => scope && commit(unlinkEdit(scope, JSON.stringify(opened)))} fallBack={fallBack} />
       {original.label && <p className="curve-label">{original.label}</p>}
       <CurveDrawing curve={value} drawn={drawn} range={range} width={300} height={198} bounds={original} onChange={setValue} />
       <div className="curve-fields">
         <label>
           from
-          <NumberField label={`${name} from`} value={value.from} onChange={(from) => setValue({ ...value, from })} />
+          <NumberField label={`${name} from`} value={value.from} min={original.min} max={original.max} step={original.max - original.min > 10 ? 1 : 0.01} onChange={(from) => setValue({ ...value, from })} />
         </label>
         <label>
           to
-          <NumberField label={`${name} to`} value={value.to} onChange={(to) => setValue({ ...value, to })} />
+          <NumberField label={`${name} to`} value={value.to} min={original.min} max={original.max} step={original.max - original.min > 10 ? 1 : 0.01} onChange={(to) => setValue({ ...value, to })} />
         </label>
       </div>
       {(["before the anchor", "after the anchor"] as const).map((side, s) => (
@@ -143,6 +152,8 @@ function CurveEditor({
                 key={i}
                 label={`easing ${side}, ${["x1", "y1", "x2", "y2"][i]}`}
                 value={n}
+                min={i % 2 === 0 ? 0 : undefined}
+                max={i % 2 === 0 ? 1 : undefined}
                 onChange={(next) => setEase(s as 0 | 1, i, next)}
               />
             ))}
@@ -161,7 +172,23 @@ function CurveEditor({
  * curve at once, so Enter, which closes the panel, never outruns it. A drag
  * moving the number shows here unless the field is being typed in.
  */
-function NumberField({ label, value, onChange }: { label: string; value: number; onChange: (n: number) => void }) {
+function NumberField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  step = 0.01,
+}: {
+  label: string;
+  value: number;
+  onChange: (n: number) => void;
+  /** What the arrows and arrow keys move it by. */
+  step?: number;
+  /** Bounds a typed or stepped value is held inside; the field shows the held value once it is left. */
+  min?: number;
+  max?: number;
+}) {
   const [text, setText] = useState(String(value));
   const typing = useRef(false);
   useEffect(() => {
@@ -171,7 +198,9 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
     <input
       className="ref-input"
       type="number"
-      step="any"
+      step={step}
+      min={min}
+      max={max}
       aria-label={label}
       value={text}
       onFocus={() => (typing.current = true)}
@@ -182,7 +211,7 @@ function NumberField({ label, value, onChange }: { label: string; value: number;
       onChange={(event) => {
         setText(event.target.value);
         const n = Number(event.target.value);
-        if (event.target.value.trim() !== "" && Number.isFinite(n)) onChange(n);
+        if (event.target.value.trim() !== "" && Number.isFinite(n)) onChange(Math.min(max ?? Infinity, Math.max(min ?? -Infinity, n)));
       }}
     />
   );

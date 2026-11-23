@@ -32,18 +32,50 @@ const STOPS: Span = { min: 0, max: 1000 };
 export const curve: Algorithm = {
   name: "curve",
   description:
-    "Experimental. A light-to-dark ramp through one color, shaped by curves you draw.",
+    "A light-to-dark ramp through one color, with lightness, chroma and hue each shaped by a curve you draw. The step is a stop from 0 to 1000, with the color at 500 unless the at param moves it.",
 
   params: {
-    anchor: { kind: "color" },
-    at: { kind: "number", default: 500, min: 1, max: 999 },
-    gamut: { kind: "choice", options: ["srgb", "display-p3"], default: "display-p3" },
-    lightness: { kind: "curve", along: "stop", min: 0, max: 1, label: "OKLab lightness", default: straight(0.97, 0.25) },
-    chroma: { kind: "curve", along: "stop", min: 0, max: 1.5, label: "share of the gamut's maximum chroma", default: straight(0.4, 0.7) },
-    hue: { kind: "curve", along: "stop", min: -180, max: 180, label: "degrees from the anchor's hue", unit: "°", default: straight(0, 0) },
+    anchor: { kind: "color", description: "The color the ramp passes through." },
+    at: { kind: "number", default: 500, min: 1, max: 999, description: "The stop the anchor sits at." },
+    gamut: {
+      kind: "choice",
+      options: ["srgb", "display-p3"],
+      default: "display-p3",
+      description: "The color space the colors are made to fit.",
+    },
+    lightness: {
+      kind: "curve",
+      along: "stop",
+      min: 0,
+      max: 1,
+      label: "OKLab lightness",
+      default: straight(0.97, 0.25),
+      description: "OKLab lightness at stop 0 and stop 1000, passing through the anchor's.",
+    },
+    chroma: {
+      kind: "curve",
+      along: "stop",
+      min: 0,
+      max: 1.5,
+      label: "share of the gamut's maximum chroma",
+      default: straight(0.4, 0.7),
+      description: "Chroma as a share of the most the gamut holds, at stop 0 and stop 1000.",
+    },
+    hue: {
+      kind: "curve",
+      along: "stop",
+      min: -180,
+      max: 180,
+      label: "degrees from the anchor's hue",
+      unit: "°",
+      default: straight(0, 0),
+      description: "Degrees from the anchor's hue, at stop 0 and stop 1000.",
+    },
   },
 
-  selector: () => ({ fields: [{ name: "stop", kind: "number", ...STOPS }] }),
+  selector: () => ({
+    fields: [{ name: "stop", kind: "number", ...STOPS, description: "Where on the ramp, from 0 to 1000. The anchor sits where the at param puts it." }],
+  }),
 
   resolve(selector, params) {
     const p = params as CurveParams;

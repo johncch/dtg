@@ -16,16 +16,25 @@ type ToneParams = {
 export const tone: Algorithm = {
   name: "tone",
   description:
-    "Experimental. A light-to-dark ramp where the same step is equally light in every hue, as in Material 3.",
+    "A ramp where the step is lightness itself, from 0 (black) to 100 (white), so the same step is equally light in every hue, as in Material 3.",
+
+  profile: ["cielab.l", "oklch.c", "oklch.h"],
 
   params: {
-    anchor: { kind: "color" },
-    chroma: { kind: "number", optional: true, min: 0, max: 0.4 },
-    hue: { kind: "number", default: 0, min: -180, max: 180 },
-    gamut: { kind: "choice", options: ["srgb", "display-p3"], default: "srgb" },
+    anchor: { kind: "color", description: "Lends its hue, and its chroma unless chroma is set." },
+    chroma: { kind: "number", optional: true, min: 0, max: 0.4, description: "How colorful the ramp is, the same at every step. Defaults to the anchor's chroma." },
+    hue: { kind: "number", default: 0, min: -180, max: 180, description: "Degrees added to the anchor's hue." },
+    gamut: {
+      kind: "choice",
+      options: ["srgb", "display-p3"],
+      default: "srgb",
+      description: "The color space the colors can be produced in.",
+    },
   },
 
-  selector: () => ({ fields: [{ name: "tone", kind: "number", min: 0, max: 100 }] }),
+  selector: () => ({
+    fields: [{ name: "tone", kind: "number", min: 0, max: 100, description: "How light the step is, from 0 (black) to 100 (white)." }],
+  }),
 
   resolve(selector, params) {
     const p = params as ToneParams;

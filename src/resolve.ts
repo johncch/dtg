@@ -31,9 +31,35 @@ import { scale } from "./algorithms/scale.js";
 import { overlay } from "./algorithms/overlay.js";
 import { curve } from "./algorithms/curve.js";
 import { tone } from "./algorithms/tone.js";
+import { DEFAULT_PROFILE, laneOf, measureIn, type ProfileLane } from "./profile.js";
 
 const CURVE_SAMPLES = 41;
 const CURVE_SWATCHES = 121;
+const PROFILE_SAMPLES = 201;
+
+type Mark = { at: number; color: Color; step: string };
+
+/** Each step whose selector is a plain point along `along`: no form, nothing but that field. */
+function marksAlong(
+  algorithm: Algorithm,
+  shape: SelectorShape,
+  steps: { selector: string; color: Color; publicStep: string }[],
+  along: string,
+): Mark[] {
+  return steps.flatMap((step) => {
+    const { values } = parseSelector(algorithm.name, shape, step.selector);
+    const at = values[along];
+    return values.form == null && typeof at === "number" ? [{ at, color: step.color, step: step.publicStep }] : [];
+  });
+}
+
+/** What the algorithm makes at `count` evenly spaced points across `span`, asked along the selector's one field. */
+function samplesAlong(algorithm: Algorithm, params: Params, along: string, span: Span, count: number): { at: number; color: Color }[] {
+  return Array.from({ length: count }, (_, i) => {
+    const at = span.min + (i / (count - 1)) * (span.max - span.min);
+    return { at, color: algorithm.resolve({ form: null, [along]: at }, params) };
+  });
+}
 
 function curvesOf(
   algorithm: Algorithm,
@@ -46,11 +72,7 @@ function curvesOf(
     Object.entries(algorithm.params).flatMap(([name, kind]) => {
       if (kind.kind !== "curve" || !pivots[name]) return [];
       const span = spanOf(algorithm, shape, name, kind.along);
-      const marks = steps.flatMap((step) => {
-        const { values } = parseSelector(algorithm.name, shape, step.selector);
-        const at = values[kind.along];
-        return values.form == null && typeof at === "number" ? [{ at, color: step.color, step: step.publicStep }] : [];
-      });
+      const marks = marksAlong(algorithm, shape, steps, kind.along);
       const curve: ResolvedCurve = {
         value: params[name] as CurveValue,
         pivot: pivots[name],
@@ -100,13 +122,7 @@ export function curveDrawing(
   const params = parseParams(algorithm, system.params, constants).values;
   const shape = system.selector;
   const span = spanOf(algorithm, shape, name, kind.along);
-  const samples =
-    shape.fields.length === 1
-      ? Array.from({ length: CURVE_SAMPLES }, (_, i) => {
-          const at = span.min + (i / (CURVE_SAMPLES - 1)) * (span.max - span.min);
-          return { at, color: algorithm.resolve({ form: null, [kind.along]: at }, params) };
-        })
-      : [];
+  const samples = shape.fields.length === 1 ? samplesAlong(algorithm, params, kind.along, span, CURVE_SAMPLES) : [];
   const swatches = algorithm.curveSwatch
     ? Array.from({ length: CURVE_SWATCHES }, (_, i) => {
         const value = kind.min + (i / (CURVE_SWATCHES - 1)) * (kind.max - kind.min);
@@ -114,6 +130,51 @@ export function curveDrawing(
       })
     : [];
   return { samples, swatches };
+}
+
+export type Profile = {
+  along: string;
+  span: Span;
+  /** The algorithm's channels, then opacity when the colors differ in it. */
+  lanes: ProfileLane[];
+  /** What the algorithm makes across the span, measured in each lane; overrides are not in them. */
+  samples: { at: number; color: Color; values: (number | null)[] }[];
+  /** The steps the system emits, as resolved, overrides included, measured the same way. */
+  marks: (Mark & { values: (number | null)[] })[];
+};
+
+/**
+ * A system's ramp measured from what it produces: the algorithm resolved
+ * densely along its selector and each color read in the algorithm's profile
+ * channels. Null when the selector is not one number field, as there is no
+ * single line to draw. Worked out only when a page shows it.
+ */
+export function profileOf(
+  system: {
+    algorithm: string;
+    params: Record<string, unknown>;
+    selector: SelectorShape;
+    steps: { selector: string; color: Color; publicStep: string }[];
+  },
+  constants: ReadonlyMap<string, Color>,
+): Profile | null {
+  const algorithm = algorithmFor(system.algorithm);
+  const [field, ...rest] = system.selector.fields;
+  if (!algorithm || !field || rest.length > 0 || field.kind !== "number") return null;
+  const params = parseParams(algorithm, system.params, constants).values;
+  const span = { min: field.min, max: field.max };
+  const sampled = samplesAlong(algorithm, params, field.name, span, PROFILE_SAMPLES);
+  const marked = marksAlong(algorithm, system.selector, system.steps, field.name);
+  const translucent = [...sampled, ...marked].some(({ color }) => color.alpha !== sampled[0].color.alpha);
+  const declared = algorithm.profile ?? DEFAULT_PROFILE;
+  const lanes = [...declared, ...(translucent && !declared.includes("alpha") ? (["alpha"] as const) : [])].map(laneOf);
+  return {
+    along: field.name,
+    span,
+    lanes,
+    samples: sampled.map((sample) => ({ ...sample, values: measureIn(lanes, sample.color) })),
+    marks: marked.map((mark) => ({ ...mark, values: measureIn(lanes, mark.color) })),
+  };
 }
 
 export const builtinAlgorithms: Algorithm[] = [tint, scale, overlay, curve, tone];
@@ -303,6 +364,8 @@ export type ResolvedSystem = {
   params: Record<string, unknown>;
   /** The top-level params the system wrote itself. */
   ownParams: string[];
+  /** The top-level params the `defaults` block writes for this system's algorithm; one the system writes too falls back to it when removed. */
+  paramsInDefaults: string[];
   /** The params nothing writes, neither the system nor `defaults`; their value in `params` is the algorithm's default. */
   defaultedParams: string[];
   /** Each `curve` param, every field filled in, with where it passes through what the algorithm holds fixed. */
@@ -723,6 +786,8 @@ export function resolveDefinition(
     colorParams: ParsedColorParam[];
     /** Top-level param keys the system wrote itself; the rest came from `defaults`. */
     ownParams: Set<string>;
+    /** Top-level param keys `defaults` writes for the system's algorithm, whether or not the system writes them too. */
+    paramsInDefaults: Set<string>;
     selectorShape: SelectorShape;
     overrides: Record<string, unknown>;
     alias?: AliasValue;
@@ -924,6 +989,7 @@ export function resolveDefinition(
         params: parsed.values,
         colorParams: parsed.colors,
         ownParams: new Set(Object.keys(paramsBlock ?? {})),
+        paramsInDefaults: new Set(Object.keys(defaults[algoName] ?? {})),
         selectorShape,
         overrides: Object.fromEntries(
           Object.entries((block.overrides ?? {}) as Record<string, unknown>).map(([selector, color]) => [
@@ -1587,6 +1653,7 @@ export function resolveDefinition(
           .map(([key, kind]) => [key, key in sys.writtenParams ? sys.writtenParams[key] : "default" in kind ? kind.default : undefined]),
       ),
       ownParams: [...sys.ownParams],
+      paramsInDefaults: [...sys.paramsInDefaults],
       defaultedParams: Object.keys(sys.algo.params).filter((key) => !(key in sys.writtenParams)),
       curves: curvesOf(sys.algo, sys.params, sys.selectorShape, steps),
       colorParams,

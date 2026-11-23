@@ -75,7 +75,10 @@ describe("scale", () => {
 
   test("takes any stop from 0 to 1000", () => {
     const shape = scale.selector(parseParams(scale, THEME).values);
-    assert.deepEqual(shape.fields, [{ name: "stop", kind: "number", min: 0, max: 1000 }]);
+    assert.deepEqual(
+      shape.fields.map(({ name, kind, ...range }) => ({ name, kind, min: "min" in range ? range.min : null, max: "max" in range ? range.max : null })),
+      [{ name: "stop", kind: "number", min: 0, max: 1000 }],
+    );
     assert.equal(isOpaque(step(scale, THEME, "250").color), true);
   });
 
@@ -83,6 +86,30 @@ describe("scale", () => {
     const free = { ...THEME, hueShift: 100 };
     assert.equal(css(step(scale, free, "0")), "#fafdff");
     assert.equal(css(step(scale, free, "1000")), "#001a28");
+  });
+
+  test("midpoint and hueShift take one value per half, in toward's order", () => {
+    const at = (params: object, stop: string) => css(step(scale, { ...THEME, ...params }, stop));
+    const split = { midpoint: [0.3, 0.6], hueShift: [0, 40] };
+    assert.equal(at(split, "250"), at({ midpoint: 0.3, hueShift: 0 }, "250"), "the light half reads the first");
+    assert.equal(at(split, "750"), at({ midpoint: 0.6, hueShift: 40 }, "750"), "the dark half reads the second");
+  });
+
+  test("one midpoint or hueShift is the same as the pair of it", () => {
+    for (const stop of ["100", "250", "750", "900"]) {
+      assert.equal(css(step(scale, THEME, stop)), css(step(scale, { ...THEME, midpoint: [0.4, 0.4], hueShift: [15, 15] }, stop)));
+    }
+  });
+
+  test("a pair is checked item by item", () => {
+    assert.throws(() => parseParams(scale, { ...THEME, midpoint: [0.4] }), /a list of 2, one for each end; got 1/);
+    assert.throws(() => parseParams(scale, { ...THEME, hueShift: [0, 140] }), /hueShift\.1': expected 0–100, got 140/);
+    assert.throws(() => scale.selector(parseParams(scale, { ...THEME, midpoint: [0.4, 1] }).values), /midpoint must be between 0 and 1, got 1/);
+  });
+
+  test("a midpoint left out is a straight line on both halves", () => {
+    const { midpoint, ...rest } = THEME;
+    assert.deepEqual(parseParams(scale, rest).values.midpoint, [0.5, 0.5]);
   });
 
   test("a lower midpoint keeps the ends paler and deeper for longer", () => {
